@@ -1,0 +1,79 @@
+{
+  "name": "motai-novel-studio",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Motai local novel writing studio with configurable AI providers and story bible generation.",
+  "author": "墨台工作室",
+  "main": "desktop/main.cjs",
+  "productName": "墨台",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/makemoremoney687/novel-studio.git"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env.local --use-env-proxy server.js",
+    "desktop": "electron .",
+    "package:win": "electron-builder --win dir --x64",
+    "make:win": "electron-builder --win nsis --x64 --publish never",
+    "check:syntax": "node --check server.js && node --check public/app.js && node --check public/studio.js && node --check src/domain.js && node --check src/studio.js && node --check src/storage.js && node --check desktop/main.cjs && node --check desktop/data-runtime.cjs",
+    "check:data": "node -e \"JSON.parse(require('fs').readFileSync('data/db.example.json','utf8')); console.log('Example database JSON is valid.')\"",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "check": "npm run check:syntax && npm test && npm run check:data"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.motai.novelstudio",
+    "productName": "墨台",
+    "copyright": "Copyright © 2026 墨台工作室",
+    "directories": {
+      "output": "out/electron-builder",
+      "buildResources": "resources"
+    },
+    "files": [
+      "server.js",
+      "src/**",
+      "public/**",
+      "desktop/**",
+      "resources/motai.ico",
+      "package.json",
+      "!data/db.json",
+      "!data/covers/**",
+      "!.env.local",
+      "!tools/**",
+      "!out/**"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/motai.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "墨台",
+      "installerIcon": "resources/motai.ico",
+      "uninstallerIcon": "resources/motai.ico"
+    }
+  },
+  "dependencies": {
+    "quill": "2.0.3"
+  }
+}

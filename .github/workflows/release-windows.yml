@@ -1,0 +1,72 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate project
+        run: pnpm run check
+
+      - name: Install test browser
+        run: pnpm exec playwright install chromium
+
+      - name: Run browser workflow tests
+        run: pnpm run test:e2e
+
+      - name: Build Windows installer
+        run: pnpm run make:win
+
+      - name: Create checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "out/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not produced." }
+          $hash = Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256
+          "$($hash.Hash) *$($installer.Name)" | Set-Content "out/electron-builder/SHA256SUMS.txt" -Encoding ascii
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem "out/electron-builder" -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not produced." }
+          $assets = @(
+            $installer.FullName,
+            "out/electron-builder/latest.yml",
+            "$($installer.FullName).blockmap",
+            "out/electron-builder/SHA256SUMS.txt"
+          ) | Where-Object { Test-Path -LiteralPath $_ }
+          $notes = @"
+          Windows x64 安装包。安装向导可选择程序目录；作品、封面和 API 配置始终保存在本机。
+
+          首次运行出现 Windows SmartScreen 时，请确认安装包来自本仓库，再选择“更多信息”→“仍要运行”。
+
+          完整更新说明与安装步骤见 README.md 和 CHANGELOG.md。
+          "@
+          gh release create $env:GITHUB_REF_NAME $assets --title "墨台 $env:GITHUB_REF_NAME" --notes $notes

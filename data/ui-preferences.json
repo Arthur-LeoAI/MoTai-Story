@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "theme": "midnight",
+  "exportFormat": "markdown",
+  "inspectorTab": "write",
+  "toolbarPrefs": {
+    "ai": true,
+    "bible": true,
+    "work": true,
+    "cover": true,
+    "settings": true
+  },
+  "wallpaper": {
+    "selectedId": "auto",
+    "opacity": 22,
+    "customWallpapers": []
+  },
+  "workspace": {
+    "workId": "",
+    "chapterId": "",
+    "mainView": "create",
+    "previewMode": false
+  }
+}

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>墨台 · 小说创作工作台</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
+    <link rel="stylesheet" href="/studio.css">
+  </head>
+  <body>
+    <div class="studio-shell" id="studioShell">
+      <aside class="primary-rail" aria-label="主要导航">
+        <button class="brand-button" type="button" data-open-project-menu aria-label="打开作品菜单">
+          <span class="brand-seal" aria-hidden="true">墨</span>
+          <span class="brand-word">墨台</span>
+        </button>
+
+        <nav class="primary-nav">
+          <button class="rail-item active" type="button" data-view="ai" aria-current="page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8.5h10M7 12h7m-7 3.5h5M5 20l2.6-2.6H18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9.4a2 2 0 0 0 1 1.73V20Z"/></svg>
+            <span>AI 创作</span>
+          </button>
+          <button class="rail-item" type="button" data-view="editor">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h9l5 5V20H5zM14 4.5V10h5M8 14h8m-8 3h6"/></svg>
+            <span>正文</span>
+          </button>
+        </nav>
+
+        <div class="rail-spacer"></div>
+        <button class="rail-item" type="button" data-view="library">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h5v16H5zM10 6h5v14h-5zm5-2h4v16h-4z"/></svg>
+          <span>创作资料</span>
+        </button>
+        <button class="rail-item" id="settingsButton" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-2.1-1.2.1-2.4-2.4-2.4-2.4.1L12 4 10.8 6.1 8.4 6 6 8.4l.1 2.4L4 12l2.1 1.2-.1 2.4L8.4 18l2.4-.1L12 20l1.2-2.1 2.4.1 2.4-2.4-.1-2.4L20 12Z"/></svg>
+          <span>设置</span>
+        </button>
+      </aside>
+
+      <main class="stage">
+        <header class="stage-header">
+          <button class="project-switcher" type="button" data-open-project-menu aria-haspopup="menu" aria-expanded="false">
+            <span class="project-cover-dot" aria-hidden="true"></span>
+            <span class="project-switcher-copy">
+              <strong id="currentWorkTitle">加载中…</strong>
+              <small id="currentWorkMeta">本地作品</small>
+            </span>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
+          </button>
+          <div class="stage-heading">
+            <h1 id="stageTitle">AI 创作</h1>
+            <span id="stageSubtitle">和 AI 一起把灵感变成可以写的故事</span>
+          </div>
+          <div class="stage-actions">
+            <button class="icon-action tablet-only" id="mobilePanelButton" type="button" aria-label="打开侧栏">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <button class="quiet-button ai-only" id="chatHistoryButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5M4 4v4.5h4.5M12 8v4l3 2"/></svg>
+              对话记录
+            </button>
+            <button class="primary-button ai-only" id="newChatButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              新对话
+            </button>
+          </div>
+        </header>
+
+        <section class="screen ai-screen active" data-screen="ai">
+          <aside class="chat-history-panel" id="chatHistoryPanel" aria-label="对话记录" aria-hidden="true">
+            <div class="panel-heading">
+              <div><strong>对话记录</strong><small>每部作品独立保存</small></div>
+              <button class="icon-action" type="button" data-close-history aria-label="关闭对话记录">×</button>
+            </div>
+            <button class="new-chat-row" id="newChatInsideButton" type="button">＋ 新建对话</button>
+            <div class="chat-list" id="chatList"></div>
+          </aside>
+
+          <div class="conversation-column">
+            <div class="conversation" id="conversation" aria-live="polite"></div>
+            <form class="composer" id="chatComposer">
+              <textarea id="chatInput" rows="1" maxlength="20000" placeholder="说说你的灵感，或问一个创作问题…" aria-label="给 AI 发送消息"></textarea>
+              <div class="composer-footer">
+                <div class="composer-hints">
+                  <button type="button" data-chat-prompt="帮我把当前灵感整理成清晰的故事核心">梳理灵感</button>
+                  <button type="button" data-chat-prompt="我们从主角的目标和阻力开始讨论">讨论人物</button>
+                </div>
+                <button class="send-button" id="sendChatButton" type="submit" aria-label="发送消息">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4.5 14-3-5.5zM11.5 13.5 19 5"/></svg>
+                </button>
+                <button class="stop-button hidden" id="stopChatButton" type="button" aria-label="停止生成">
+                  <span></span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <aside class="artifact-rail" id="artifactRail" aria-label="创作资料">
+            <div class="artifact-rail-heading">
+              <div><strong>创作资料</strong><small>让故事保持一致</small></div>
+              <button class="text-action" type="button" data-view="library">查看全部</button>
+            </div>
+            <div class="artifact-cards" id="artifactCards"></div>
+            <p class="artifact-note">AI 生成的内容会先成为草案，只有确认后才写入作品。</p>
+          </aside>
+        </section>
+
+        <section class="screen editor-screen" data-screen="editor">
+          <aside class="chapter-sidebar" id="chapterSidebar">
+            <div class="chapter-heading">
+              <div><strong>正文</strong><small id="chapterCountLabel">0 个章节</small></div>
+              <button class="icon-action" id="addChapterButton" type="button" aria-label="新建章节">＋</button>
+            </div>
+            <div class="chapter-list" id="chapterList"></div>
+          </aside>
+
+          <div class="editor-workspace">
+            <div class="editor-topline">
+              <input id="chapterTitleInput" class="chapter-title-input" aria-label="章节标题" placeholder="未命名章节">
+              <span class="save-indicator" id="editorSaveState" data-state="saved">已保存</span>
+              <button class="quiet-button" id="toggleEditorAiButton" type="button">问 AI</button>
+            </div>
+            <div class="editor-toolbar ql-toolbar ql-snow" id="editorToolbar">
+              <span class="ql-formats"><button class="ql-bold" type="button"></button><button class="ql-italic" type="button"></button></span>
+              <span class="ql-formats"><select class="ql-header"><option selected></option><option value="2"></option><option value="3"></option></select></span>
+              <span class="ql-formats"><button class="ql-blockquote" type="button"></button><button class="ql-list" value="ordered" type="button"></button><button class="ql-list" value="bullet" type="button"></button></span>
+              <span class="ql-formats"><button class="ql-link" type="button"></button><button class="ql-image" type="button"></button></span>
+            </div>
+            <div class="paper-scroller">
+              <article class="writing-paper">
+                <div id="richEditor" aria-label="章节正文"></div>
+              </article>
+            </div>
+            <div class="selection-tools hidden" id="selectionTools" role="toolbar" aria-label="AI 文本工具">
+              <button type="button" data-ai-edit="continue">续写</button>
+              <button type="button" data-ai-edit="expand">扩写</button>
+              <button type="button" data-ai-edit="shorten">缩写</button>
+              <button type="button" data-ai-edit="polish">润色</button>
+              <button type="button" data-ai-edit="ask">问 AI</button>
+            </div>
+          </div>
+
+          <aside class="editor-ai-panel" id="editorAiPanel" aria-hidden="true">
+            <div class="panel-heading">
+              <div><strong>正文助手</strong><small>先预览，再替换</small></div>
+              <button class="icon-action" type="button" data-close-editor-ai aria-label="关闭">×</button>
+            </div>
+            <div class="editor-ai-body" id="editorAiBody">
+              <p>选中文字后，可以扩写、缩写或润色；也可以把段落带到 AI 对话里继续讨论。</p>
+            </div>
+          </aside>
+        </section>
+
+        <section class="screen library-screen" data-screen="library">
+          <aside class="library-sidebar">
+            <div class="library-title"><strong>创作资料</strong><small>小说的结构与事实</small></div>
+            <nav id="libraryNav"></nav>
+            <p>每次 AI 优化都会先生成草案，不会直接改动现有资料。</p>
+          </aside>
+          <div class="library-document-wrap">
+            <article class="library-document">
+              <header class="document-header">
+                <div><span id="libraryIndex">01</span><h2 id="libraryTitle">故事大纲</h2></div>
+                <div class="document-actions">
+                  <button class="quiet-button" id="editLibraryButton" type="button">编辑</button>
+                  <button class="quiet-button" id="libraryAiButton" type="button">让 AI 优化</button>
+                  <button class="primary-button hidden" id="saveLibraryButton" type="button">保存更改</button>
+                </div>
+              </header>
+              <p class="document-intro" id="libraryIntro"></p>
+              <div class="library-fields" id="libraryFields"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="menu-popover project-menu" id="projectMenu" role="menu" aria-hidden="true">
+      <div class="project-menu-list" id="projectMenuList"></div>
+      <div class="menu-divider"></div>
+      <button type="button" id="newWorkMenuButton">＋ 新建作品</button>
+      <button type="button" id="projectInfoButton">作品信息</button>
+      <label class="export-row">导出作品<select id="exportFormat"><option value="markdown">Markdown</option><option value="txt">TXT</option><option value="html">HTML</option><option value="doc">Word</option><option value="pdf">PDF</option></select><button id="exportButton" type="button">导出</button></label>
+      <a href="/legacy.html">封面、备份与高级工具</a>
+      <button class="danger-text" type="button" id="deleteWorkButton">删除当前作品</button>
+    </div>
+
+    <dialog class="studio-dialog" id="newWorkDialog">
+      <form method="dialog" id="newWorkForm">
+        <header><div><h2>开始一个新故事</h2><p>先写一句也可以，其他设定可以和 AI 慢慢聊。</p></div><button type="button" data-close-dialog="newWorkDialog" aria-label="关闭">×</button></header>
+        <label><span>作品名</span><input id="newWorkTitle" maxlength="80" placeholder="未命名作品"></label>
+        <label><span>一句灵感</span><textarea id="newWorkPremise" rows="4" placeholder="例如：一个失去记忆的人，收到十年前的自己寄来的信。"></textarea></label>
+        <footer><button class="quiet-button" type="button" data-close-dialog="newWorkDialog">取消</button><button class="primary-button" type="submit">创建并开始</button></footer>
+      </form>
+    </dialog>
+
+    <dialog class="studio-dialog" id="projectInfoDialog">
+      <form method="dialog" id="projectInfoForm">
+        <header><div><h2>作品信息</h2><p>这些信息会成为 AI 理解作品的基础。</p></div><button type="button" data-close-dialog="projectInfoDialog" aria-label="关闭">×</button></header>
+        <label><span>作品名</span><input id="projectTitleInput" maxlength="80"></label>
+        <label><span>类型</span><input id="projectGenreInput" maxlength="40"></label>
+        <label><span>一句话简介</span><textarea id="projectPremiseInput" rows="5"></textarea></label>
+        <footer><button class="quiet-button" type="button" data-close-dialog="projectInfoDialog">取消</button><button class="primary-button" type="submit">保存</button></footer>
+      </form>
+    </dialog>
+
+    <dialog class="studio-dialog settings-dialog" id="settingsDialog">
+      <form method="dialog" id="settingsForm">
+        <header><div><h2>AI 设置</h2><p>DeepSeek 为默认服务，也可以展开高级设置使用兼容接口。</p></div><button type="button" data-close-dialog="settingsDialog" aria-label="关闭">×</button></header>
+        <div class="settings-grid simple-settings">
+          <label><span>服务商</span><select id="aiProviderInput"></select></label>
+          <label><span>API Key</span><input id="aiKeyInput" type="password" autocomplete="off" placeholder="未配置"></label>
+          <label><span>模型</span><input id="aiModelInput" placeholder="deepseek-v4-flash"></label>
+        </div>
+        <p class="migration-warning hidden" id="modelMigrationWarning">当前保存的是已弃用的 DeepSeek 模型。不会自动修改；建议更新模型后测试连接。</p>
+        <details class="advanced-settings">
+          <summary>高级设置</summary>
+          <div class="settings-grid">
+            <label><span>Base URL</span><input id="aiBaseUrlInput"></label>
+            <label><span>接口类型</span><select id="aiEndpointInput"><option value="chat">Chat Completions</option><option value="responses">Responses</option><option value="local">本地备用</option></select></label>
+            <label><span>最大输出 Token</span><input id="aiMaxTokensInput" type="number" min="200" max="8000"></label>
+            <label><span>超时（毫秒）</span><input id="aiTimeoutInput" type="number" min="3000" max="120000"></label>
+            <label><span>代理地址</span><input id="aiProxyInput" placeholder="http://127.0.0.1:7890"></label>
+            <label class="check-row"><input id="aiFallbackInput" type="checkbox"><span>外部接口失败时使用本地备用</span></label>
+            <label><span>图片 API 地址</span><input id="imageBaseUrlInput"></label>
+            <label><span>图片模型</span><input id="imageModelInput"></label>
+          </div>
+        </details>
+        <p class="settings-status" id="settingsStatus"></p>
+        <footer><button class="quiet-button" id="testAiButton" type="button">测试连接</button><button class="primary-button" type="submit">保存设置</button></footer>
+      </form>
+    </dialog>
+
+    <dialog class="studio-dialog proposal-dialog" id="proposalDialog">
+      <form method="dialog" id="proposalForm">
+        <header><div><h2 id="proposalDialogTitle">创作资料草案</h2><p>选择要写入作品的部分。未选中的内容保持不变。</p></div><button type="button" data-close-dialog="proposalDialog" aria-label="关闭">×</button></header>
+        <div class="proposal-sections" id="proposalSections"></div>
+        <footer><button class="quiet-button danger-text" id="discardProposalButton" type="button">放弃草案</button><span class="dialog-spacer"></span><button class="quiet-button" type="button" data-close-dialog="proposalDialog">稍后处理</button><button class="primary-button" type="submit">确认写入</button></footer>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/vendor/quill/quill.js"></script>
+    <script src="/studio.js"></script>
+  </body>
+</html>
