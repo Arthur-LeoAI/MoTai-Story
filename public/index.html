@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="paper-blue">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +7,7 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
     <link rel="stylesheet" href="/studio.css">
+    <link rel="stylesheet" href="/workbench.css">
   </head>
   <body>
     <div class="studio-shell" id="studioShell">
@@ -53,6 +54,9 @@
             <span id="stageSubtitle">和 AI 一起把灵感变成可以写的故事</span>
           </div>
           <div class="stage-actions">
+            <button class="ai-availability checking" id="aiAvailabilityButton" type="button" aria-live="polite" title="正在检测 AI 接口">
+              <span aria-hidden="true"></span><strong>AI 检测中</strong>
+            </button>
             <button class="icon-action tablet-only" id="mobilePanelButton" type="button" aria-label="打开侧栏">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
@@ -108,18 +112,22 @@
 
         <section class="screen editor-screen" data-screen="editor">
           <aside class="chapter-sidebar" id="chapterSidebar">
+            <button type="button" class="quiet-button drawer-close" id="closeChaptersButton">关闭章节栏</button>
             <div class="chapter-heading">
               <div><strong>正文</strong><small id="chapterCountLabel">0 个章节</small></div>
               <button class="icon-action" id="addChapterButton" type="button" aria-label="新建章节">＋</button>
             </div>
             <div class="chapter-list" id="chapterList"></div>
+            <div class="beta-actions"><button class="quiet-button" type="button" data-beta="scenes">场景规划</button><button class="quiet-button" type="button" data-beta="history">章节历史</button><button class="quiet-button" type="button" data-beta="trash">回收站</button></div>
           </aside>
 
           <div class="editor-workspace">
             <div class="editor-topline">
+              <button class="quiet-button" id="toggleChaptersButton" type="button" aria-controls="chapterSidebar" aria-expanded="true">章节</button>
               <input id="chapterTitleInput" class="chapter-title-input" aria-label="章节标题" placeholder="未命名章节">
               <span class="save-indicator" id="editorSaveState" data-state="saved">已保存</span>
               <button class="quiet-button" id="toggleEditorAiButton" type="button">问 AI</button>
+              <button class="quiet-button" id="focusWritingButton" type="button" aria-pressed="false">专注</button>
             </div>
             <div class="editor-toolbar ql-toolbar ql-snow" id="editorToolbar">
               <span class="ql-formats"><button class="ql-bold" type="button"></button><button class="ql-italic" type="button"></button></span>
@@ -143,11 +151,32 @@
 
           <aside class="editor-ai-panel" id="editorAiPanel" aria-hidden="true">
             <div class="panel-heading">
-              <div><strong>正文助手</strong><small>先预览，再替换</small></div>
+              <div><strong>正文助手</strong><small>输入要求，预览后应用</small></div>
               <button class="icon-action" type="button" data-close-editor-ai aria-label="关闭">×</button>
             </div>
+            <div class="editor-ai-context" id="editorAiContext">将继续当前章节</div>
+            <form class="editor-ai-form" id="editorAiForm">
+              <label><span>处理方式</span><select id="editorAiMode">
+                <option value="continue">继续创作</option>
+                <option value="custom">按指令修改或创作</option>
+                <option value="expand">扩写选中内容</option>
+                <option value="polish">润色选中内容</option>
+                <option value="shorten">缩写选中内容</option>
+              </select></label>
+              <label><span>给 AI 的指令</span><textarea id="editorAiInstruction" rows="5" placeholder="例如：让冲突更紧张，加入一段主角与调查员的对话，不要总结。"></textarea></label>
+              <button class="primary-button" id="generateEditorAiButton" type="submit">生成预览</button>
+              <label><span>目标字数</span><select id="targetWordsPreset"><option value="300">300 字</option><option value="800" selected>800 字</option><option value="1500">1500 字</option><option value="custom">自定义</option></select><input aria-label="自定义目标字数" class="hidden" id="targetWords" type="number" min="200" max="2000" value="800"></label>
+              <details class="writing-options"><summary>更多写作选项</summary><label><span><input id="autoRewrite" type="checkbox"> 自动修订（最多两轮）</span></label></details>
+              <button type="button" class="quiet-button hidden" id="cancelWritingTask">取消任务</button>
+            </form>
+            <div class="editor-ai-run-meta hidden" id="editorAiRunMeta" aria-live="polite"></div>
+            <details class="editor-ai-context-details hidden" id="editorAiContextDetails">
+              <summary>查看本次使用的上下文</summary>
+              <div class="editor-ai-context-list" id="editorAiContextList"></div>
+            </details>
+            <section class="editor-ai-validation hidden" id="editorAiValidationReport" aria-live="polite" aria-label="一致性校验报告"></section>
             <div class="editor-ai-body" id="editorAiBody">
-              <p>选中文字后，可以扩写、缩写或润色；也可以把段落带到 AI 对话里继续讨论。</p>
+              <p>可以直接续写当前章节；选中文字后，也可以按你的指令修改、扩写、润色或缩写。</p>
             </div>
           </aside>
         </section>
@@ -181,8 +210,13 @@
       <div class="menu-divider"></div>
       <button type="button" id="newWorkMenuButton">＋ 新建作品</button>
       <button type="button" id="projectInfoButton">作品信息</button>
-      <label class="export-row">导出作品<select id="exportFormat"><option value="markdown">Markdown</option><option value="txt">TXT</option><option value="html">HTML</option><option value="doc">Word</option><option value="pdf">PDF</option></select><button id="exportButton" type="button">导出</button></label>
-      <a href="/legacy.html">封面、备份与高级工具</a>
+      <button type="button" data-beta="import">导入作品</button>
+      <button type="button" data-beta="search">全文搜索</button>
+      <button type="button" data-beta="facts">正式设定</button>
+      <button type="button" data-beta="preferences">写作偏好</button>
+      <button type="button" data-beta="usage">用量与任务</button>
+      <button type="button" data-beta="backup">备份与恢复</button>
+      <label class="export-row">导出作品<select id="exportFormat"><option value="markdown">Markdown</option><option value="txt">TXT</option><option value="docx">Word DOCX</option><option value="html">HTML</option><option value="pdf">PDF</option></select><button id="exportButton" type="button">导出</button></label>
       <button class="danger-text" type="button" id="deleteWorkButton">删除当前作品</button>
     </div>
 
@@ -207,28 +241,25 @@
 
     <dialog class="studio-dialog settings-dialog" id="settingsDialog">
       <form method="dialog" id="settingsForm">
-        <header><div><h2>AI 设置</h2><p>DeepSeek 为默认服务，也可以展开高级设置使用兼容接口。</p></div><button type="button" data-close-dialog="settingsDialog" aria-label="关闭">×</button></header>
-        <div class="settings-grid simple-settings">
-          <label><span>服务商</span><select id="aiProviderInput"></select></label>
-          <label><span>API Key</span><input id="aiKeyInput" type="password" autocomplete="off" placeholder="未配置"></label>
-          <label><span>模型</span><input id="aiModelInput" placeholder="deepseek-v4-flash"></label>
+        <header><div><h2>选择 AI 模型</h2><p>API 凭据由运行环境统一管理，使用者只能选择已经开放的模型。</p></div><button type="button" data-close-dialog="settingsDialog" aria-label="关闭">×</button></header>
+        <div class="api-key-setting">
+          <label><span>AI 模型</span><select id="aiModelInput"></select></label>
+          <small>列表仅显示运行环境已配置且适合小说写作的模型。这里不会显示、接收或保存 API Key。</small>
         </div>
-        <p class="migration-warning hidden" id="modelMigrationWarning">当前保存的是已弃用的 DeepSeek 模型。不会自动修改；建议更新模型后测试连接。</p>
-        <details class="advanced-settings">
-          <summary>高级设置</summary>
-          <div class="settings-grid">
-            <label><span>Base URL</span><input id="aiBaseUrlInput"></label>
-            <label><span>接口类型</span><select id="aiEndpointInput"><option value="chat">Chat Completions</option><option value="responses">Responses</option><option value="local">本地备用</option></select></label>
-            <label><span>最大输出 Token</span><input id="aiMaxTokensInput" type="number" min="200" max="8000"></label>
-            <label><span>超时（毫秒）</span><input id="aiTimeoutInput" type="number" min="3000" max="120000"></label>
-            <label><span>代理地址</span><input id="aiProxyInput" placeholder="http://127.0.0.1:7890"></label>
-            <label class="check-row"><input id="aiFallbackInput" type="checkbox"><span>外部接口失败时使用本地备用</span></label>
-            <label><span>图片 API 地址</span><input id="imageBaseUrlInput"></label>
-            <label><span>图片模型</span><input id="imageModelInput"></label>
-          </div>
-        </details>
+        <section class="ai-provider-status-list hidden" id="aiProviderStatusList" aria-label="AI 连接状态" aria-live="polite">
+          <article class="ai-provider-status" data-ai-provider-status="deepseek">
+            <span class="provider-status-dot" aria-hidden="true"></span>
+            <div><strong>DeepSeek</strong><small>等待检测</small></div>
+            <span class="provider-model">尚未配置</span>
+          </article>
+          <article class="ai-provider-status" data-ai-provider-status="openai">
+            <span class="provider-status-dot" aria-hidden="true"></span>
+            <div><strong>OpenAI</strong><small>等待检测</small></div>
+            <span class="provider-model">尚未配置</span>
+          </article>
+        </section>
         <p class="settings-status" id="settingsStatus"></p>
-        <footer><button class="quiet-button" id="testAiButton" type="button">测试连接</button><button class="primary-button" type="submit">保存设置</button></footer>
+        <footer><button class="primary-button" type="submit">保存选择并测试</button></footer>
       </form>
     </dialog>
 
@@ -240,8 +271,20 @@
       </form>
     </dialog>
 
+    <dialog class="studio-dialog proposal-dialog canon-proposal-dialog" id="canonProposalDialog" aria-labelledby="canonProposalDialogTitle">
+      <form method="dialog" id="canonProposalForm">
+        <header><div><h2 id="canonProposalDialogTitle">确认事实更新</h2><p>正文已经写入。请选择要同步到人物、事件与时间线约束中的事实。</p></div><button type="button" data-close-dialog="canonProposalDialog" aria-label="关闭">×</button></header>
+        <div class="canon-proposal-summary hidden" id="canonProposalSummary"></div>
+        <div class="proposal-sections canon-proposal-sections" id="canonProposalSections" aria-live="polite"></div>
+        <footer><button class="quiet-button danger-text" id="rejectCanonProposalButton" type="button">拒绝事实更新</button><span class="dialog-spacer"></span><button class="quiet-button" type="button" data-close-dialog="canonProposalDialog">稍后处理</button><button class="primary-button" id="confirmCanonProposalButton" type="submit">确认更新设定</button></footer>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog class="studio-dialog beta-dialog" id="betaDialog"><header><h2 id="betaTitle"></h2><button type="button" data-close-dialog="betaDialog">×</button></header><div id="betaBody"></div></dialog>
     <script src="/vendor/quill/quill.js"></script>
     <script src="/studio.js"></script>
+    <script src="/beta.js"></script>
+    <script src="/workbench.js"></script>
   </body>
 </html>

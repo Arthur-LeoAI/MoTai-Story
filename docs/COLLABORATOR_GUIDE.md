@@ -298,7 +298,7 @@ git status
 
 ```powershell
 tools\node\node.exe --check server.js
-tools\node\node.exe --check public\app.js
+tools\node\node.exe --check public\studio.js
 tools\node\node.exe --check src\domain.js
 tools\node\node.exe --check src\storage.js
 tools\node\node.exe --test
@@ -310,7 +310,7 @@ tools\node\node.exe -e "JSON.parse(require('fs').readFileSync('data/db.example.j
 只提交和本次任务有关的文件。
 
 ```powershell
-git add README.md public/app.js
+git add README.md public/studio.js
 git commit -m "feat: improve ai writing flow"
 git push -u origin feature/简短功能名
 ```

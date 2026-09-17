@@ -12,11 +12,11 @@
     "url": "https://github.com/makemoremoney687/novel-studio.git"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env.local --use-env-proxy server.js",
+    "start": "node --env-file-if-exists=.env.local server.js",
     "desktop": "electron .",
     "package:win": "electron-builder --win dir --x64",
     "make:win": "electron-builder --win nsis --x64 --publish never",
-    "check:syntax": "node --check server.js && node --check public/app.js && node --check public/studio.js && node --check src/domain.js && node --check src/studio.js && node --check src/storage.js && node --check desktop/main.cjs && node --check desktop/data-runtime.cjs",
+    "check:syntax": "node scripts/check-syntax.cjs",
     "check:data": "node -e \"JSON.parse(require('fs').readFileSync('data/db.example.json','utf8')); console.log('Example database JSON is valid.')\"",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",

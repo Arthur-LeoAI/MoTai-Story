@@ -22,7 +22,7 @@ fs.writeFileSync(dataFile, JSON.stringify({
 
 process.env.DATA_FILE = dataFile;
 process.env.ENV_FILE = path.join(directory, ".env.local");
-process.env.AI_PROVIDER = "local";
+process.env.MOTAI_TEST_AI = "1";
 
 const { createAppServer } = require("../server");
 const server = createAppServer();
@@ -42,6 +42,7 @@ test.after(async () => {
 });
 
 async function request(pathname, options = {}) {
+  options = await require("./versioned-request").versionedOptions(baseUrl, pathname, options);
   const response = await fetch(`${baseUrl}${pathname}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers }

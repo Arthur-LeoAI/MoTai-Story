@@ -25,7 +25,7 @@ fs.writeFileSync(dataFile, JSON.stringify({
 
 process.env.DATA_FILE = dataFile;
 process.env.ENV_FILE = path.join(directory, ".env.local");
-process.env.AI_PROVIDER = "local";
+process.env.MOTAI_TEST_AI = "1";
 
 const { createAppServer } = require("../server");
 const server = createAppServer();

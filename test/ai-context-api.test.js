@@ -9,11 +9,13 @@ const path = require("node:path");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "motai-ai-mock-"));
 process.env.DATA_FILE = path.join(directory, "db.json");
 process.env.ENV_FILE = path.join(directory, ".env.local");
-process.env.AI_PROVIDER = "local";
+delete process.env.MOTAI_TEST_AI;
+process.env.AI_PROVIDER = "openai";
 
 const { createAppServer } = require("../server");
 const requests = [];
 let responseCall = 0;
+let reviewOverride = null;
 const detailedSetting = "天穹星港的每一条跃迁航线都由航标、导航 AI 和轨道议会共同维持；任何一次篡改都会在相邻殖民地留下可被追踪的时序回声。林舟必须从维修记录、货船黑匣子和师父留下的密钥中逐步还原真相，同时避免走私集团抢先夺走关键航标。".repeat(12);
 const chapterPlan = Array.from({ length: 8 }, (_, index) => `第${index + 1}章｜星港航标${index + 1}｜剧情目标：推进航线危机｜成长点：掌握一项导航技能｜爽点：提前锁定关键坐标｜冲突：走私集团制造阻碍｜结尾钩子：未来信号出现新的异常`).join("\n");
 
@@ -40,6 +42,31 @@ function sendJson(response, payload) {
 const mockAi = http.createServer(async (request, response) => {
   const body = await readJson(request);
   requests.push({ url: request.url, body });
+
+  if (request.url === "/v1/models") {
+    sendJson(response, { data: [{ id: "gpt-5.5" }, { id: "text-embedding-3-large" }] });
+    return;
+  }
+
+  if (JSON.stringify(body).includes("请只回复：连接成功")) {
+    sendJson(response, { output: [{ content: [{ type: "output_text", text: "连接成功" }] }] });
+    return;
+  }
+
+  if (JSON.stringify(body).includes("只做小说连续性审校")) {
+    if (reviewOverride !== null) {
+      sendJson(response, { output: [{ content: [{ type: "output_text", text: reviewOverride }] }] });
+      return;
+    }
+    sendJson(response, {
+      output: [{ content: [{ type: "output_text", text: JSON.stringify({
+        conflicts: [],
+        chapterMemory: { summary: "林舟发现失控货船逼近星港。", timeLabel: "警报响起后" },
+        facts: [{ category: "event_state", predicate: "失控货船", value: "正在撞向星港", strength: "hard" }]
+      }) }] }]
+    });
+    return;
+  }
 
   if (request.url === "/v1/images/generations") {
     sendJson(response, {
@@ -87,6 +114,12 @@ test.before(async () => {
     mockAi.listen(0, "127.0.0.1", resolve);
   });
   mockBaseUrl = `http://127.0.0.1:${mockAi.address().port}/v1`;
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.OPENAI_BASE_URL = mockBaseUrl;
+  process.env.OPENAI_MODEL = "gpt-5.5";
+  process.env.IMAGE_API_KEY = "image-key";
+  process.env.IMAGE_BASE_URL = mockBaseUrl;
+  process.env.IMAGE_MODEL = "mock-image";
   await new Promise((resolve, reject) => {
     appServer.once("error", reject);
     appServer.listen(0, "127.0.0.1", resolve);
@@ -101,6 +134,7 @@ test.after(async () => {
 });
 
 async function request(pathname, options = {}) {
+  options = await require("./versioned-request").versionedOptions(baseUrl, pathname, options);
   const response = await fetch(`${baseUrl}${pathname}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers }
@@ -109,21 +143,9 @@ async function request(pathname, options = {}) {
 }
 
 test("模拟 AI 请求携带设定库、章纲与连续性，并覆盖封面链路", async () => {
-  const config = await request("/api/ai/config", {
-    method: "POST",
-    body: JSON.stringify({
-      provider: "openai",
-      apiKey: "test-key",
-      baseUrl: mockBaseUrl,
-      model: "mock-model",
-      endpoint: "responses",
-      imageApiKey: "image-key",
-      imageBaseUrl: mockBaseUrl,
-      imageModel: "mock-image",
-      localFallback: false
-    })
-  });
-  assert.equal(config.response.status, 200);
+  const connection = await request("/api/ai/test", { method: "POST", body: JSON.stringify({ provider: "openai" }) });
+  assert.equal(connection.payload.ok, true);
+  assert.equal(connection.payload.model, "gpt-5.5");
 
   const created = await request("/api/works", {
     method: "POST",
@@ -149,6 +171,34 @@ test("模拟 AI 请求携带设定库、章纲与连续性，并覆盖封面链�
   });
   assert.equal(writing.response.status, 200);
   assert.match(writing.payload.text, /林舟/);
+  assert.equal(writing.payload.canAccept, true);
+  const beforeAccept = await request(`/api/works/${work.id}`);
+  const pendingProposal = beforeAccept.payload.work.canonProposals.find((item) => item.generationRecordId === writing.payload.generation.id);
+  const prematureConfirm = await request(`/api/works/${work.id}/canon-proposals/${pendingProposal.id}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ factIds: pendingProposal.changes.map((item) => item.fact.id) })
+  });
+  assert.equal(prematureConfirm.response.status, 409);
+  const afterPrematureConfirm = await request(`/api/works/${work.id}`);
+  assert.deepEqual(afterPrematureConfirm.payload.work.canon, beforeAccept.payload.work.canon);
+  assert.equal(afterPrematureConfirm.payload.work.canonProposals.find((item) => item.id === pendingProposal.id).status, "pending");
+  const accepted = await request(`/api/works/${work.id}/chapters/${chapter.id}/generations/${writing.payload.generation.id}/accept`, {
+    method: "POST",
+    body: JSON.stringify({
+      baseChapterUpdatedAt: chapter.updatedAt,
+      richContent: { version: 1, ops: [{ insert: `${writing.payload.text}\n` }] }
+    })
+  });
+  assert.equal(accepted.response.status, 200);
+  assert.equal(accepted.payload.generation.status, "accepted");
+  assert.equal(accepted.payload.canonProposal.changes.length, 1);
+  const proposedFactId = accepted.payload.canonProposal.changes[0].fact.id;
+  const confirmed = await request(`/api/works/${work.id}/canon-proposals/${accepted.payload.canonProposal.id}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ factIds: [proposedFactId] })
+  });
+  assert.equal(confirmed.response.status, 200);
+  assert.equal(confirmed.payload.canon.facts.some((fact) => fact.id === proposedFactId), true);
 
   const title = await request("/api/ai/write", {
     method: "POST",
@@ -206,4 +256,69 @@ test("模拟 AI 请求携带设定库、章纲与连续性，并覆盖封面链�
   assert.match(imageRequests[2].body.prompt, /星港来信/);
   assert.match(imageRequests[2].body.prompt, /核心冲突/);
   assert.match(imageRequests[2].body.prompt, /不要在壁纸中画出书名/);
+});
+
+test("无效审校报告拒绝生成，不保存可接受结果或改写正文", async () => {
+  const created = await request("/api/works", { method: "POST", body: JSON.stringify({ title: "审校失败保护" }) });
+  const work = created.payload.work;
+  const chapter = work.chapters[0];
+  const invalidReports = [
+    "这段正文没有问题。",
+    "{invalid json}",
+    JSON.stringify({ conflicts: [], facts: [] }),
+    JSON.stringify({ conflicts: [], facts: [], chapterMemory: { summary: "   " } }),
+    JSON.stringify({ conflicts: [{ severity: "unknown", message: "时间不符" }], facts: [], chapterMemory: { summary: "进展" } })
+  ];
+  try {
+    for (const report of invalidReports) {
+      reviewOverride = report;
+      const result = await request("/api/ai/write", {
+        method: "POST", body: JSON.stringify({ workId: work.id, chapterId: chapter.id, mode: "continue" })
+      });
+      assert.equal(result.response.status, 502, report);
+      assert.match(JSON.stringify(result.payload), /审校.*不能写入/);
+      assert.equal(result.payload.generation, undefined);
+    }
+  } finally {
+    reviewOverride = null;
+  }
+  const saved = (await request(`/api/works/${work.id}`)).payload.work;
+  assert.equal(saved.chapters[0].content, chapter.content);
+  assert.equal(saved.generationRecords.length, 0);
+  assert.equal(saved.canonProposals.length, 0);
+});
+
+test("持续硬冲突最多重写两次并阻止接受正文", async () => {
+  const created = await request("/api/works", { method: "POST", body: JSON.stringify({ title: "硬冲突保护" }) });
+  const work = created.payload.work;
+  const chapter = work.chapters[0];
+  reviewOverride = JSON.stringify({
+    conflicts: [{ category: "timeline", severity: "hard", message: "人物在事件发生前得知其结果。" }],
+    facts: [], chapterMemory: { summary: "人物提前得知事件结果。" }
+  });
+  const start = requests.length;
+  let result;
+  try {
+    result = await request("/api/ai/write", {
+      method: "POST", body: JSON.stringify({ workId: work.id, chapterId: chapter.id, mode: "continue", autoRewrite: true })
+    });
+  } finally {
+    reviewOverride = null;
+  }
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.canAccept, false);
+  assert.equal(result.payload.generation.status, "blocked");
+  assert.equal(result.payload.generation.rewriteCount, 2);
+  assert.equal(result.payload.generation.attempts.length, 3);
+  const calls = requests.slice(start).filter((item) => item.url === "/v1/responses");
+  assert.equal(calls.filter((item) => JSON.stringify(item.body).includes("只做小说连续性审校")).length, 3);
+  assert.equal(calls.length, 6);
+  const accept = await request(`/api/works/${work.id}/chapters/${chapter.id}/generations/${result.payload.generation.id}/accept`, {
+    method: "POST", body: JSON.stringify({ richContent: { version: 1, ops: [{ insert: `${result.payload.text}\n` }] } })
+  });
+  assert.equal(accept.response.status, 409);
+  const saved = (await request(`/api/works/${work.id}`)).payload.work;
+  assert.equal(saved.chapters[0].content, chapter.content);
+  assert.equal(saved.generationRecords[0].status, "blocked");
+  assert.equal(saved.canonProposals.length, 0);
 });

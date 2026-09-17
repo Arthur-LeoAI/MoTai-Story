@@ -3,6 +3,9 @@
 .motai.pid
 data/db.json
 data/covers/
+data/backups/
+data/wallpapers/
+data/ui-preferences.json
 tmp/
 logs/
 server.out.log

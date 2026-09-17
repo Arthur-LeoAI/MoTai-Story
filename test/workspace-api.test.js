@@ -1,0 +1,62 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const fsp = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "motai-beta-"));
+process.env.DATA_FILE = path.join(dir, "db.json"); process.env.ENV_FILE = path.join(dir, ".env"); process.env.MOTAI_TEST_AI = "1";
+const { createAppServer } = require("../server"); const server = createAppServer(); let base;
+const { createDocx } = require("../src/manuscript-import");
+test.before(async () => { await new Promise(r => server.listen(0,"127.0.0.1",r)); base = `http://127.0.0.1:${server.address().port}`; });
+test.after(async () => { await new Promise(r => server.close(r)); await fsp.rm(dir,{recursive:true,force:true}); });
+async function req(url, method="GET", data) { const response = await fetch(base+url,{method,headers:{"Content-Type":"application/json"},...(data ? {body:JSON.stringify(data)}:{})}); return {status:response.status,...await response.json()}; }
+test("version conflict, immutable restore, partial merge, history backup and recycle", async () => {
+  const {work} = await req('/api/works','POST',{title:'修订测试'}); const c=work.chapters[0], root=`/api/works/${work.id}/chapters/${c.id}`;
+  assert.equal((await req(root,'PATCH',{content:'missing'})).status,428);
+  const saved=await req(root,'PATCH',{baseRevision:c.revision,richContent:{ops:[{insert:'原稿',attributes:{bold:true}},{insert:'\n'}]}});
+  assert.equal(saved.status,200); assert.equal(saved.chapter.revision,c.revision+1);
+  assert.equal((await req(root,'PATCH',{baseRevision:c.revision,content:'stale'})).status,409);
+  const manual=await req(`${root}/revisions`,'POST',{baseRevision:saved.chapter.revision,name:'命名稿'}); assert.equal(manual.status,200);
+  const changed=await req(root,'PATCH',{baseRevision:saved.chapter.revision,content:'新版正文'}); assert.equal(changed.status,200);
+  const list=await req(`${root}/revisions`); const target=list.revisions.find(r=>r.name==='命名稿'); assert.ok(target);
+  const restored=await req(`${root}/revisions/${target.id}/restore`,'POST',{baseRevision:changed.chapter.revision}); assert.equal(restored.status,200); assert.equal(restored.chapter.richContent.ops[0].attributes.bold,true);
+  const task=(await req('/api/tasks','POST',{requestId:'beta-generation',workId:work.id,chapterId:c.id,baseRevision:restored.chapter.revision,mode:'continue',range:{index:2,length:0}})).task;
+  let current; do { current=(await req(`/api/tasks/${task.id}`)).task; if(current.status!=='completed') await new Promise(r=>setTimeout(r,20)); } while(!['completed','failed'].includes(current.status));
+  assert.equal(current.status,'completed',current.message); const record=current.result.generation;
+  const merge=await req(`${root}/generations/${record.id}/merge`,'POST',{baseRevision:restored.chapter.revision,hunkIds:[record.hunks[0].id]}); assert.equal(merge.status,200);
+  assert.equal(merge.chapter.richContent.ops[0].attributes.bold,true);
+  let reviewed;
+  do { reviewed=(await req(`/api/tasks/${merge.reviewTask.id}`)).task; if(!['completed','failed'].includes(reviewed.status)) await new Promise(r=>setTimeout(r,20)); } while(!['completed','failed'].includes(reviewed.status));
+  assert.equal(reviewed.status,'completed',reviewed.message);
+  const next = await req('/api/tasks','POST',{requestId:'after-review',workId:work.id,chapterId:c.id,baseRevision:merge.chapter.revision,baseChapterUpdatedAt:'obsolete-display-time',mode:'continue'});
+  let nextTask;
+  do { nextTask=(await req(`/api/tasks/${next.task.id}`)).task; if(!['completed','failed'].includes(nextTask.status)) await new Promise(r=>setTimeout(r,20)); } while(!['completed','failed'].includes(nextTask.status));
+  assert.equal(nextTask.status,'completed',nextTask.message);
+  assert.equal((await req(`${root}/generations/${record.id}/merge`,'POST',{baseRevision:restored.chapter.revision,hunkIds:[record.hunks[0].id]})).status,409);
+  const backup=await req('/api/backup'); assert.ok(Object.keys(backup.history).length>=3);
+  const deleted=await req(root,'DELETE',{baseRevision:merge.chapter.revision}); assert.equal(deleted.work.chapters.length,0);
+  const recovered=await req(`/api/works/${work.id}/trash/${c.id}/restore`,'POST',{baseRevision:deleted.work.structureRevision}); assert.equal(recovered.work.chapters[0].id,c.id); assert.equal(recovered.work.deletedChapters.length,0);
+  assert.equal((await req('/api/backup/restore','POST',backup)).status,200);
+  const after=(await req(`/api/works/${work.id}`)).work;
+  const history=await req(`${root}/revisions/${after.chapters[0].revisions[0].id}`); assert.equal(history.status,200);
+});
+test("scene planning preserves text and rejects stale structure", async()=>{
+ const {work}=await req('/api/works','POST',{title:'场景'}), c=work.chapters[0], root=`/api/works/${work.id}/chapters/${c.id}/scenes`;
+ const saved=await req(root,'PATCH',{baseRevision:c.revision,structureRevision:work.structureRevision,scenes:[{title:'第一场',start:0,end:0,storyTime:3,mustNot:'不得飞行'}]});
+ assert.equal(saved.status,200); assert.equal(saved.chapter.content,''); assert.ok(saved.chapter.scenes[0].id);
+ assert.equal((await req(root,'PATCH',{baseRevision:c.revision,structureRevision:work.structureRevision,scenes:[]})).status,409);
+});
+
+test("DOCX confirmation preserves trusted formatting after title changes", async () => {
+ const buffer = await createDocx({title:'格式导入', chapters:[{title:'第一章 原标题', richContent:{ops:[{insert:'加粗正文',attributes:{bold:true}},{insert:'\n'}]},content:'加粗正文'}]});
+ const parsed = await req('/api/imports','POST',{fileName:'sample.docx',base64:buffer.toString('base64')});
+ assert.equal(parsed.status,200);
+ const chapters = parsed.preview.chapters.map((c,sourceIndex)=>({sourceIndex,title:'修改后的标题',content:c.content,richContent:{ops:[{insert:'不可信内容\n'}]}}));
+ const imported = await req(`/api/imports/${parsed.preview.id}/confirm`,'POST',{chapters});
+ assert.equal(imported.status,201);
+ assert.ok(imported.work.chapters.some(c=>c.richContent.ops.some(op=>op.attributes?.bold)));
+ assert.ok(imported.work.chapters.every(c=>!c.content.includes('不可信内容')));
+ const repeated = await req(`/api/imports/${parsed.preview.id}/confirm`,'POST',{chapters});
+ assert.equal(repeated.work.id, imported.work.id);
+});

@@ -224,7 +224,7 @@ function applyArtifactProposal(work, proposal, sectionKeys) {
     throw error;
   }
   const allowed = new Set(proposal.sections.map((section) => section.key));
-  const requested = Array.isArray(sectionKeys) && sectionKeys.length
+  const requested = Array.isArray(sectionKeys)
     ? sectionKeys.filter((key) => allowed.has(key))
     : [...allowed];
   if (!requested.length) {

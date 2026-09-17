@@ -21,6 +21,35 @@ const {
   workSummary
 } = require("./src/domain");
 const { createJsonStore } = require("./src/storage");
+const { createTaskService, taskContext } = require("./src/tasks");
+const { createBetaApi } = require("./src/beta-api");
+const { normalizeTemporalFact, selectTemporalFacts, invalidateDependencies, classifyConflict, adjudicateConflict } = require("./src/temporal");
+const { createWorkspaceService, upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, makeHunks, mergeHunks, fail } = require("./src/workspace");
+const {
+  PROVIDERS,
+  applyDeepSeekThinking,
+  buildModelListRequest,
+  buildTextRequest,
+  extractModelIds,
+  getProviderConfig,
+  isSupportedWritingModel,
+  normalizeProvider,
+  parseTextResponse,
+  publicProviderStatus,
+  selectWritingModel
+} = require("./src/ai-providers");
+const {
+  DATABASE_SCHEMA_VERSION,
+  applyCanonProposal,
+  canAcceptGeneration,
+  hashChapterContent,
+  normalizeCanonProposal,
+  normalizeChapterMemory,
+  normalizeConflict,
+  normalizeGenerationRecord,
+  selectContinuityContext,
+  upgradeDatabase
+} = require("./src/continuity");
 const {
   ARTIFACT_DEFINITIONS,
   applyArtifactProposal,
@@ -60,7 +89,13 @@ const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
 const dataStore = createJsonStore(DATA_FILE);
+const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
+const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
+const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
+let migrationTask;
+const databaseBaselines = new WeakMap();
 let automaticBackupTask = null;
+const providerRuntimeStatus = new Map();
 const PORT = Number(process.env.PORT || 5177);
 const ENV_FILE = process.env.ENV_FILE
   ? path.resolve(process.env.ENV_FILE)
@@ -91,37 +126,15 @@ const AI_PROVIDER_PRESETS = {
   deepseek: {
     label: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     endpoint: "chat"
-  },
-  moonshot: {
-    label: "Kimi / Moonshot",
-    baseUrl: "https://api.moonshot.cn/v1",
-    model: "moonshot-v1-8k",
-    endpoint: "chat"
-  },
-  zhipu: {
-    label: "智谱 GLM",
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    model: "glm-4-flash",
-    endpoint: "chat"
-  },
-  custom: {
-    label: "自定义兼容接口",
-    baseUrl: "",
-    model: "",
-    endpoint: "chat"
-  },
-  local: {
-    label: "本地备用",
-    baseUrl: "",
-    model: "本地备用",
-    endpoint: "local"
   }
 };
 
 const AI_ENV_KEYS = [
   "AI_PROVIDER",
+  "DEEPSEEK_API_KEY",
+  "DEEPSEEK_MODEL",
   "OPENAI_API_KEY",
   "OPENAI_MODEL",
   "OPENAI_BASE_URL",
@@ -152,17 +165,55 @@ const MIME_TYPES = {
 };
 
 async function readDb() {
-  const db = await dataStore.read();
-  const { db: migrated, changed } = await migrateCoverStorage(db);
-  if (changed) {
-    await dataStore.write(migrated);
+  if (!migrationTask) migrationTask = (async () => {
+    const existing = await dataStore.read();
+    if (existing.schemaVersion < DATABASE_SCHEMA_VERSION && existing.works.length) {
+      const dir = path.join(DATA_DIR, "backups"); await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(path.join(dir, `schema-${existing.schemaVersion}-before-${Date.now()}.json`), JSON.stringify(existing), { flag: "wx" });
+    }
+    await dataStore.transact(async stored => {
+      const upgraded = upgradeDatabase(stored);
+      const covers = await migrateCoverStorage(upgraded.db);
+      Object.assign(stored, covers.db);
+    });
+  })();
+  await migrationTask;
+  const raw = await dataStore.read();
+  const upgraded = upgradeDatabase(raw);
+  const covers = await migrateCoverStorage(upgraded.db);
+  if (upgraded.changed || covers.changed) {
+    await dataStore.write(covers.db);
+    const fresh = await dataStore.read(); databaseBaselines.set(fresh, structuredClone(fresh)); return fresh;
   }
-  return migrated;
+  databaseBaselines.set(covers.db, structuredClone(covers.db));
+  return covers.db;
 }
 
 async function writeDb(db, { automaticBackup = true } = {}) {
-  const { db: migrated } = await migrateCoverStorage(db);
-  await dataStore.write(migrated);
+  const upgraded = upgradeDatabase(db);
+  const { db: migrated } = await migrateCoverStorage(upgraded.db);
+  const baseline = databaseBaselines.get(db);
+  let saved;
+  if (baseline) {
+    saved = await dataStore.transact(stored => {
+      const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
+      const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
+      for (const w of [...changes, ...removed]) {
+        if (JSON.stringify(stored.works.find(x => x.id === w.id)) !== JSON.stringify(baseline.works.find(x => x.id === w.id))) fail("作品已在其他窗口更新，未保存内容仍保留。", 409);
+      }
+      stored.works = stored.works.filter(w => !removed.some(x => x.id === w.id));
+      for (const w of changes) { const at = stored.works.findIndex(x => x.id === w.id); if (at < 0) stored.works.unshift(w); else stored.works[at] = w; }
+      return stored;
+    });
+  } else saved = await dataStore.write(migrated);
+  db.storeRevision = saved.storeRevision;
+  for (const work of db.works) {
+    const persisted = saved.works.find(w => w.id === work.id);
+    if (persisted) { work.structureRevision = persisted.structureRevision; work.canonRevision = persisted.canonRevision; work.volumes = persisted.volumes; work.deletedChapters = persisted.deletedChapters; work.writingPreferences = persisted.writingPreferences;
+      for (const chapter of work.chapters || []) { const c = persisted.chapters.find(x => x.id === chapter.id); if (c) Object.assign(chapter, { revision: c.revision, revisions: c.revisions, scenes: c.scenes }); }
+    }
+  }
+  databaseBaselines.set(db, structuredClone(saved));
   if (automaticBackup) {
     scheduleAutomaticBackup();
   }
@@ -333,11 +384,11 @@ async function writeLocalEnvMap(map) {
 }
 
 function getProviderPreset(provider) {
-  return AI_PROVIDER_PRESETS[provider] || AI_PROVIDER_PRESETS.openai;
+  return AI_PROVIDER_PRESETS[normalizeProvider(provider)] || AI_PROVIDER_PRESETS.deepseek;
 }
 
 function getProviderOptions() {
-  return Object.entries(AI_PROVIDER_PRESETS).map(([value, preset]) => ({
+  return Object.entries(AI_PROVIDER_PRESETS).filter(([value]) => value !== "custom").map(([value, preset]) => ({
     value,
     label: preset.label,
     baseUrl: preset.baseUrl,
@@ -346,30 +397,29 @@ function getProviderOptions() {
   }));
 }
 
-function getAiConfig(includeKey = false) {
+function getAiConfig(includeKey = false, providerValue = process.env.AI_PROVIDER) {
   loadLocalEnv(ENV_FILE);
-  const provider = process.env.AI_PROVIDER || (getOpenAiKey() ? "openai" : "local");
+  const provider = normalizeProvider(providerValue, "deepseek");
   const preset = getProviderPreset(provider);
-  const apiKey = getOpenAiKey();
-  const defaultBaseUrl = provider === "custom" || provider === "local"
-    ? preset.baseUrl
-    : preset.baseUrl || DEFAULT_OPENAI_BASE_URL;
-  const baseUrl = String(process.env.OPENAI_BASE_URL || defaultBaseUrl || "").replace(/\/+$/, "");
-  const model = process.env.OPENAI_MODEL || process.env.AI_MODEL || preset.model || DEFAULT_OPENAI_MODEL;
-  const endpoint = process.env.OPENAI_ENDPOINT || preset.endpoint || DEFAULT_OPENAI_ENDPOINT;
+  const providerConfig = getProviderConfig(process.env, provider);
+  const runtime = providerRuntimeStatus.get(provider) || {};
+  const isActive = normalizeProvider(process.env.AI_PROVIDER, "deepseek") === provider;
+  const baseUrl = String(isActive && process.env.OPENAI_BASE_URL || providerConfig.baseUrl || preset.baseUrl).replace(/\/+$/, "");
+  const savedModel = provider === "deepseek" ? process.env.DEEPSEEK_MODEL : process.env.OPENAI_MODEL;
+  const model = savedModel || runtime.model || (isActive ? process.env.AI_MODEL : "") || preset.model || DEFAULT_OPENAI_MODEL;
+  const endpoint = providerConfig.endpoint || preset.endpoint || DEFAULT_OPENAI_ENDPOINT;
   const proxy = normalizeProxyUrl(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "");
 
   return {
     provider,
     providerLabel: preset.label,
-    hasApiKey: Boolean(apiKey),
-    apiKey: includeKey ? apiKey : "",
+    hasApiKey: providerConfig.hasApiKey,
+    apiKey: includeKey ? providerConfig.apiKey : "",
     model,
     baseUrl,
     endpoint,
     maxOutputTokens: getOpenAiMaxOutputTokens(),
-    timeoutMs: getOpenAiTimeoutMs(),
-    localFallback: isLocalAiFallbackEnabled(),
+    timeoutMs: model === "deepseek-flash" ? Math.max(120000, getOpenAiTimeoutMs()) : getOpenAiTimeoutMs(),
     proxy,
     noProxy: process.env.NO_PROXY || "localhost,127.0.0.1",
     providers: getProviderOptions()
@@ -380,10 +430,15 @@ function publicAiConfig() {
   const config = getAiConfig(false);
   return {
     ...config,
-    modelDeprecated: ["deepseek-chat", "deepseek-reasoner"].includes(config.model),
+    modelDeprecated: false,
     image: publicImageConfig(),
-    configured: config.provider === "local" || config.hasApiKey || config.localFallback,
-    statusProvider: config.provider === "local" || !config.hasApiKey ? "local" : config.provider
+    configured: isTestAiEnabled() || config.hasApiKey,
+    statusProvider: isTestAiEnabled() ? "test" : config.provider,
+    providerStatuses: Object.keys(PROVIDERS).map((provider) => {
+      const providerConfig = getAiConfig(false, provider);
+      const runtime = providerRuntimeStatus.get(provider) || {};
+      return publicProviderStatus(providerConfig, runtime);
+    })
   };
 }
 
@@ -463,60 +518,28 @@ function normalizeProxyUrl(value) {
 
 async function saveAiConfig(body) {
   const current = readLocalEnvMap();
-  const provider = AI_PROVIDER_PRESETS[body.provider] ? body.provider : "custom";
-  const preset = getProviderPreset(provider);
-  const endpoint = ["responses", "chat", "local"].includes(body.endpoint)
-    ? body.endpoint
-    : preset.endpoint;
-  const apiKey = typeof body.apiKey === "string" && body.apiKey.trim()
-    ? body.apiKey.trim()
-    : current.OPENAI_API_KEY || "";
-  const baseUrl = provider === "local"
-    ? ""
-    : sanitizeUrl(body.baseUrl || preset.baseUrl || DEFAULT_OPENAI_BASE_URL, "API 地址");
-  const model = normalizeText(body.model) || preset.model || DEFAULT_OPENAI_MODEL;
-  const maxOutputTokens = Math.max(200, Math.min(8000, Number(body.maxOutputTokens) || 3200));
-  const timeoutMs = Math.max(3000, Math.min(120000, Number(body.timeoutMs) || 30000));
-  const imageApiKey = typeof body.imageApiKey === "string" && body.imageApiKey.trim()
-    ? body.imageApiKey.trim()
-    : current.IMAGE_API_KEY || "";
-  const imageBaseUrl = normalizeText(body.imageBaseUrl)
-    ? sanitizeUrl(body.imageBaseUrl, "图片 API 地址")
-    : current.IMAGE_BASE_URL || "";
-  const imageModel = normalizeText(body.imageModel)
-    || current.IMAGE_MODEL
-    || current.OPENAI_IMAGE_MODEL
-    || DEFAULT_OPENAI_IMAGE_MODEL;
-  const imageTimeoutMs = Math.max(3000, Math.min(120000, Number(body.imageTimeoutMs) || Number(current.IMAGE_TIMEOUT_MS) || 60000));
-  const localFallback = body.localFallback === undefined ? true : Boolean(body.localFallback);
-  const proxy = normalizeProxyUrl(sanitizeUrl(body.proxy, "代理地址"));
+  const provider = normalizeProvider(body.provider, "deepseek");
+  const model = normalizeText(body.model);
+  const providerConfig = getAiConfig(false, provider);
+  if (!providerConfig.hasApiKey && !isTestAiEnabled()) {
+    const error = new Error(`${providerConfig.providerLabel} 尚未由运行环境配置，不能选择该服务商的模型。`);
+    error.status = 400;
+    throw error;
+  }
+  if (!isSupportedWritingModel(provider, model)) {
+    const error = new Error("请选择列表中的小说写作模型。");
+    error.status = 400;
+    throw error;
+  }
 
   const next = {
     ...current,
     AI_PROVIDER: provider,
-    OPENAI_API_KEY: apiKey,
-    OPENAI_MODEL: model,
-    OPENAI_BASE_URL: baseUrl,
-    OPENAI_ENDPOINT: endpoint,
-    OPENAI_MAX_OUTPUT_TOKENS: String(maxOutputTokens),
-    OPENAI_TIMEOUT_MS: String(timeoutMs),
-    IMAGE_API_KEY: imageApiKey,
-    IMAGE_BASE_URL: imageBaseUrl,
-    IMAGE_MODEL: imageModel,
-    IMAGE_TIMEOUT_MS: String(imageTimeoutMs),
-    OPENAI_IMAGE_MODEL: "",
-    AI_LOCAL_FALLBACK: localFallback ? "1" : "0",
-    HTTPS_PROXY: proxy,
-    HTTP_PROXY: proxy,
-    NO_PROXY: normalizeText(body.noProxy) || "localhost,127.0.0.1"
+    ...(provider === "deepseek" ? { DEEPSEEK_MODEL: model } : { OPENAI_MODEL: model })
   };
 
-  if (!proxy) {
-    next.HTTPS_PROXY = "";
-    next.HTTP_PROXY = "";
-  }
-
   await writeLocalEnvMap(next);
+  providerRuntimeStatus.delete(provider);
   return publicAiConfig();
 }
 
@@ -1075,6 +1098,12 @@ function cloneJson(value) {
 
 async function buildBackupPayload() {
   const db = await readDb();
+  const history = {};
+  for (const work of db.works) for (const chapter of [...work.chapters, ...(work.deletedChapters || [])]) {
+    for (const revision of chapter.revisions || []) {
+      history[revision.id] = { workId: work.id, chapter: await workspaceService.readSnapshot(work, chapter, revision.id) };
+    }
+  }
   const covers = {};
   let totalCoverBytes = 0;
 
@@ -1132,7 +1161,8 @@ async function buildBackupPayload() {
     createdAt: nowIso(),
     appVersion: PACKAGE_VERSION,
     database: cloneJson(db),
-    covers
+    covers,
+    history
   };
 }
 
@@ -1183,7 +1213,7 @@ function normalizeBackupPayload(value) {
   }
 
   return {
-    database: cloneJson(value.database),
+    database: upgradeDatabase(cloneJson(value.database)).db,
     covers
   };
 }
@@ -1255,7 +1285,24 @@ function scheduleAutomaticBackup() {
 
 async function restoreBackupPayload(value) {
   const backup = normalizeBackupPayload(value);
+  const history = value.history || {};
+  for (const work of backup.database.works) for (const chapter of [...work.chapters, ...(work.deletedChapters || [])]) {
+    for (const revision of chapter.revisions || []) {
+      const item = history[revision.id];
+      if (!/^revision_[a-zA-Z0-9]+$/.test(revision.id) || !item || item.workId !== work.id || item.chapter?.id !== chapter.id) fail("备份中的章节历史引用无效。", 400);
+    }
+  }
+  const restoreBase = (await readDb()).storeRevision;
   const previousBackup = await createSafetyBackup("恢复前");
+  await fsp.mkdir(workspaceService.historyDir, { recursive: true });
+  for (const work of backup.database.works) for (const chapter of [...work.chapters, ...(work.deletedChapters || [])]) {
+    for (const revision of chapter.revisions || []) {
+      const original = history[revision.id]; const nextId = createId("revision");
+      await fsp.writeFile(path.join(workspaceService.historyDir, `${nextId}.json`), JSON.stringify(original), { flag: "wx" });
+      revision.id = nextId;
+    }
+  }
+  for (const task of backup.database.tasks || []) if (!["completed", "failed", "cancelled", "interrupted"].includes(task.status)) task.status = "interrupted";
   await fsp.mkdir(COVER_DIR, { recursive: true });
   const coverPathMap = new Map();
 
@@ -1282,13 +1329,20 @@ async function restoreBackupPayload(value) {
     });
     ensureCoverHistory(work);
     for (const chapter of work.chapters || []) {
-      chapter.content = String(chapter.content || "").replace(/\/data\/covers\/([^\s)]+)/g, (full, name) => {
+      const rewriteLocalCoverPath = (input) => String(input || "").replace(/\/data\/covers\/([^\s)]+)/g, (full, name) => {
         const original = validateBackupCoverName(name);
         return original && coverPathMap.has(original) ? coverPathMap.get(original) : full;
       });
+      chapter.content = rewriteLocalCoverPath(chapter.content);
+      if (chapter.richContent && Array.isArray(chapter.richContent.ops)) {
+        chapter.richContent.ops = chapter.richContent.ops.map((op) => typeof op?.insert === "string"
+          ? { ...op, insert: rewriteLocalCoverPath(op.insert) }
+          : op);
+      }
     }
   }
 
+  backup.database.storeRevision = restoreBase;
   await writeDb(backup.database, { automaticBackup: false });
   return {
     previousBackup: path.basename(previousBackup),
@@ -1485,10 +1539,14 @@ function getApiRoot(baseUrl) {
     .replace(/\/images\/generations$/, "");
 }
 
-function isLocalAiFallbackEnabled() {
-  loadLocalEnv(ENV_FILE);
-  const value = String(process.env.AI_LOCAL_FALLBACK || "1").toLowerCase();
-  return value !== "0" && value !== "false" && value !== "off";
+function isTestAiEnabled() {
+  return process.env.MOTAI_TEST_AI === "1";
+}
+
+function aiUnavailableError(message = "AI 不可用：尚未配置 API Key。请打开 AI 设置完成配置并测试连接。") {
+  const error = new Error(message);
+  error.status = 503;
+  return error;
 }
 
 function getNetworkErrorMessage(error, baseUrl = getOpenAiBaseUrl()) {
@@ -1524,6 +1582,19 @@ function limitText(text, maxLength) {
 }
 
 async function fetchAiJson(url, apiKey, requestBody, signal) {
+  if (url.endsWith("/chat/completions")) requestBody = applyDeepSeekThinking(requestBody);
+  const ctx = taskContext.getStore();
+  if (ctx?.signal) signal = signal ? AbortSignal.any([signal, ctx.signal]) : ctx.signal;
+  const usageId = createId("usage"), started = Date.now();
+  const reserved = JSON.stringify(requestBody).length + Number(requestBody.max_tokens || requestBody.max_output_tokens || 0);
+  await dataStore.transact(db => {
+    db.usage ||= []; db.settings ||= { dailyTokenLimit: 200000 };
+    const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+    const used = db.usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
+    if (used + reserved > db.settings.dailyTokenLimit) fail("今日 AI 用量已达到上限，请在用量面板查看。", 429);
+    db.usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
+  });
+  const finishUsage = async values => dataStore.transact(db => { const u = db.usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
   let response;
   try {
     response = await fetch(url, {
@@ -1536,6 +1607,7 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
       body: JSON.stringify(requestBody)
     });
   } catch (error) {
+    await finishUsage({ status: "unknown", errorCategory: error.name });
     const message = error.name === "AbortError"
       ? `连接 AI 接口超时：${url}。当前网络可能无法直连。`
       : getNetworkErrorMessage(error, url);
@@ -1550,6 +1622,9 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
   }
 
   const payload = await response.json().catch(() => ({}));
+  const parsedUsage = parseTextResponse(url.endsWith("/chat/completions") ? "deepseek" : "openai", payload);
+  await finishUsage({ status: response.ok ? "completed" : "failed", responseId: parsedUsage.responseId, model: payload.model || requestBody.model,
+    ...(payload.usage ? parsedUsage.usage : response.ok ? {} : { totalTokens: 0 }), errorCategory: response.ok ? "" : `http_${response.status}` });
   if (!response.ok) {
     const rawMessage = payload.error?.message || payload.message || `AI request failed with status ${response.status}`;
     const message = response.status === 401
@@ -1937,23 +2012,86 @@ function extractResponseText(payload) {
   return chunks.join("").trim();
 }
 
-async function testAiConnection() {
-  const config = getAiConfig(true);
+async function fetchAiModels(config, signal) {
+  const request = buildModelListRequest(config);
+  let response;
+  try {
+    response = await fetch(request.url, { method: request.method, headers: request.headers, signal });
+  } catch (error) {
+    const message = error.name === "AbortError" ? `连接 AI 接口超时：${request.url}。` : getNetworkErrorMessage(error, request.url);
+    if (message) {
+      const wrapped = new Error(message);
+      wrapped.status = 502;
+      throw wrapped;
+    }
+    throw error;
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error?.message || payload.message || `获取模型列表失败（${response.status}）`);
+    error.status = response.status;
+    throw error;
+  }
+  return extractModelIds(payload);
+}
 
-  if (config.provider === "local" || config.endpoint === "local") {
+async function listSelectableAiModels() {
+  if (isTestAiEnabled()) {
+    return {
+      models: [
+        { provider: "deepseek", providerLabel: "DeepSeek", id: "deepseek-chat" },
+        { provider: "openai", providerLabel: "OpenAI", id: "gpt-5.5" }
+      ],
+      errors: []
+    };
+  }
+
+  const results = await Promise.all(Object.keys(PROVIDERS).map(async (provider) => {
+    const config = getAiConfig(true, provider);
+    if (!config.apiKey) return { provider, models: [], error: "运行环境尚未配置" };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs, 10000));
+    try {
+      const ids = await fetchAiModels(config, controller.signal);
+      return {
+        provider,
+        models: ids.filter((id) => isSupportedWritingModel(provider, id)).map((id) => ({
+          provider,
+          providerLabel: config.providerLabel,
+          id
+        }))
+      };
+    } catch (error) {
+      return { provider, models: [], error: error.message || "无法获取模型列表" };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }));
+
+  return {
+    models: results.flatMap((result) => result.models),
+    errors: results.filter((result) => result.error).map(({ provider, error }) => ({ provider, message: error }))
+  };
+}
+
+async function testAiConnection(providerValue) {
+  const config = getAiConfig(true, providerValue);
+
+  if (isTestAiEnabled()) {
     return {
       ok: true,
-      message: "本地备用可用，不会连接外部 API。",
+      message: "测试模型连接成功。",
       provider: config.provider,
-      endpoint: config.endpoint,
-      model: config.model
+      endpoint: "test",
+      model: "测试模型",
+      checkedAt: nowIso()
     };
   }
 
   if (!config.apiKey) {
     return {
       ok: false,
-      message: "未填写 API Key。请在右侧“接口”页填写并保存。",
+      message: "AI 服务尚未由运行环境配置，请联系应用管理员。",
       provider: config.provider,
       endpoint: config.endpoint,
       model: config.model
@@ -1964,28 +2102,15 @@ async function testAiConnection() {
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   try {
-    let payload;
-    let text = "";
-    const testPrompt = "请只回复：连接成功";
-
-    if (config.endpoint === "chat") {
-      payload = await fetchAiJson(`${config.baseUrl}/chat/completions`, config.apiKey, {
-        model: config.model,
-        messages: [
-          { role: "user", content: testPrompt }
-        ],
-        max_tokens: 16,
-        temperature: 0.2
-      }, controller.signal);
-      text = extractChatText(payload);
-    } else {
-      payload = await fetchAiJson(`${config.baseUrl}/responses`, config.apiKey, {
-        model: config.model,
-        input: testPrompt,
-        max_output_tokens: 16
-      }, controller.signal);
-      text = extractResponseText(payload);
+    const models = await fetchAiModels(config, controller.signal);
+    const model = selectWritingModel(config.provider, models, config.model);
+    if (!model) {
+      throw new Error(`${config.providerLabel} 账号没有返回可用于小说写作的文本模型。`);
     }
+    const testPrompt = "请只回复：连接成功";
+    const request = buildTextRequest({ provider: config.provider, apiKey: config.apiKey, model, baseUrl: config.baseUrl, userPrompt: testPrompt, maxOutputTokens: 32 });
+    const payload = await fetchAiJson(request.url, config.apiKey, request.body, controller.signal);
+    const text = parseTextResponse(config.provider, payload).text;
 
     if (!text) {
       return {
@@ -1993,24 +2118,31 @@ async function testAiConnection() {
         message: "接口已响应，但没有返回文本。请检查模型和接口类型是否匹配。",
         provider: config.provider,
         endpoint: config.endpoint,
-        model: config.model
+        model
       };
     }
+
+    const checkedAt = nowIso();
+    providerRuntimeStatus.set(config.provider, { available: true, model, message: `${config.providerLabel} 连接成功。`, checkedAt });
 
     return {
       ok: true,
       message: `${config.providerLabel || config.provider} 连接成功。`,
       provider: config.provider,
       endpoint: config.endpoint,
-      model: config.model
+      model,
+      checkedAt
     };
   } catch (error) {
+    const checkedAt = nowIso();
+    providerRuntimeStatus.set(config.provider, { available: false, model: config.model, message: error.message || "连接失败。", checkedAt });
     return {
       ok: false,
       message: error.message || "连接失败。",
       provider: config.provider,
       endpoint: config.endpoint,
-      model: config.model
+      model: config.model,
+      checkedAt
     };
   } finally {
     clearTimeout(timeout);
@@ -2024,18 +2156,12 @@ async function callOpenAiWriter(body) {
   const boldness = clampNumber(body.work?.boldness, 0, 100, 50);
   const temperature = temperatureFromBoldness(boldness);
 
-  if (config.provider === "local" || config.endpoint === "local") {
-    return buildLocalAiResult(body, "正在使用本地备用生成。");
+  if (isTestAiEnabled()) {
+    return buildTestAiResult(body);
   }
 
   if (!apiKey) {
-    if (isLocalAiFallbackEnabled()) {
-      return buildLocalAiResult(body, "未配置 OPENAI_API_KEY，已使用本地备用生成。");
-    }
-
-    const error = new Error("OPENAI_API_KEY 未配置。请在网页右侧 AI 助手的设置页保存 API Key。");
-    error.status = 400;
-    throw error;
+    throw aiUnavailableError();
   }
 
   const controller = new AbortController();
@@ -2098,25 +2224,287 @@ async function callOpenAiWriter(body) {
     }
 
     if (!text) {
-      if (isLocalAiFallbackEnabled()) {
-        return buildLocalAiResult(body, "OpenAI 返回空内容，已使用本地备用生成。");
-      }
-
-      const error = new Error("OpenAI returned an empty response");
+      const error = new Error("AI 不可用：接口已响应，但没有返回内容。请检查模型和接口类型。");
       error.status = 502;
       throw error;
     }
 
-    return { text, model, provider: config.provider, endpoint: config.endpoint };
-  } catch (error) {
-    if (isLocalAiFallbackEnabled()) {
-      return buildLocalAiResult(body, error.message);
-    }
-
-    throw error;
+    const parsedResponse = parseTextResponse(config.provider, payload);
+    return { text, model: parsedResponse.model || model, provider: config.provider, endpoint: config.endpoint, usage: parsedResponse.usage };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function parseJsonObject(text) {
+  const value = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const start = value.indexOf("{");
+  const end = value.lastIndexOf("}");
+  if (start < 0 || end <= start) return {};
+  try {
+    return JSON.parse(value.slice(start, end + 1));
+  } catch {
+    return {};
+  }
+}
+
+function continuityContextText(context) {
+  const facts = context.canonFacts.map((fact) => `- [${fact.strength}] ${fact.predicate}：${fact.value || fact.objectId}`).join("\n");
+  const memories = context.chapterMemories.map((memory) => `- 第${memory.chapterOrder + 1}章：${memory.summary}${memory.timeLabel ? `（时间：${memory.timeLabel}）` : ""}`).join("\n");
+  return [
+    "已确认事实（hard 不得违反，soft 尽量保持）：",
+    facts || "- 暂无已确认结构化事实",
+    "最近章节记忆：",
+    memories || "- 暂无已确认章节记忆"
+  ].join("\n");
+}
+
+function detectRuleConflicts(chapter, candidate) {
+  const source = String(chapter?.content || "");
+  const paragraphs = String(candidate || "").split(/\n+/).map((item) => item.trim()).filter((item) => item.length >= 24);
+  const seen = new Set();
+  const conflicts = [];
+  for (const paragraph of paragraphs) {
+    const repeatedInDraft = seen.has(paragraph);
+    const repeatedInChapter = source.includes(paragraph);
+    seen.add(paragraph);
+    if (!repeatedInDraft && !repeatedInChapter) continue;
+    conflicts.push(normalizeConflict({
+      id: createId("conflict"),
+      category: "repetition",
+      severity: "hard",
+      status: "open",
+      detectedBy: "rule",
+      message: repeatedInChapter ? "生成内容重复了当前章节中已有的完整段落。" : "生成内容内部出现了重复段落。",
+      evidence: [{ chapterId: chapter.id, excerpt: paragraph.slice(0, 240) }],
+      createdAt: nowIso()
+    }));
+  }
+  return conflicts;
+}
+
+async function analyzeGeneratedText(work, chapter, candidate, context) {
+  if (isTestAiEnabled()) {
+    return {
+      conflicts: [],
+      chapterMemory: {
+        status: "confirmed",
+        sourceContentHash: "",
+        summary: String(candidate || "").replace(/\s+/g, " ").slice(0, 280),
+        timeLabel: "",
+        participantIds: [],
+        locationIds: [],
+        factIds: [],
+        completedEventIds: [],
+        openForeshadowingIds: [],
+        updatedAt: nowIso()
+      },
+      facts: []
+    };
+  }
+
+  const validationBody = {
+    mode: "custom",
+    work,
+    chapter,
+    selectedText: candidate,
+    instruction: [
+      "你现在只做小说连续性审校，不创作正文。严格输出 JSON 对象，不要 Markdown。",
+      "格式：{\"conflicts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|causality|motivation|voice|other\",\"severity\":\"hard|soft\",\"message\":\"...\",\"excerpt\":\"...\"}],\"chapterMemory\":{\"summary\":\"...\",\"timeLabel\":\"...\"},\"facts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|other\",\"predicate\":\"...\",\"value\":\"...\",\"strength\":\"hard|soft\"}]}",
+      "hard 仅用于明确违反已确认事实、时间线、死亡状态、已知能力边界或因果不可能；风格建议用 soft。",
+      "facts 只提取这段新正文中明确发生且后续章节需要记住的事实，最多 12 条。",
+      "chapterMemory.summary 必须总结当前章节已有正文与本次新增内容的完整进展，不要只总结最后一段。",
+      "当前章节已有正文：",
+      limitText(chapter.content || "", 16000),
+      continuityContextText(context)
+    ].join("\n")
+  };
+  const result = await callOpenAiWriter(validationBody);
+  const parsed = parseJsonObject(result.text);
+  if (!Array.isArray(parsed.conflicts) || !Array.isArray(parsed.facts)
+    || !parsed.chapterMemory || typeof parsed.chapterMemory.summary !== "string"
+    || !parsed.chapterMemory.summary.trim()
+    || parsed.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim())) {
+    const error = new Error("AI 审校未返回有效的检查报告，本次结果不能写入。请重新生成。");
+    error.status = 502;
+    throw error;
+  }
+  const conflicts = (Array.isArray(parsed.conflicts) ? parsed.conflicts : []).slice(0, 40).map((item) => normalizeConflict({
+    id: createId("conflict"),
+    category: item.category,
+    severity: item.severity,
+    status: "open",
+    detectedBy: "ai",
+    message: item.message,
+    evidence: [{ chapterId: chapter.id, excerpt: item.excerpt }],
+    createdAt: nowIso()
+  }));
+  const facts = (Array.isArray(parsed.facts) ? parsed.facts : []).slice(0, 12).map((item) => ({
+    id: createId("fact"),
+    category: item.category,
+    subjectId: "",
+    predicate: normalizeText(item.predicate).slice(0, 120),
+    value: normalizeText(item.value).slice(0, 4000),
+    objectId: "",
+    strength: item.strength === "soft" ? "soft" : "hard",
+    status: "active",
+    sourceChapterId: chapter.id,
+    effectiveOrder: Math.max(0, (work.chapters || []).findIndex((item) => item.id === chapter.id)),
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  })).filter((fact) => fact.predicate || fact.value);
+  return {
+    conflicts,
+    facts,
+    chapterMemory: normalizeChapterMemory({
+      status: "confirmed",
+      sourceContentHash: "",
+      summary: parsed.chapterMemory?.summary || String(candidate || "").replace(/\s+/g, " ").slice(0, 600),
+      timeLabel: parsed.chapterMemory?.timeLabel || "",
+      updatedAt: nowIso()
+    })
+  };
+}
+
+async function reviewChapterTask(input) {
+  const db = await readDb(), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
+  if (!chapter) fail("章节不存在。", 404); ensureVersion(chapter.revision, input.baseRevision);
+  const task = taskContext.getStore(); if (task) { task.stage = "review"; await task.update({ status: "checking" }); }
+  const context = selectContinuityContext(work, chapter.id);
+  const scene = chapter.scenes?.[0];
+  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  const analysis = await analyzeGeneratedText(work, { ...chapter, content: "" }, chapter.content, context);
+  task?.signal.throwIfAborted();
+  return workspaceService.mutate(work.id, chapter.id, input.baseRevision, (w, c) => {
+    task?.signal.throwIfAborted(); ensureVersion(w.canonRevision, work.canonRevision);
+    const proposal = normalizeCanonProposal({ id: createId("canon_proposal"), chapterId: c.id, generationRecordId: "", status: "pending", sourceRevision: c.revision, changes: analysis.facts.map(f => ({ operation: "add", fact: { ...f, sourceRevision: c.revision } })), chapterMemory: analysis.chapterMemory, createdAt: nowIso() });
+    c.chapterMemory = normalizeChapterMemory({ ...analysis.chapterMemory, status: "confirmed", sourceContentHash: hashChapterContent(c) });
+    c.chapterMemory.context = { chapterVersions: context.chapterMemoryChapterIds.map(id => ({ id, revision: w.chapters.find(c => c.id === id)?.revision })), factVersions: context.canonFacts.map(f => ({ id: f.id, revision: f.sourceRevision })) };
+    w.canonProposals.push(proposal);
+    return { chapter: c, work: w, proposal, conflicts: analysis.conflicts };
+  });
+}
+
+function selectedGenerationOutput(record) {
+  const normalized = normalizeGenerationRecord(record);
+  const attempt = normalized.attempts.find((item) => item.index === normalized.selectedAttemptIndex) || normalized.attempts.at(-1);
+  return attempt?.output || "";
+}
+
+async function createConstrainedGeneration(body) {
+  const workId = normalizeText(body.workId || body.work?.id);
+  const chapterId = normalizeText(body.chapterId || body.chapter?.id);
+  const db = await readDb();
+  const work = findWork(db, workId);
+  const chapter = work && findChapter(work, chapterId);
+  if (!work || !chapter) {
+    const error = new Error("作品或章节不存在，请刷新后重试。");
+    error.status = 404;
+    throw error;
+  }
+  if (body.baseRevision !== undefined) ensureVersion(chapter.revision, body.baseRevision);
+  const scene = body.sceneId ? chapter.scenes.find(s => s.id === body.sceneId) : null;
+  if (body.sceneId && (!scene || scene.needsRelocation)) fail("场景需要重新定位后才能生成。", 409);
+  if (body.baseRevision === undefined && body.baseChapterUpdatedAt && body.baseChapterUpdatedAt !== chapter.updatedAt) {
+    const error = new Error("章节已在别处更新，请刷新后重新生成，避免覆盖新内容。");
+    error.status = 409;
+    throw error;
+  }
+
+  const mode = normalizeText(body.mode) || "continue";
+  const context = selectContinuityContext(work, chapter.id, { maxFacts: 240, recentChapterCount: 4 });
+  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  if (Array.isArray(body.excludeFactIds)) context.canonFacts = context.canonFacts.filter(f => !body.excludeFactIds.includes(f.id) || f.strength === "hard");
+  context.canonFactIds = context.canonFacts.map(f => f.id);
+  const baseContentHash = hashChapterContent(chapter);
+  const attempts = [];
+  let analysis = { conflicts: [], facts: [], chapterMemory: normalizeChapterMemory() };
+  let result = null;
+  const baseInstruction = [normalizeText(body.instruction), scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  let instruction = baseInstruction;
+  const task = taskContext.getStore();
+
+  for (let index = 0; index < 3; index += 1) {
+    task?.signal.throwIfAborted();
+    if (task) { task.stage = index ? "revision" : "generation"; await task.update({ status: "generating" }); }
+    const startedAt = nowIso();
+    try {
+      result = await callOpenAiWriter({
+        mode,
+        instruction,
+        selectedText: String(body.selectedText || ""),
+        work,
+        chapter,
+        continuityContext: context,
+        rewriteIssues: analysis.conflicts
+      });
+      task?.signal.throwIfAborted();
+      if (task) { task.stage = "review"; await task.update({ status: "checking", draft: result.text }); }
+      const ruleConflicts = detectRuleConflicts(mode === "continue" ? chapter : { ...chapter, content: "" }, result.text);
+      analysis = await analyzeGeneratedText(work, chapter, result.text, context);
+      analysis.conflicts = [...ruleConflicts, ...analysis.conflicts];
+      attempts.push({ index, status: "completed", output: result.text, usage: result.usage || {}, startedAt, finishedAt: nowIso() });
+      const hard = analysis.conflicts.filter((item) => item.severity === "hard" && item.status === "open");
+      if (!hard.length || index === 2 || body.autoRewrite !== true) break;
+      instruction = [baseInstruction, "请重写上一版并解决这些硬冲突：", ...hard.map((item) => `- ${item.message}`)].filter(Boolean).join("\n");
+    } catch (error) {
+      attempts.push({ index, status: "failed", output: "", error: error.message, startedAt, finishedAt: nowIso() });
+      throw error;
+    }
+  }
+
+  const hasHardConflict = analysis.conflicts.some((item) => item.severity === "hard" && item.status === "open");
+  const completedAt = nowIso();
+  const record = normalizeGenerationRecord({
+    id: createId("generation"),
+    chapterId: chapter.id,
+    mode,
+    status: hasHardConflict ? "blocked" : "ready",
+    provider: result?.provider,
+    model: result?.model,
+    instruction: normalizeText(body.instruction),
+    baseContentHash,
+    baseRevision: chapter.revision, canonRevision: work.canonRevision, sceneId: scene?.id || "",
+    context: { canonFactIds: context.canonFactIds, chapterMemoryChapterIds: context.chapterMemoryChapterIds, factVersions: context.canonFacts.map(f => ({ id: f.id, revision: f.sourceRevision })), chapterVersions: context.chapterMemoryChapterIds.map(id => ({ id, revision: work.chapters.find(c => c.id === id)?.revision })), promptVersion: "continuity-v2" },
+    attempts,
+    selectedAttemptIndex: attempts.length - 1,
+    conflicts: analysis.conflicts,
+    rewriteCount: Math.max(0, attempts.length - 1),
+    createdAt: attempts[0]?.startedAt || completedAt,
+    completedAt
+  });
+  if (body.range) record.hunks = makeHunks(chapter, body.range, selectedGenerationOutput(record));
+  record.conflicts = record.conflicts.map(c => ({ ...c, kind: classifyConflict(c) }));
+  let proposal = null;
+  if (!hasHardConflict) {
+    proposal = normalizeCanonProposal({
+      id: createId("canon_proposal"),
+      generationRecordId: record.id,
+      chapterId: chapter.id,
+      status: "pending",
+      changes: analysis.facts.map((fact) => ({ operation: "add", targetFactId: "", fact: { ...fact, sourceGenerationId: record.id } })),
+      chapterMemory: analysis.chapterMemory,
+      createdAt: completedAt
+    });
+  }
+
+  await dataStore.transact((stored) => {
+    task?.signal.throwIfAborted();
+    const upgraded = upgradeDatabase(stored).db;
+    Object.assign(stored, upgraded);
+    const currentWork = findWork(stored, work.id);
+    const currentChapter = currentWork && findChapter(currentWork, chapter.id);
+    if (!currentChapter || hashChapterContent(currentChapter) !== baseContentHash) {
+      const error = new Error("生成期间章节内容已变化，本次结果未保存，请重新生成。");
+      error.status = 409;
+      throw error;
+    }
+    currentWork.generationRecords.push(record);
+    if (proposal) currentWork.canonProposals.push(proposal);
+    currentWork.updatedAt = completedAt;
+  });
+
+  return { generation: record, text: selectedGenerationOutput(record), canAccept: canAcceptGeneration(record), fallback: false };
 }
 
 function buildChatSystemPrompt(work) {
@@ -2215,7 +2603,7 @@ async function consumeSseResponse(response, onDelta) {
 async function callConversationStream(work, chat, onDelta, signal) {
   const config = getAiConfig(true);
   const latestUserMessage = [...chat.messages].reverse().find((message) => message.role === "user");
-  if (config.provider === "local" || config.endpoint === "local" || !config.apiKey) {
+  if (isTestAiEnabled()) {
     const text = buildLocalChatReply(work, latestUserMessage?.content || "");
     for (const chunk of text.match(/.{1,6}/gu) || [text]) {
       if (signal.aborted) {
@@ -2223,7 +2611,10 @@ async function callConversationStream(work, chat, onDelta, signal) {
       }
       onDelta(chunk);
     }
-    return { text, provider: "local", warning: !config.apiKey && config.provider !== "local" ? "未配置 API Key，已使用本地备用。" : "" };
+    return { text, provider: "test", warning: "" };
+  }
+  if (!config.apiKey) {
+    throw aiUnavailableError();
   }
 
   const messages = [
@@ -2248,29 +2639,14 @@ async function callConversationStream(work, chat, onDelta, signal) {
       stream: true
     };
   const endpoint = config.endpoint === "chat" ? "/chat/completions" : "/responses";
-  let response;
-  try {
-    response = await fetch(`${config.baseUrl}${endpoint}`, {
-      method: "POST",
-      signal,
-      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
-    });
-  } catch (error) {
-    if (isLocalAiFallbackEnabled() && error.name !== "AbortError") {
-      const text = buildLocalChatReply(work, latestUserMessage?.content || "");
-      onDelta(text);
-      return { text, provider: "local", warning: error.message };
-    }
-    throw error;
-  }
+  const response = await fetch(`${config.baseUrl}${endpoint}`, {
+    method: "POST",
+    signal,
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(config.endpoint === "chat" ? applyDeepSeekThinking(requestBody) : requestBody)
+  });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    if (isLocalAiFallbackEnabled()) {
-      const text = buildLocalChatReply(work, latestUserMessage?.content || "");
-      onDelta(text);
-      return { text, provider: "local", warning: upstreamAiError(response, payload).message };
-    }
     throw upstreamAiError(response, payload);
   }
   const contentType = response.headers.get("content-type") || "";
@@ -2302,10 +2678,11 @@ async function generateArtifactFields(work, type, instruction = "") {
   }
   const config = getAiConfig(true);
   const fieldNames = Object.keys(definition.fields);
-  if (config.provider === "local" || config.endpoint === "local" || !config.apiKey) {
-    const result = await callStoryBibleGenerator(work);
+  if (isTestAiEnabled()) {
+    const result = buildTestStoryBible(work);
     return Object.fromEntries(fieldNames.map((field) => [field, result.storyBible[field] || ""]));
   }
+  if (!config.apiKey) throw aiUnavailableError();
   const prompt = [
     `请为小说《${work.title || "未命名作品"}》优化${definition.label}。`,
     `作品简介：${work.premise || "暂无"}`,
@@ -2349,12 +2726,6 @@ async function generateArtifactFields(work, type, instruction = "") {
       output = extractJsonObject(extractResponseText(payload));
     }
     return Object.fromEntries(fieldNames.map((field) => [field, String(output?.[field] || "").trim()]));
-  } catch (error) {
-    if (!isLocalAiFallbackEnabled()) {
-      throw error;
-    }
-    const result = await callStoryBibleGenerator(work);
-    return Object.fromEntries(fieldNames.map((field) => [field, result.storyBible[field] || ""]));
   } finally {
     clearTimeout(timeout);
   }
@@ -2453,7 +2824,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
           chat.updatedAt = nowIso();
           await writeDb(db);
         }
-        sendSseEvent(res, "error", { message: error.name === "AbortError" ? "生成已停止。" : error.message, retryable: true, partialMessage: output ? assistantMessage : null });
+        sendSseEvent(res, "error", { message: error.name === "AbortError" ? "生成已停止。" : error.message, status: error.name === "AbortError" ? 499 : error.status || 502, retryable: true, partialMessage: output ? assistantMessage : null });
       } finally {
         clearTimeout(timeout);
         if (!res.writableEnded && !res.destroyed) {
@@ -2518,13 +2889,16 @@ async function handleAiApi(req, res, parts) {
       baseUrl: config.baseUrl,
       provider: config.statusProvider,
       providerLabel: config.providerLabel,
-      endpoint: config.endpoint,
-      fallbackEnabled: config.localFallback
+      endpoint: config.endpoint
     });
   }
 
   if (req.method === "GET" && parts.length === 3 && parts[2] === "config") {
     return sendJson(res, 200, { config: publicAiConfig() });
+  }
+
+  if (req.method === "GET" && parts.length === 3 && parts[2] === "models") {
+    return sendJson(res, 200, await listSelectableAiModels());
   }
 
   if (req.method === "POST" && parts.length === 3 && parts[2] === "config") {
@@ -2534,13 +2908,27 @@ async function handleAiApi(req, res, parts) {
   }
 
   if (req.method === "POST" && parts.length === 3 && parts[2] === "test") {
-    const result = await testAiConnection();
+    const body = await readBody(req);
+    const result = await testAiConnection(body.provider);
     return sendJson(res, 200, result);
   }
 
   if (req.method === "POST" && parts.length === 3 && parts[2] === "write") {
     const body = await readBody(req);
-    const result = await callOpenAiWriter(body);
+    const mode = normalizeText(body.mode) || "continue";
+    const continuityModes = new Set(["continue", "polish", "expand", "shorten", "custom"]);
+    let result;
+    if (continuityModes.has(mode)) {
+      await readDb();
+      const task = await taskService.create({ ...body, requestId: body.requestId || createId("request") });
+      result = await taskService.wait(task.id);
+    } else {
+      const db = await readDb();
+      const work = findWork(db, normalizeText(body.workId || body.work?.id));
+      const chapter = work && findChapter(work, normalizeText(body.chapterId || body.chapter?.id));
+      if (!work || !chapter) return sendError(res, 404, "作品或章节不存在，请刷新后重试。");
+      result = await callOpenAiWriter({ ...body, work, chapter });
+    }
     return sendJson(res, 200, result);
   }
 
@@ -2563,6 +2951,7 @@ async function handleSystemApi(req, res, parts) {
 }
 
 async function handleApi(req, res, url) {
+  if (await betaApi(req, res, url)) return;
   const parts = url.pathname.split("/").filter(Boolean);
 
   if (parts.length === 1 && parts[0] === "api") {
@@ -2676,6 +3065,7 @@ async function handleApi(req, res, url) {
     const chapterTitle = normalizeText(body.chapterTitle) || "第一章";
     const work = {
       id: createId("work"),
+      ownerId: "local",
       title,
       author: normalizeText(body.author).slice(0, 40) || "未署名",
       premise: normalizeText(body.premise),
@@ -2689,6 +3079,9 @@ async function handleApi(req, res, url) {
       coverLogline: normalizeText(body.coverLogline),
       cover: DEFAULT_COVER_PATH,
       coverHistory: [],
+      canon: { version: 1, status: "empty", entities: [], facts: [] },
+      generationRecords: [],
+      canonProposals: [],
       notes: "",
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -2702,6 +3095,7 @@ async function handleApi(req, res, url) {
           notes: "",
           status: "draft",
           planning: normalizeChapterPlanning(body.chapterPlanning),
+          chapterMemory: normalizeChapterMemory(),
           createdAt: timestamp,
           updatedAt: timestamp
         }
@@ -2731,13 +3125,15 @@ async function handleApi(req, res, url) {
     work.coverStyle = normalizeCoverStyle(work.coverStyle);
     work.coverLogline = normalizeText(work.coverLogline);
     work.aiWorkspace = normalizeAiWorkspace(work.aiWorkspace);
+    work.canon = upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION, works: [work] }).db.works[0].canon;
     work.chapters = (work.chapters || []).map((chapter) => ({
       ...chapter,
       planning: normalizeChapterPlanning(chapter.planning),
       richContent: chapter.richContent
         ? normalizeRichContent(chapter.richContent)
         : plainTextToRichContent(chapter.content),
-      contentFormat: "quill-delta-v1"
+      contentFormat: "quill-delta-v1",
+      chapterMemory: normalizeChapterMemory(chapter.chapterMemory)
     }));
     ensureCoverHistory(work);
     return sendJson(res, 200, { work });
@@ -2891,6 +3287,55 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { work, cover: work.cover, source: "layout" });
   }
 
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon-proposals" && ["confirm", "reject"].includes(parts[5])) {
+    const body = await readBody(req);
+    const proposalId = parts[4];
+    const action = parts[5];
+    const result = await dataStore.transact((stored) => {
+      const upgraded = upgradeDatabase(stored).db;
+      Object.assign(stored, upgraded);
+      const storedWork = findWork(stored, work.id);
+      const proposal = storedWork?.canonProposals.find((item) => item.id === proposalId);
+      if (!proposal) {
+        const error = new Error("事实提案不存在。");
+        error.status = 404;
+        throw error;
+      }
+      if (proposal.status !== "pending") {
+        const error = new Error("这份事实提案已经处理，不能重复操作。");
+        error.status = 409;
+        throw error;
+      }
+      const sourceGeneration = storedWork.generationRecords.find((item) => item.id === proposal.generationRecordId);
+      const sourceChapter = storedWork.chapters.find(c => c.id === proposal.chapterId);
+      const directReview = !proposal.generationRecordId && proposal.sourceRevision === sourceChapter?.revision;
+      if (!directReview && (!sourceGeneration || sourceGeneration.status !== "accepted")) {
+        const error = new Error("请先接受对应正文，再确认或拒绝事实更新。");
+        error.status = 409;
+        throw error;
+      }
+      const decidedAt = nowIso();
+      if (action === "reject") {
+        proposal.status = "rejected";
+        proposal.decidedAt = decidedAt;
+      } else {
+        const selected = new Set(Array.isArray(body.factIds) ? body.factIds.map(normalizeText) : []);
+        const filtered = { ...proposal, changes: proposal.changes.filter((change) => change.fact?.id && selected.has(change.fact.id)) };
+        if (filtered.changes.length) {
+          const applied = applyCanonProposal(storedWork.canon, filtered, { decidedAt });
+          storedWork.canon = applied.canon;
+          Object.assign(proposal, applied.proposal);
+        } else {
+          proposal.status = "accepted";
+          proposal.decidedAt = decidedAt;
+        }
+      }
+      storedWork.updatedAt = decidedAt;
+      return { proposal, canon: storedWork.canon };
+    });
+    return sendJson(res, 200, result);
+  }
+
   if (parts[3] !== "chapters") {
     return sendError(res, 404, "API route not found");
   }
@@ -2907,6 +3352,7 @@ async function handleApi(req, res, url) {
       notes: "",
       status: "draft",
       planning: normalizeChapterPlanning(body.planning),
+      chapterMemory: normalizeChapterMemory(),
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -2923,6 +3369,67 @@ async function handleApi(req, res, url) {
 
   if (!chapter) {
     return sendError(res, 404, "Chapter not found");
+  }
+
+  if (req.method === "POST" && parts.length === 8 && parts[5] === "generations" && parts[7] === "accept") {
+    const body = await readBody(req, 2 * 1024 * 1024, "章节内容过大，无法写入。");
+    const generationId = parts[6];
+    const result = await dataStore.transact((stored) => {
+      const upgraded = upgradeDatabase(stored).db;
+      Object.assign(stored, upgraded);
+      const storedWork = findWork(stored, work.id);
+      const storedChapter = storedWork && findChapter(storedWork, chapter.id);
+      const record = storedWork?.generationRecords.find((item) => item.id === generationId);
+      if (!storedChapter || !record || record.chapterId !== storedChapter.id) {
+        const error = new Error("生成记录或章节不存在，请重新生成。");
+        error.status = 404;
+        throw error;
+      }
+      if (body.baseChapterUpdatedAt && body.baseChapterUpdatedAt !== storedChapter.updatedAt) {
+        const error = new Error("章节已更新，不能写入基于旧版本生成的内容。");
+        error.status = 409;
+        throw error;
+      }
+      if (hashChapterContent(storedChapter) !== record.baseContentHash) {
+        const error = new Error("章节正文已变化，不能写入基于旧正文生成的内容。");
+        error.status = 409;
+        throw error;
+      }
+      if (!canAcceptGeneration(record)) {
+        const error = new Error("生成结果仍有未解决的硬冲突，不能写入正文。请先重新生成或修改指令。");
+        error.status = 409;
+        throw error;
+      }
+      const richContent = normalizeRichContent(body.richContent);
+      const content = richContentToMarkdown(richContent);
+      const generated = selectedGenerationOutput(record);
+      const comparable = (value) => String(value || "").replace(/\s+/g, "");
+      if (!generated || !comparable(content).includes(comparable(generated))) {
+        const error = new Error("待写入正文中没有找到本次 AI 生成内容，已阻止错误写入。");
+        error.status = 400;
+        throw error;
+      }
+      const acceptedAt = nowIso();
+      storedChapter.richContent = richContent;
+      storedChapter.content = content;
+      storedChapter.contentFormat = "quill-delta-v1";
+      storedChapter.updatedAt = acceptedAt;
+      record.status = "accepted";
+      record.acceptedAt = acceptedAt;
+      const proposal = storedWork.canonProposals.find((item) => item.generationRecordId === record.id && item.status === "pending") || null;
+      if (proposal) {
+        storedChapter.chapterMemory = normalizeChapterMemory({
+          ...proposal.chapterMemory,
+          status: "confirmed",
+          sourceContentHash: hashChapterContent(content),
+          updatedAt: acceptedAt
+        });
+      }
+      storedWork.updatedAt = acceptedAt;
+      return { chapter: storedChapter, work: storedWork, generation: record, canonProposal: proposal?.changes?.length ? proposal : null };
+    });
+    scheduleAutomaticBackup();
+    return sendJson(res, 200, result);
   }
 
   if (req.method === "POST" && parts.length === 7 && parts[5] === "images" && ["generate", "upload"].includes(parts[6])) {
@@ -3516,7 +4023,7 @@ function buildLocalStoryBible(work, reason = "") {
       ].join("\n")
     },
     fallback: true,
-    warning: reason || "已使用本地备用生成设定库。"
+    warning: reason || "测试模型生成设定库。"
   };
 }
 
@@ -3675,9 +4182,8 @@ async function callStoryBibleGenerator(work) {
   const apiKey = config.apiKey;
   const model = config.model || DEFAULT_OPENAI_MODEL;
 
-  if (config.provider === "local" || !apiKey) {
-    return buildLocalStoryBible(work, "未配置 API Key，已使用本地备用生成设定库。");
-  }
+  if (isTestAiEnabled()) return buildTestStoryBible(work);
+  if (!apiKey) throw aiUnavailableError();
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -3721,10 +4227,6 @@ async function callStoryBibleGenerator(work) {
     const storyBible = normalizeStoryBible(extractJsonObject(text));
     const quality = validateStoryBibleQuality(work, storyBible);
     if (!quality.ok) {
-      if (isLocalAiFallbackEnabled()) {
-        return buildLocalStoryBible(work, `远程设定库质量不合格：${quality.issues.join("；")}。已使用本地贴题模板。`);
-      }
-
       const error = new Error(`生成内容太泛：${quality.issues.join("；")}。请补充简介细节或重新生成。`);
       error.status = 422;
       throw error;
@@ -3737,11 +4239,6 @@ async function callStoryBibleGenerator(work) {
       endpoint: config.endpoint,
       fallback: false
     };
-  } catch (error) {
-    if (isLocalAiFallbackEnabled() && !/有效 JSON/.test(error.message)) {
-      return buildLocalStoryBible(work, error.message);
-    }
-    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -3775,6 +4272,8 @@ function buildAiPrompt(body) {
   const storyBibleSummary = compactStoryBible(storyBible);
   const chapterPlanMatch = findRelevantChapterPlan(storyBible.chapterPlan, chapter.title);
   const canonPolicy = getCanonPolicy(work);
+  const structuredContinuity = body.continuityContext ? continuityContextText(body.continuityContext) : "暂无结构化事实；仍须遵守设定库。";
+  const rewriteIssues = Array.isArray(body.rewriteIssues) ? body.rewriteIssues : [];
   const authorWantsPlan = /方案|思路|分析|计划|解释/.test(instruction);
   const outputRule = mode === "title"
     ? "输出要求：只输出一个简体中文章节标题，8到16个字，不要引号、序号、解释或列表。"
@@ -3805,6 +4304,10 @@ function buildAiPrompt(body) {
     "设定库摘要：",
     storyBibleSummary || "暂无设定库。请严格依据作品梗概和当前章节，不要擅自创造过多新设定。",
     "",
+    "结构化连续性约束：",
+    structuredContinuity,
+    ...(rewriteIssues.length ? ["", "上一版必须修复的问题：", ...rewriteIssues.map((item) => `- ${item.message}`)] : []),
+    "",
     "当前应推进的章节规划：",
     chapterPlanMatch || "未匹配到具体章纲。请按当前章节标题和作品主线合理推进，不要改写主线方向。",
     "",
@@ -3831,6 +4334,11 @@ function buildAiPrompt(body) {
     "",
     outputRule
   ].join("\n");
+}
+
+function pickFreshLocalDraft(sourceText, drafts) {
+  const source = String(sourceText || "");
+  return drafts.find((draft) => draft && !source.includes(draft)) || drafts[source.length % drafts.length] || "";
 }
 
 function buildLocalAiDraft(body) {
@@ -3914,17 +4422,46 @@ function buildLocalAiDraft(body) {
     return sentences.filter((_sentence, index) => index % 2 === 0 || sentences.length < 4).join("").trim();
   }
 
-  return "主角意识到，眼前的问题并不是简单地跨过去，而是从这一刻开始，原本稳定的生活已经被推向另一条路。";
+  const protagonist = normalizeText(storyBible.characters).split(/[：:\n]/)[0] || "主角";
+  const focus = limitText(instruction || chapterPlanMatch || work.premise || storyBible.conflict || "眼前正在发生的变化", 72);
+  const continuationDrafts = [
+    `${protagonist}没有马上作出决定，而是重新核对手中的线索。关于“${focus}”的细节里，有一处此前被忽略的矛盾正变得越来越清晰。`,
+    `门外突然传来的动静打断了${protagonist}的思考。新的变化没有给人留下准备时间，也迫使他把“${focus}”从猜测变成下一步必须验证的行动。`,
+    `${protagonist}刚把现有线索串联起来，局面便出现了新的偏差。原本安全的选择开始显露代价，而“${focus}”背后的压力也第一次真正落到现实中。`,
+    `事情没有沿着预想的方向发展。${protagonist}意识到，只有主动追查“${focus}”，才可能在下一次变化到来之前拿回一点主动权。`
+  ];
+
+  if (mode === "expand" && sourceText) {
+    return `${sourceText}\n\n${pickFreshLocalDraft(sourceText, continuationDrafts)}`;
+  }
+
+  if (mode === "custom" && selectedText) {
+    return pickFreshLocalDraft(sourceText, continuationDrafts);
+  }
+
+  return pickFreshLocalDraft(sourceText, continuationDrafts);
 }
 
-function buildLocalAiResult(body, reason = "") {
+function buildTestAiResult(body) {
   return {
     text: buildLocalAiDraft(body),
-    model: "本地备用",
-    provider: "local",
-    endpoint: "local",
-    fallback: true,
-    warning: normalizeText(reason)
+    model: "测试模型",
+    provider: "test",
+    endpoint: "test",
+    fallback: false,
+    warning: ""
+  };
+}
+
+function buildTestStoryBible(work) {
+  const result = buildLocalStoryBible(work);
+  return {
+    ...result,
+    model: "测试模型",
+    provider: "test",
+    endpoint: "test",
+    fallback: false,
+    warning: ""
   };
 }
 

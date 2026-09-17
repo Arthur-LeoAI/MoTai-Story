@@ -37,6 +37,12 @@ test("artifact proposals support partial apply and one-step revert", () => {
     chapterPlan: "新章纲"
   });
 
+  assert.throws(
+    () => applyArtifactProposal(work, proposal, []),
+    (error) => error.status === 400 && /至少选择一个/.test(error.message)
+  );
+  assert.equal(proposal.status, "pending");
+
   const applied = applyArtifactProposal(work, proposal, ["outline"]);
   assert.deepEqual(applied, ["outline"]);
   assert.equal(work.storyBible.outline, "新大纲");

@@ -9,7 +9,7 @@ const { version } = require("../package.json");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "motai-api-"));
 process.env.DATA_FILE = path.join(directory, "db.json");
 process.env.ENV_FILE = path.join(directory, ".env.local");
-process.env.AI_PROVIDER = "local";
+process.env.MOTAI_TEST_AI = "1";
 
 const { createAppServer } = require("../server");
 const server = createAppServer();
@@ -30,6 +30,7 @@ test.after(async () => {
 });
 
 async function request(pathname, options = {}) {
+  options = await require("./versioned-request").versionedOptions(baseUrl, pathname, options);
   const response = await fetch(`${baseUrl}${pathname}`, {
     ...options,
     headers: {
@@ -52,9 +53,6 @@ test("health endpoint and static homepage are available", async () => {
   assert.equal(homepage.status, 200);
   assert.match(homepage.headers.get("content-type"), /text\/html/);
 
-  const builtInWallpaper = await fetch(`${baseUrl}/assets/wallpapers/dawn-desk.png`);
-  assert.equal(builtInWallpaper.status, 200);
-  assert.match(builtInWallpaper.headers.get("content-type"), /image\/png/);
 });
 
 test("UI preferences persist locally without storing writing content or API keys", async () => {
@@ -129,59 +127,64 @@ test("custom wallpapers are stored locally and can be selected without embedding
   assert.doesNotMatch(raw, /iVBORw0KGgo/);
 });
 
-test("AI config supports separate text and image APIs without exposing keys", async () => {
+test("AI config only saves a model choice and ignores credential fields", async () => {
   const saved = await request("/api/ai/config", {
     method: "POST",
     body: JSON.stringify({
       provider: "deepseek",
-      apiKey: "text-key",
-      baseUrl: "https://api.deepseek.com",
+      apiKey: "must-not-be-saved",
       model: "deepseek-chat",
-      endpoint: "chat",
-      maxOutputTokens: 1400,
-      timeoutMs: 12000,
-      imageApiKey: "image-key",
-      imageBaseUrl: "https://api.openai.com/v1",
-      imageModel: "gpt-image-1",
-      imageTimeoutMs: 60000,
-      localFallback: true
+      baseUrl: "https://attacker.invalid",
+      imageApiKey: "must-not-be-saved-either"
     })
   });
 
   assert.equal(saved.response.status, 200);
   assert.equal(saved.payload.config.provider, "deepseek");
-  assert.equal(saved.payload.config.hasApiKey, true);
+  assert.equal(saved.payload.config.model, "deepseek-chat");
+  assert.equal(saved.payload.config.hasApiKey, false);
   assert.equal(saved.payload.config.apiKey, "");
-  assert.equal(saved.payload.config.image.hasApiKey, true);
-  assert.equal(saved.payload.config.image.baseUrl, "https://api.openai.com/v1");
-  assert.equal(saved.payload.config.image.model, "gpt-image-1");
-  assert.equal(saved.payload.config.image.timeoutMs, 60000);
-  assert.equal(saved.payload.config.image.configured, true);
-  assert.equal(Object.hasOwn(saved.payload.config.image, "apiKey"), false);
 
   const rawEnv = await fsp.readFile(process.env.ENV_FILE, "utf8");
-  assert.match(rawEnv, /OPENAI_API_KEY=text-key/);
-  assert.match(rawEnv, /IMAGE_API_KEY=image-key/);
+  assert.match(rawEnv, /AI_PROVIDER=deepseek/);
+  assert.match(rawEnv, /DEEPSEEK_MODEL=deepseek-chat/);
+  assert.doesNotMatch(rawEnv, /must-not-be-saved|attacker\.invalid/);
 });
 
-test("story bible and writing tools work with the isolated local fallback", async () => {
-  const localConfig = await request("/api/ai/config", {
+test("model settings switch providers without accepting API keys", async () => {
+  const openai = await request("/api/ai/config", {
     method: "POST",
-    body: JSON.stringify({
-      provider: "local",
-      apiKey: "",
-      baseUrl: "",
-      model: "本地备用",
-      endpoint: "local",
-      imageApiKey: "",
-      imageBaseUrl: "",
-      imageModel: "",
-      localFallback: true
-    })
+    body: JSON.stringify({ provider: "openai", model: "gpt-5.5", apiKey: "ignored-openai-key" })
   });
-  assert.equal(localConfig.response.status, 200);
-  assert.equal(localConfig.payload.config.provider, "local");
 
+  assert.equal(openai.response.status, 200);
+  assert.equal(openai.payload.config.provider, "openai");
+  assert.equal(openai.payload.config.hasApiKey, false);
+  assert.equal(openai.payload.config.baseUrl, "https://api.openai.com/v1");
+  assert.equal(openai.payload.config.model, "gpt-5.5");
+  assert.equal(openai.payload.config.endpoint, "responses");
+  assert.equal(openai.payload.config.providers.some((provider) => provider.value === "custom"), false);
+
+  const switched = await request("/api/ai/config", {
+    method: "POST",
+    body: JSON.stringify({ provider: "deepseek", model: "deepseek-chat" })
+  });
+  assert.equal(switched.payload.config.provider, "deepseek");
+  const rawEnv = await fsp.readFile(process.env.ENV_FILE, "utf8");
+  assert.doesNotMatch(rawEnv, /ignored-openai-key/);
+});
+
+test("AI model list exposes choices but never credentials", async () => {
+  const listed = await request("/api/ai/models");
+  assert.equal(listed.response.status, 200);
+  assert.deepEqual(listed.payload.models.map((model) => `${model.provider}:${model.id}`), [
+    "deepseek:deepseek-chat",
+    "openai:gpt-5.5"
+  ]);
+  assert.equal(JSON.stringify(listed.payload).includes("apiKey"), false);
+});
+
+test("story bible and writing tools work with the isolated test model", async () => {
   const created = await request("/api/works", {
     method: "POST",
     body: JSON.stringify({
@@ -198,7 +201,7 @@ test("story bible and writing tools work with the isolated local fallback", asyn
   const chapter = work.chapters[0];
   const bible = await request(`/api/works/${work.id}/story-bible/generate`, { method: "POST" });
   assert.equal(bible.response.status, 200);
-  assert.equal(bible.payload.fallback, true);
+  assert.equal(bible.payload.fallback, false);
   assert.match(bible.payload.storyBible.characters, /葛小伦/);
   assert.match(bible.payload.storyBible.chapterPlan, /剧情目标：/);
   assert.ok(bible.payload.quality);
@@ -218,7 +221,7 @@ test("story bible and writing tools work with the isolated local fallback", asyn
     })
   });
   assert.equal(writing.response.status, 200);
-  assert.equal(writing.payload.fallback, true);
+  assert.equal(writing.payload.fallback, false);
   assert.match(writing.payload.text, /卢小鱼/);
 
   const outline = await request("/api/ai/write", {
@@ -261,7 +264,7 @@ test("仿生人星际题材的本地设定库提供可执行人物关系与十�
 
   const generated = await request(`/api/works/${created.payload.work.id}/story-bible/generate`, { method: "POST", body: "{}" });
   assert.equal(generated.response.status, 200);
-  assert.equal(generated.payload.fallback, true);
+  assert.equal(generated.payload.fallback, false);
   assert.match(generated.payload.storyBible.characters, /赏金猎人/);
   assert.match(generated.payload.storyBible.characters, /仿生人/);
   assert.match(generated.payload.storyBible.relationships, /->/);
