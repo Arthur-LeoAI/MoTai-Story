@@ -13,12 +13,12 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       if (req.method === "POST" && p.length === 2) {
         const body = await readBody(req); const db = await store.read();
         const work = db.works.find(w => w.id === body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
-        if (!chapter) fail("章节不存在。", 404); ensureVersion(chapter.revision, body.baseRevision);
+        if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, body.baseRevision);
         return result(res, { task: await tasks.create(body) }, 202);
       }
       if (req.method === "POST" && p[3] === "cancel") return result(res, { task: await tasks.cancel(p[2]) });
       if (req.method === "GET" && p[3] === "events") {
-        if (!await tasks.get(p[2])) fail("任务不存在。", 404);
+        if (!await tasks.get(p[2])) fail("TASK_NOT_FOUND");
         res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
         let closed = false, last = ""; res.on("close", () => { closed = true; });
         while (!closed) {
@@ -46,11 +46,11 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       }
       if (p[3] === "confirm") {
         const saved = await store.transact(async db => {
-          const preview = db.imports.find(i => i.id === p[2]); if (!preview) fail("导入预览不存在。", 404);
+          const preview = db.imports.find(i => i.id === p[2]); if (!preview) fail("IMPORT_PREVIEW_NOT_FOUND");
           if (preview.workId) return { work: db.works.find(w => w.id === preview.workId) };
           const chapters = body.chapters || preview.chapters.map((chapter, sourceIndex) => ({ ...chapter, sourceIndex }));
-          if (!Array.isArray(chapters) || !chapters.length || chapters.length > 10000) fail("章节列表无效。");
-          if (chapters.reduce((n, c) => n + String(c.content || "").length, 0) > 1000000) fail("文本超过一百万字。", 413);
+          if (!Array.isArray(chapters) || !chapters.length || chapters.length > 10000) fail("IMPORT_CHAPTERS_INVALID");
+          if (chapters.reduce((n, c) => n + String(c.content || "").length, 0) > 1000000) fail("IMPORT_TEXT_TOO_LARGE");
           const timestamp = nowIso();
           const work = { id: createId("work"), ownerId: "local", title: String(body.title || preview.title || "导入作品").slice(0, 100), genre: "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
             // Only reuse the server-parsed Delta. Titles are editable and not unique;
@@ -86,7 +86,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       return result(res, await service.mutate(work.id, null, body.baseRevision, w => {
         if (body.volumes) w.volumes = body.volumes.slice(0, 100).map(v => ({ id: w.volumes.some(x => x.id === v.id) ? v.id : createId("volume"), title: String(v.title || "新卷").slice(0, 100), goal: String(v.goal || "").slice(0, 4000) }));
         if (body.chapterIds) {
-          if (body.chapterIds.length !== w.chapters.length || new Set(body.chapterIds).size !== w.chapters.length || body.chapterIds.some(id => !w.chapters.some(c => c.id === id))) fail("章节排序无效。");
+          if (body.chapterIds.length !== w.chapters.length || new Set(body.chapterIds).size !== w.chapters.length || body.chapterIds.some(id => !w.chapters.some(c => c.id === id))) fail("CHAPTER_ORDER_INVALID");
           w.chapters = body.chapterIds.map(id => w.chapters.find(c => c.id === id));
           for (const c of w.chapters) invalidateDependencies(w, { chapterId: c.id, reason: "章节顺序变化" });
         }
@@ -98,7 +98,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
         ensureVersion(w.canonRevision, body.canonRevision);
         const old = w.canon.facts.find(f => f.id === body.fact.id);
         const fact = normalizeTemporalFact({ ...body.fact, id: old?.id || createId("fact"), updatedAt: nowIso(), createdAt: old?.createdAt || nowIso() });
-        if (!fact.predicate || !fact.value) fail("请填写事实名称和内容。");
+        if (!fact.predicate || !fact.value) fail("FACT_FIELDS_REQUIRED");
         if (old) { invalidateDependencies(w, { factIds: [old.id], reason: "作者修改设定" }); Object.assign(old, fact); }
         else w.canon.facts.push(fact);
       }));
@@ -108,7 +108,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       if (req.method === "POST" && p[5] === "restore") {
         const body = await readBody(req);
         return result(res, await service.mutate(work.id, null, body.baseRevision, w => {
-          const c = w.deletedChapters.find(c => c.id === p[4]); if (!c) fail("回收站中没有该章节。", 404);
+          const c = w.deletedChapters.find(c => c.id === p[4]); if (!c) fail("TRASH_CHAPTER_NOT_FOUND");
           w.deletedChapters = w.deletedChapters.filter(item => item.id !== c.id);
           w.chapters.push(c);
         }));
@@ -131,18 +131,18 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       const body = await readBody(req);
       return result(res, await service.mutate(work.id, chapter.id, body.baseRevision, (w, c) => {
         ensureVersion(w.structureRevision, body.structureRevision);
-        if (!Array.isArray(body.scenes) || body.scenes.length > 200) fail("场景列表无效。");
+        if (!Array.isArray(body.scenes) || body.scenes.length > 200) fail("SCENES_INVALID");
         c.scenes = body.scenes.map(s => normalizeScene(s, deltaLength(c.richContent)));
-        if (new Set(c.scenes.map(s => s.id)).size !== c.scenes.length || c.scenes.some(s => s.end < s.start)) fail("场景范围或标识无效。");
-        if (body.volumeId !== undefined) { if (body.volumeId && !w.volumes.some(v => v.id === body.volumeId)) fail("卷不存在。"); c.volumeId = body.volumeId; }
+        if (new Set(c.scenes.map(s => s.id)).size !== c.scenes.length || c.scenes.some(s => s.end < s.start)) fail("SCENE_RANGES_INVALID");
+        if (body.volumeId !== undefined) { if (body.volumeId && !w.volumes.some(v => v.id === body.volumeId)) fail("VOLUME_NOT_FOUND"); c.volumeId = body.volumeId; }
         invalidateDependencies(w, { chapterId: c.id, reason: "场景规划变化" });
       }));
     }
     if (p[5] === "generations" && p[7] === "adjudicate" && req.method === "POST") {
       const body = await readBody(req);
       return result(res, await service.mutate(work.id, chapter.id, body.baseRevision, (w, c) => {
-        const record = w.generationRecords.find(r => r.id === p[6] && r.chapterId === c.id); if (!record) fail("生成记录不存在。", 404);
-        if (record.baseContentHash !== hash(c) || record.canonRevision !== w.canonRevision) fail("依据已更新，请重新审校。", 409);
+        const record = w.generationRecords.find(r => r.id === p[6] && r.chapterId === c.id); if (!record) fail("GENERATION_NOT_FOUND");
+        if (record.baseContentHash !== hash(c) || record.canonRevision !== w.canonRevision) fail("REVIEW_BASIS_STALE");
         adjudicateConflict(record, body.conflictId, { reason: body.reason, baseRevision: body.baseRevision, canonRevision: body.canonRevision, currentRevision: c.revision, currentCanonRevision: w.canonRevision });
         if (!record.conflicts.some(x => x.severity === "hard" && x.status === "open")) record.status = "ready";
         return { generation: record, canAccept: canAccept(record) };
@@ -152,7 +152,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       const body = await readBody(req);
       const saved = await service.mutate(work.id, chapter.id, body.baseRevision, async (w, c) => {
         const record = w.generationRecords.find(r => r.id === p[6] && r.chapterId === c.id);
-        if (!record || !canAccept(record) || record.baseContentHash !== hash(c) || record.canonRevision !== w.canonRevision) fail("生成结果或设定已变化，请重新生成。", 409);
+        if (!record || !canAccept(record) || record.baseContentHash !== hash(c) || record.canonRevision !== w.canonRevision) fail("GENERATION_STALE");
         const delta = mergeHunks(c, record.hunks || [], body.hunkIds);
         await service.snapshot(w, c, "ai"); const before = c.richContent;
         c.richContent = delta; c.content = richContentToMarkdown(delta); transformScenes(c, before, delta);

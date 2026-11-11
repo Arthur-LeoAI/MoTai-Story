@@ -1,4 +1,5 @@
 "use strict";
+function taskErrorText(task) { return task.errorCode ? describeServerError({ code: task.errorCode, params: task.errorParams, message: task.message }) : (task.message || ""); }
 const betaStatus = value => ({ planned: "待写", draft: "草稿", done: "已完成", queued: "排队中", generating: "生成中", checking: "审校中", completed: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" })[value] || value;
 let activeSceneId = "", activeTaskId = "";
 const betaBody = () => document.querySelector("#betaBody");
@@ -64,7 +65,7 @@ async function showBeta(type) {
     document.querySelector("#reviewChapter").onclick = async e => { if (!chapter) return; e.target.disabled = true; betaMessage("正在审校实际正文并提取事实…"); try { const r = await request(`${root}/chapters/${chapter.id}/review`, { method: "POST", body: JSON.stringify({ baseRevision: chapter.revision }) }); await refreshBetaWork(); closeDialog("betaDialog"); if (r.proposal.changes.length) openCanonProposal(r.proposal); else showToast("审校完成，没有新增事实。"); } catch (error) { betaMessage(error.message); e.target.disabled = false; } };
   } else if (type === "usage") {
     const [usage, taskList] = await Promise.all([request("/api/usage"), request(`/api/tasks${work ? `?workId=${work.id}` : ""}`)]);
-    betaBody().innerHTML = `<p>已报告用量 ${usage.totalTokens} token；每日上限 ${usage.dailyTokenLimit}。未知用量调用 ${usage.unknownCalls} 次，按预留用量占用额度。</p><p>未配置价格，因此不估算金额。</p>` + taskList.tasks.map(t => `<div class="beta-row">${escapeHtml(betaStatus(t.status))} · ${escapeHtml(formatDate(t.createdAt))}<p>${escapeHtml(t.message || "")}</p><details><summary>查看草稿</summary><p style="white-space:pre-wrap">${escapeHtml(t.result?.text || t.draft || "暂无")}</p></details></div>`).join("");
+    betaBody().innerHTML = `<p>已报告用量 ${usage.totalTokens} token；每日上限 ${usage.dailyTokenLimit}。未知用量调用 ${usage.unknownCalls} 次，按预留用量占用额度。</p><p>未配置价格，因此不估算金额。</p>` + taskList.tasks.map(t => `<div class="beta-row">${escapeHtml(betaStatus(t.status))} · ${escapeHtml(formatDate(t.createdAt))}<p>${escapeHtml(taskErrorText(t))}</p><details><summary>查看草稿</summary><p style="white-space:pre-wrap">${escapeHtml(t.result?.text || t.draft || "暂无")}</p></details></div>`).join("");
   } else if (type === "import") {
     betaBody().innerHTML = '<p>支持 TXT、Markdown、DOCX，最大20MB。仅导入稿件，不会自动调用 AI。</p><input id="importFile" type="file" accept=".txt,.md,.markdown,.docx"><label>编码<select id="importEncoding"><option value="auto">自动</option><option value="utf-8">UTF-8</option><option value="gb18030">GB18030</option></select></label><button id="parseImport" class="primary-button">读取并预览</button>';
     document.querySelector("#parseImport").onclick = async e => { const file = document.querySelector("#importFile").files[0]; if (!file) return betaMessage("请选择文件。"); e.target.disabled = true; try {
@@ -103,11 +104,11 @@ async function betaGenerate(body) {
     const stream = new EventSource(`/api/tasks/${task.id}/events`);
     function done(t) {
       if (closed) return;
-      document.querySelector("#editorAiBody").textContent = ({ queued: "任务已排队", generating: "正在生成正文…", checking: "正在审校…" })[t.status] || t.message || "正在完成…";
+      document.querySelector("#editorAiBody").textContent = ({ queued: "任务已排队", generating: "正在生成正文…", checking: "正在审校…" })[t.status] || taskErrorText(t) || "正在完成…";
       if (["completed", "failed", "cancelled", "interrupted"].includes(t.status)) {
         closed = true; stream.close(); clearInterval(timer); activeTaskId = "";
         if (t.status === "completed") resolve(t.result);
-        else { const error = new Error(t.message || "任务中断"); error.status = t.errorStatus || (t.status === "failed" ? 500 : 409); reject(error); }
+        else { const error = new Error(taskErrorText(t) || "任务中断"); error.status = t.errorStatus || (t.status === "failed" ? 500 : 409); reject(error); }
       }
     }
     stream.addEventListener("task", e => done(JSON.parse(e.data)));

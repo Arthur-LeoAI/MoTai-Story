@@ -1,6 +1,7 @@
 const fsp = require("fs/promises");
 const path = require("path");
 const { bumpVersions } = require("./workspace");
+const { appError } = require("./errors");
 
 function normalizeDatabase(value) {
   return {
@@ -10,6 +11,21 @@ function normalizeDatabase(value) {
       : 0,
     works: Array.isArray(value?.works) ? value.works : []
   };
+}
+
+// On Windows, replacing a file that another handle is reading at that moment
+// fails with EPERM/EACCES/EBUSY. The lock is momentary, so retry briefly.
+const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+
+async function renameWithRetry(from, to, attempts = 8) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fsp.rename(from, to);
+    } catch (error) {
+      if (!TRANSIENT_RENAME_CODES.has(error.code) || attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10 * attempt));
+    }
+  }
 }
 
 function createJsonStore(filePath) {
@@ -34,7 +50,7 @@ function createJsonStore(filePath) {
     const tempFile = `${resolvedFile}.${process.pid}.${Date.now()}.tmp`;
     try {
       await fsp.writeFile(tempFile, payload, "utf8");
-      await fsp.rename(tempFile, resolvedFile);
+      await renameWithRetry(tempFile, resolvedFile);
     } finally {
       await fsp.unlink(tempFile).catch(() => {});
     }
@@ -50,7 +66,7 @@ function createJsonStore(filePath) {
     const operation = writeTail.then(async () => {
       const previous = await readFile();
       if (snapshot.storeRevision !== undefined && snapshot.storeRevision !== (previous.storeRevision || 0)) {
-        throw Object.assign(new Error("数据已更新，请刷新后重试；未保存的编辑仍保留。"), { status: 409 });
+        throw appError("STORE_REVISION_CONFLICT");
       }
       if (snapshot.schemaVersion >= 3) bumpVersions(previous, snapshot);
       snapshot.storeRevision = (previous.storeRevision || 0) + 1;

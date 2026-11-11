@@ -174,5 +174,5 @@ test("legacy database upgrade is additive, stable and idempotent", () => {
   });
   assert.equal(second.changed, false);
   assert.deepEqual(second.db, first.db);
-  assert.throws(() => upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION + 1, works: [] }), /高于当前支持/);
+  assert.throws(() => upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION + 1, works: [] }), { code: "DATABASE_VERSION_UNSUPPORTED" });
 });

@@ -1,10 +1,11 @@
 const { inflateRawSync } = require('node:zlib');
 const path = require('node:path');
+const { appError } = require('./errors');
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT = 1_000_000;
 const MAX_EXPANDED = 40 * 1024 * 1024;
-function invalid(message) { return Object.assign(new Error(message), { status: 400, statusCode: 400 }); }
+function invalid(code) { return appError(code); }
 function plainDelta(text) { return { ops: [{ insert: text.endsWith('\n') ? text : `${text}\n` }] }; }
 function heading(line) {
   const value = line.trim();
@@ -16,7 +17,7 @@ function heading(line) {
 
 function splitChapters(text) {
   text = String(text).replace(/\r\n?/g, '\n');
-  if (text.length > MAX_TEXT) throw invalid('稿件不能超过 100 万个字符。');
+  if (text.length > MAX_TEXT) throw invalid("IMPORT_TEXT_TOO_LARGE");
   const chapters = [];
   let title = '第一章';
   let lines = [];
@@ -62,37 +63,37 @@ function readZip(buffer) {
   for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 65557); i--) {
     if (buffer.readUInt32LE(i) === 0x06054b50 && i + 22 + buffer.readUInt16LE(i + 20) === buffer.length) { end = i; break; }
   }
-  if (end < 0) throw invalid('不是有效的 DOCX 文件，或文件已加密。');
+  if (end < 0) throw invalid("DOCX_INVALID");
   const count = buffer.readUInt16LE(end + 10);
   const start = buffer.readUInt32LE(end + 16);
   const size = buffer.readUInt32LE(end + 12);
-  if (buffer.readUInt16LE(end + 4) || buffer.readUInt16LE(end + 6) || buffer.readUInt16LE(end + 8) !== count || count > 2000 || start + size > end) throw invalid('不支持分卷、ZIP64 或条目过多的 DOCX。');
+  if (buffer.readUInt16LE(end + 4) || buffer.readUInt16LE(end + 6) || buffer.readUInt16LE(end + 8) !== count || count > 2000 || start + size > end) throw invalid("DOCX_ARCHIVE_UNSUPPORTED");
   let cursor = start;
   let expanded = 0;
   const files = new Map();
   for (let i = 0; i < count; i++) {
-    if (cursor + 46 > end || buffer.readUInt32LE(cursor) !== 0x02014b50) throw invalid('DOCX 目录已损坏。');
+    if (cursor + 46 > end || buffer.readUInt32LE(cursor) !== 0x02014b50) throw invalid("DOCX_CORRUPTED");
     const flags = buffer.readUInt16LE(cursor + 8), method = buffer.readUInt16LE(cursor + 10);
     const compressed = buffer.readUInt32LE(cursor + 20), uncompressed = buffer.readUInt32LE(cursor + 24);
     const nameLen = buffer.readUInt16LE(cursor + 28), extraLen = buffer.readUInt16LE(cursor + 30), commentLen = buffer.readUInt16LE(cursor + 32);
     const offset = buffer.readUInt32LE(cursor + 42);
     expanded += uncompressed;
-    if (expanded > MAX_EXPANDED || flags & 1 || ![0, 8].includes(method) || buffer.readUInt16LE(cursor + 34)) throw invalid('DOCX 已加密、压缩格式不支持或解压后超过 40MB。');
-    if (cursor + 46 + nameLen + extraLen + commentLen > start + size) throw invalid('DOCX 目录已损坏。');
+    if (expanded > MAX_EXPANDED || flags & 1 || ![0, 8].includes(method) || buffer.readUInt16LE(cursor + 34)) throw invalid("DOCX_ENCRYPTED_OR_TOO_LARGE");
+    if (cursor + 46 + nameLen + extraLen + commentLen > start + size) throw invalid("DOCX_CORRUPTED");
     const name = buffer.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
-    if (files.has(name) || name.includes('..') || name.startsWith('/') || name.includes('\\')) throw invalid('DOCX 条目路径无效。');
-    if (offset + 30 > start || buffer.readUInt32LE(offset) !== 0x04034b50) throw invalid('DOCX 内容已损坏。');
+    if (files.has(name) || name.includes('..') || name.startsWith('/') || name.includes('\\')) throw invalid("DOCX_CORRUPTED");
+    if (offset + 30 > start || buffer.readUInt32LE(offset) !== 0x04034b50) throw invalid("DOCX_CORRUPTED");
     const localNameLen = buffer.readUInt16LE(offset + 26), localExtraLen = buffer.readUInt16LE(offset + 28);
     const dataStart = offset + 30 + localNameLen + localExtraLen;
-    if (dataStart + compressed > start || buffer.readUInt16LE(offset + 6) !== flags || buffer.readUInt16LE(offset + 8) !== method || buffer.subarray(offset + 30, offset + 30 + localNameLen).toString('utf8') !== name) throw invalid('DOCX 内容与目录不一致。');
+    if (dataStart + compressed > start || buffer.readUInt16LE(offset + 6) !== flags || buffer.readUInt16LE(offset + 8) !== method || buffer.subarray(offset + 30, offset + 30 + localNameLen).toString('utf8') !== name) throw invalid("DOCX_CORRUPTED");
     let data;
     try { data = method === 0 ? buffer.subarray(dataStart, dataStart + compressed) : inflateRawSync(buffer.subarray(dataStart, dataStart + compressed), { maxOutputLength: Math.max(1, Math.min(MAX_EXPANDED, uncompressed)) }); }
-    catch { throw invalid('DOCX 解压失败或超过限制。'); }
-    if (data.length !== uncompressed || crc32(data) !== buffer.readUInt32LE(cursor + 16)) throw invalid('DOCX 内容校验失败。');
+    catch { throw invalid("DOCX_ENCRYPTED_OR_TOO_LARGE"); }
+    if (data.length !== uncompressed || crc32(data) !== buffer.readUInt32LE(cursor + 16)) throw invalid("DOCX_CORRUPTED");
     files.set(name, data);
     cursor += 46 + nameLen + extraLen + commentLen;
   }
-  if (cursor !== start + size) throw invalid('DOCX 目录长度不一致。');
+  if (cursor !== start + size) throw invalid("DOCX_CORRUPTED");
   return files;
 }
 
@@ -106,9 +107,9 @@ function decodeXml(text) {
 }
 function docxChapters(files) {
   const raw = files.get('word/document.xml');
-  if (!raw || !files.has('[Content_Types].xml')) throw invalid('DOCX 缺少正文。');
+  if (!raw || !files.has('[Content_Types].xml')) throw invalid("DOCX_NO_BODY");
   const xml = raw.toString('utf8');
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw invalid('不支持包含外部实体的文档。');
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw invalid("DOCX_EXTERNAL_ENTITY");
   const chapters = [];
   let chapter = { title: '第一章', content: '', richContent: { ops: [] } };
   let explicit = false;
@@ -128,7 +129,7 @@ function docxChapters(files) {
     }
     const text = ops.map((op) => op.insert).join('');
     chars += text.length + 1;
-    if (chars > MAX_TEXT) throw invalid('稿件不能超过 100 万个字符。');
+    if (chars > MAX_TEXT) throw invalid("IMPORT_TEXT_TOO_LARGE");
     const title = heading(text) || (/<w:pStyle\b[^>]*w:val=["']Heading1["']/i.test(paragraph[1]) ? text.trim() : '');
     if (title) {
       if (explicit || chapter.content) chapters.push(chapter);
@@ -146,25 +147,25 @@ function docxChapters(files) {
 
 async function parseManuscript({ fileName = '', base64 = '', encoding = 'auto' } = {}) {
   const extension = path.extname(String(fileName)).toLowerCase();
-  if (!['.txt', '.md', '.markdown', '.docx'].includes(extension)) throw invalid('仅支持 TXT、Markdown 和 DOCX；旧 DOC 格式请另存为 DOCX。');
-  if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw invalid('文件编码无效或超过 20MB。');
+  if (!['.txt', '.md', '.markdown', '.docx'].includes(extension)) throw invalid("IMPORT_FILE_TYPE_UNSUPPORTED");
+  if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw invalid("IMPORT_FILE_INVALID");
   const buffer = Buffer.from(base64, 'base64');
-  if (!buffer.length || buffer.length > MAX_BYTES) throw invalid('文件为空或超过 20MB。');
+  if (!buffer.length || buffer.length > MAX_BYTES) throw invalid("IMPORT_FILE_EMPTY_OR_TOO_LARGE");
   const title = path.basename(String(fileName), extension).slice(0, 200) || '导入作品';
   if (extension === '.docx') {
     const files = readZip(buffer);
     return { title, chapters: docxChapters(files), encoding: 'utf-8', warnings: ['DOCX 仅导入正文段落及加粗、斜体、下划线；图片、页眉页脚、批注和复杂样式不导入。'] };
   }
-  if (!['auto', 'utf-8', 'utf8', 'gb18030'].includes(encoding)) throw invalid('不支持的编码。');
+  if (!['auto', 'utf-8', 'utf8', 'gb18030'].includes(encoding)) throw invalid("IMPORT_ENCODING_UNSUPPORTED");
   let actualEncoding = encoding === 'auto' || encoding === 'utf8' ? 'utf-8' : encoding;
   let text;
   try { text = new TextDecoder(actualEncoding, { fatal: true }).decode(buffer); }
   catch {
-    if (encoding !== 'auto') throw invalid('文件与所选编码不匹配，请切换编码。');
+    if (encoding !== 'auto') throw invalid("IMPORT_ENCODING_MISMATCH");
     actualEncoding = 'gb18030';
-    try { text = new TextDecoder(actualEncoding, { fatal: true }).decode(buffer); } catch { throw invalid('无法识别文本编码，请另存为 UTF-8。'); }
+    try { text = new TextDecoder(actualEncoding, { fatal: true }).decode(buffer); } catch { throw invalid("IMPORT_ENCODING_UNKNOWN"); }
   }
-  if (text.includes('\u0000')) throw invalid('文件不是可导入的文本。');
+  if (text.includes('\u0000')) throw invalid("IMPORT_NOT_TEXT");
   const chapters = splitChapters(text);
   if (extension !== '.txt') for (const chapter of chapters) chapter.richContent = markdownDelta(chapter.content);
   return { title, chapters, encoding: actualEncoding, warnings: actualEncoding === 'gb18030' ? ['已按 GB18030 解码，请在预览中确认文字。'] : [] };

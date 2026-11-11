@@ -149,10 +149,21 @@ function getWorkTextBag(work) {
   ].join("\n");
 }
 
+// The language a story is written in. Independent of the interface language.
+// Works created before this field existed were all written in Chinese, so they
+// read as "zh-CN".
+const STORY_LANGUAGES = Object.freeze(["en", "zh-CN"]);
+const LEGACY_STORY_LANGUAGE = "zh-CN";
+
+function normalizeStoryLanguage(value, fallback = LEGACY_STORY_LANGUAGE) {
+  return STORY_LANGUAGES.includes(value) ? value : fallback;
+}
+
 function workSummary(work) {
   return {
     id: work.id,
     title: work.title,
+    language: normalizeStoryLanguage(work.language),
     author: normalizeText(work.author) || "未署名",
     premise: work.premise,
     genre: work.genre,
@@ -180,6 +191,7 @@ function findChapter(work, chapterId) {
 
 module.exports = {
   COVER_STYLE_PALETTES,
+  STORY_LANGUAGES,
   STORY_BIBLE_FIELDS,
   clampNumber,
   countCharacters,
@@ -195,6 +207,7 @@ module.exports = {
   normalizeStoryBible,
   normalizeChapterPlanning,
   normalizeCoverStyle,
+  normalizeStoryLanguage,
   normalizeText,
   nowIso,
   temperatureFromBoldness,

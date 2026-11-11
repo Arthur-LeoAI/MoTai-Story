@@ -91,6 +91,25 @@ function countCharacters(value) {
   return String(value || "").replace(/\s/g, "").length;
 }
 
+// The server reports errors as { code, message, params }. This legacy UI is
+// Chinese, so it translates codes with the shared zh-CN locale file.
+const serverErrorText = { messages: null };
+fetch("/locales/zh-CN.json")
+  .then((response) => (response.ok ? response.json() : null))
+  .then((data) => { serverErrorText.messages = data?.errors || null; })
+  .catch(() => {});
+
+function describeServerError(error, fallback = "") {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  const template = error.code && serverErrorText.messages?.[error.code];
+  if (template) {
+    const params = error.params || {};
+    return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => (params[key] ?? match));
+  }
+  return error.message || fallback;
+}
+
 async function request(pathname, options = {}) {
   const response = await fetch(pathname, {
     ...options,
@@ -98,8 +117,9 @@ async function request(pathname, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error || `请求失败（${response.status}）`);
+    const error = new Error(describeServerError(payload.error, `请求失败（${response.status}）`));
     error.status = response.status;
+    error.code = payload.error?.code || "";
     throw error;
   }
   return payload;
@@ -178,7 +198,7 @@ async function checkAiAvailability({ notify = false } = {}) {
     const result = await request("/api/ai/test", { method: "POST", body: "{}" });
     state.aiAvailability = {
       status: result.ok ? "available" : "unavailable",
-      message: result.message || (result.ok ? "AI 接口可用。" : "AI 接口不可用。")
+      message: result.ok ? (result.message || "AI 接口可用。") : describeServerError(result, "AI 接口不可用。")
     };
   } catch (error) {
     state.aiAvailability = { status: "unavailable", message: error.message || "无法检测 AI 接口。" };
@@ -902,7 +922,7 @@ async function sendChat(content, retryOf = "") {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      const error = new Error(payload.error || "AI 请求失败");
+      const error = new Error(describeServerError(payload.error, "AI 请求失败"));
       error.status = response.status;
       throw error;
     }
@@ -935,7 +955,7 @@ async function sendChat(content, retryOf = "") {
             if (!assistantMessage.content) assistantMessage.content = "生成已停止。";
             continue;
           }
-          const error = new Error(parsed.payload.message || "AI 请求失败");
+          const error = new Error(describeServerError(parsed.payload, "AI 请求失败"));
           error.status = parsed.payload.status || 502;
           const message = handleAiFailure(error);
           if (!assistantMessage.content) assistantMessage.content = message;
@@ -1166,7 +1186,7 @@ function normalizeProviderStatuses(config) {
       label: current.label || provider.label,
       hasApiKey: Boolean(current.hasApiKey ?? (isActive && config.hasApiKey)),
       status: current.status || (current.available === true ? "available" : current.available === false ? "unavailable" : "unknown"),
-      message: current.message || "",
+      message: current.code ? describeServerError(current) : current.message || "",
       model: current.model || (isActive ? config.model : ""),
       checkedAt: current.checkedAt || ""
     }];

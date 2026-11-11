@@ -15,6 +15,7 @@ const {
   normalizeChapterPlanning,
   normalizeCoverStyle,
   normalizeStoryBible,
+  normalizeStoryLanguage,
   normalizeText,
   nowIso,
   temperatureFromBoldness,
@@ -65,10 +66,18 @@ const {
   richContentToMarkdown,
   selectChatContext
 } = require("./src/studio");
+const { appError, toErrorResponse } = require("./src/errors");
+const { authenticate } = require("./src/auth");
+const { createPreferenceRepository } = require("./src/preferences");
+const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
+// New frontend (web/), built by Vite into web/dist and served under /app/.
+const WEB_DIST_DIR = path.join(ROOT, "web", "dist");
+const WEB_URL_PREFIX = "/app";
+const LOCALES_DIR = path.join(ROOT, "shared", "locales");
 const DATA_FILE = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
   : path.join(ROOT, "data", "db.json");
@@ -89,6 +98,7 @@ const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
 const dataStore = createJsonStore(DATA_FILE);
+const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
 const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
 const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
@@ -161,7 +171,12 @@ const MIME_TYPES = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
-  ".svg": "image/svg+xml; charset=utf-8"
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ico": "image/x-icon",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8"
 };
 
 async function readDb() {
@@ -488,8 +503,7 @@ function sanitizeUrl(value, fieldName) {
   }
 
   if (!/^https?:\/\//.test(url)) {
-    const error = new Error(`${fieldName} 必须以 http:// 或 https:// 开头`);
-    error.status = 400;
+    const error = appError("URL_SCHEME_INVALID", { field: fieldName });
     throw error;
   }
 
@@ -522,13 +536,11 @@ async function saveAiConfig(body) {
   const model = normalizeText(body.model);
   const providerConfig = getAiConfig(false, provider);
   if (!providerConfig.hasApiKey && !isTestAiEnabled()) {
-    const error = new Error(`${providerConfig.providerLabel} 尚未由运行环境配置，不能选择该服务商的模型。`);
-    error.status = 400;
+    const error = appError("AI_PROVIDER_NOT_CONFIGURED", { provider: providerConfig.providerLabel });
     throw error;
   }
   if (!isSupportedWritingModel(provider, model)) {
-    const error = new Error("请选择列表中的小说写作模型。");
-    error.status = 400;
+    const error = appError("AI_MODEL_NOT_ALLOWED");
     throw error;
   }
 
@@ -563,8 +575,10 @@ function sendDownload(res, file) {
   res.end(file.buffer);
 }
 
-function sendError(res, status, message) {
-  sendJson(res, status, { error: message });
+// Every API error goes out as { error: { code, message, params } }; clients translate by code.
+function sendError(res, codeOrError, params) {
+  const { status, body } = toErrorResponse(typeof codeOrError === "string" ? appError(codeOrError, params) : codeOrError);
+  sendJson(res, status, body);
 }
 
 async function readBody(req, maxBytes = 5 * 1024 * 1024, limitError = "REQUEST_TOO_LARGE") {
@@ -574,7 +588,7 @@ async function readBody(req, maxBytes = 5 * 1024 * 1024, limitError = "REQUEST_T
   for await (const chunk of req) {
     total += chunk.length;
     if (total > maxBytes) {
-      throw new Error(limitError);
+      throw typeof limitError === "string" ? appError(limitError) : limitError;
     }
     chunks.push(chunk);
   }
@@ -648,23 +662,20 @@ function parseImageDataUrl(value) {
 
   const match = raw.match(/^data:(image\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,([\s\S]+)$/i);
   if (!match) {
-    const error = new Error("Unsupported image data URL");
-    error.status = 400;
+    const error = appError("IMAGE_INVALID");
     throw error;
   }
 
   const mime = match[1].toLowerCase();
   const extension = imageExtensionForMime(mime);
   if (!extension) {
-    const error = new Error(`Unsupported cover image type: ${mime}`);
-    error.status = 400;
+    const error = appError("IMAGE_TYPE_UNSUPPORTED");
     throw error;
   }
 
   const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
   if (!buffer.length) {
-    const error = new Error("Cover image data is empty");
-    error.status = 400;
+    const error = appError("IMAGE_EMPTY");
     throw error;
   }
 
@@ -674,13 +685,11 @@ function parseImageDataUrl(value) {
 function parseUploadedCover(value) {
   const image = parseImageDataUrl(value);
   if (!image) {
-    const error = new Error("请上传有效的图片文件。");
-    error.status = 400;
+    const error = appError("IMAGE_INVALID");
     throw error;
   }
   if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(image.mime)) {
-    const error = new Error("仅支持 PNG、JPG 或 WebP 图片。");
-    error.status = 400;
+    const error = appError("IMAGE_TYPE_UNSUPPORTED");
     throw error;
   }
   return image;
@@ -689,13 +698,11 @@ function parseUploadedCover(value) {
 function parseUploadedIllustration(value) {
   const image = parseImageDataUrl(value);
   if (!image) {
-    const error = new Error("请上传有效的图片文件。");
-    error.status = 400;
+    const error = appError("IMAGE_INVALID");
     throw error;
   }
   if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(image.mime)) {
-    const error = new Error("章节插图仅支持 PNG、JPG 或 WebP 图片。");
-    error.status = 400;
+    const error = appError("IMAGE_TYPE_UNSUPPORTED");
     throw error;
   }
   return image;
@@ -704,13 +711,11 @@ function parseUploadedIllustration(value) {
 function parseUploadedWallpaper(value) {
   const image = parseImageDataUrl(value);
   if (!image) {
-    const error = new Error("请上传有效的 PNG、JPG 或 WebP 图片。");
-    error.status = 400;
+    const error = appError("IMAGE_INVALID");
     throw error;
   }
   if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(image.mime)) {
-    const error = new Error("壁纸仅支持 PNG、JPG 或 WebP 图片。");
-    error.status = 400;
+    const error = appError("IMAGE_TYPE_UNSUPPORTED");
     throw error;
   }
   return image;
@@ -1136,15 +1141,13 @@ async function buildBackupPayload() {
       }
 
       if (!buffer.length || buffer.length > COVER_MAX_BYTES) {
-        const error = new Error(`本地图片无法备份：${fileName}`);
-        error.status = 422;
+        const error = appError("BACKUP_LOCAL_IMAGE_MISSING", { fileName });
         throw error;
       }
 
       totalCoverBytes += buffer.length;
       if (totalCoverBytes > BACKUP_MAX_COVER_BYTES) {
-        const error = new Error("封面与章节插图总大小超过 40MB，无法创建单文件备份。请先移除部分过大的图片。");
-        error.status = 413;
+        const error = appError("BACKUP_IMAGES_TOO_LARGE");
         throw error;
       }
 
@@ -1168,20 +1171,17 @@ async function buildBackupPayload() {
 
 function normalizeBackupPayload(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    const error = new Error("备份文件格式不正确。");
-    error.status = 400;
+    const error = appError("BACKUP_FORMAT_INVALID");
     throw error;
   }
 
   if (value.format !== BACKUP_FORMAT || Number(value.version) !== BACKUP_VERSION) {
-    const error = new Error("不是可恢复的墨台备份文件，或备份版本暂不受支持。");
-    error.status = 400;
+    const error = appError("BACKUP_UNSUPPORTED");
     throw error;
   }
 
   if (!value.database || typeof value.database !== "object" || !Array.isArray(value.database.works)) {
-    const error = new Error("备份文件缺少作品库数据。");
-    error.status = 400;
+    const error = appError("BACKUP_MISSING_LIBRARY");
     throw error;
   }
 
@@ -1191,22 +1191,19 @@ function normalizeBackupPayload(value) {
     const fileName = validateBackupCoverName(name);
     const expectedMime = imageMimeForExtension(path.extname(fileName));
     if (!fileName || !item || typeof item !== "object" || item.mime !== expectedMime || typeof item.data !== "string") {
-      const error = new Error("备份中的封面数据不合法。");
-      error.status = 400;
+      const error = appError("BACKUP_COVER_INVALID");
       throw error;
     }
 
     const buffer = Buffer.from(item.data, "base64");
     if (!buffer.length || buffer.length > COVER_MAX_BYTES) {
-      const error = new Error("备份中的封面大小不合法。");
-      error.status = 400;
+      const error = appError("BACKUP_COVER_INVALID");
       throw error;
     }
 
     totalCoverBytes += buffer.length;
     if (totalCoverBytes > BACKUP_MAX_COVER_BYTES) {
-      const error = new Error("备份中的封面总大小超过恢复上限 40MB。");
-      error.status = 413;
+      const error = appError("BACKUP_COVERS_TOO_LARGE");
       throw error;
     }
     covers[fileName] = buffer;
@@ -1353,8 +1350,7 @@ async function restoreBackupPayload(value) {
 
 async function saveCoverBuffer(workId, image) {
   if (image.buffer.length > COVER_MAX_BYTES) {
-    const error = new Error("Cover image is too large");
-    error.status = 413;
+    const error = appError("IMAGE_TOO_LARGE", { limitMb: Math.round(COVER_MAX_BYTES / 1048576) });
     throw error;
   }
 
@@ -1366,8 +1362,7 @@ async function saveCoverBuffer(workId, image) {
 
 async function saveIllustrationBuffer(workId, chapterId, image) {
   if (image.buffer.length > COVER_MAX_BYTES) {
-    const error = new Error("章节插图不能超过 25MB。");
-    error.status = 413;
+    const error = appError("IMAGE_TOO_LARGE", { limitMb: 25 });
     throw error;
   }
 
@@ -1379,8 +1374,7 @@ async function saveIllustrationBuffer(workId, chapterId, image) {
 
 async function saveWallpaperBuffer(image) {
   if (image.buffer.length > WALLPAPER_MAX_BYTES) {
-    const error = new Error("壁纸图片不能超过 25MB。");
-    error.status = 413;
+    const error = appError("IMAGE_TOO_LARGE", { limitMb: Math.round(WALLPAPER_MAX_BYTES / 1048576) });
     throw error;
   }
 
@@ -1397,16 +1391,14 @@ async function saveRemoteWallpaperImage(imageUrl) {
   try {
     const response = await fetch(imageUrl, { signal: controller.signal });
     if (!response.ok) {
-      const error = new Error(`无法下载生成的壁纸：${response.status}`);
-      error.status = 502;
+      const error = appError("AI_IMAGE_DOWNLOAD_FAILED", { status: response.status });
       throw error;
     }
 
     const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     const extension = imageExtensionForMime(mime) || getExtensionFromImageUrl(imageUrl);
     if (!extension || !imageMimeForExtension(extension)) {
-      const error = new Error("生成的壁纸类型不受支持。");
-      error.status = 502;
+      const error = appError("AI_IMAGE_TYPE_UNSUPPORTED");
       throw error;
     }
     return saveWallpaperBuffer({
@@ -1428,8 +1420,7 @@ async function saveWallpaperImage(imageValue) {
   if (/^https?:\/\//i.test(value)) {
     return saveRemoteWallpaperImage(value);
   }
-  const error = new Error("图片模型没有返回可保存的壁纸数据。");
-  error.status = 502;
+  const error = appError("AI_IMAGE_EMPTY");
   throw error;
 }
 
@@ -1440,8 +1431,7 @@ async function saveRemoteCoverImage(workId, imageUrl) {
   try {
     const response = await fetch(imageUrl, { signal: controller.signal });
     if (!response.ok) {
-      const error = new Error(`Could not download generated cover image: ${response.status}`);
-      error.status = 502;
+      const error = appError("AI_IMAGE_DOWNLOAD_FAILED", { status: response.status });
       throw error;
     }
 
@@ -1450,8 +1440,7 @@ async function saveRemoteCoverImage(workId, imageUrl) {
     const mime = imageExtensionForMime(contentType) ? contentType : imageMimeForExtension(extension);
 
     if (!extension || !mime) {
-      const error = new Error("Generated cover image type is not supported");
-      error.status = 502;
+      const error = appError("AI_IMAGE_TYPE_UNSUPPORTED");
       throw error;
     }
 
@@ -1543,33 +1532,26 @@ function isTestAiEnabled() {
   return process.env.MOTAI_TEST_AI === "1";
 }
 
-function aiUnavailableError(message = "AI 不可用：尚未配置 API Key。请打开 AI 设置完成配置并测试连接。") {
-  const error = new Error(message);
-  error.status = 503;
-  return error;
+function aiUnavailableError() {
+  return appError("AI_UNAVAILABLE");
 }
 
-function getNetworkErrorMessage(error, baseUrl = getOpenAiBaseUrl()) {
+// Maps a fetch failure to an error code, or "" when it is not a network failure.
+function getNetworkErrorCode(error) {
   const cause = error.cause || {};
   const code = cause.code || error.code || "";
 
-  if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT") {
-    return `连接 OpenAI API 超时：${baseUrl}。这通常是本机网络、代理或防火墙无法访问 api.openai.com。请确认当前网络允许后端程序访问 OpenAI API，或在 .env.local 中配置可用的 OPENAI_BASE_URL。`;
-  }
-
-  if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
-    return `无法解析 OpenAI API 地址：${baseUrl}。请检查 DNS、网络或代理设置。`;
-  }
-
-  if (code === "ECONNRESET" || code === "ECONNREFUSED") {
-    return `连接 OpenAI API 被中断：${baseUrl}。请检查网络、代理或防火墙设置。`;
-  }
-
-  if (error.name === "TypeError" && String(error.message || "").includes("fetch failed")) {
-    return `无法连接 OpenAI API：${baseUrl}。请检查网络、代理或 OPENAI_BASE_URL 配置。`;
-  }
-
+  if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT") return "AI_NETWORK_TIMEOUT";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "AI_NETWORK_DNS";
+  if (code === "ECONNRESET" || code === "ECONNREFUSED") return "AI_NETWORK_RESET";
+  if (error.name === "TypeError" && String(error.message || "").includes("fetch failed")) return "AI_NETWORK_UNREACHABLE";
   return "";
+}
+
+function networkError(error, url) {
+  if (error.name === "AbortError") return appError("AI_TIMEOUT", { url });
+  const code = getNetworkErrorCode(error);
+  return code ? appError(code, { url }) : null;
 }
 
 function limitText(text, maxLength) {
@@ -1608,17 +1590,7 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
     });
   } catch (error) {
     await finishUsage({ status: "unknown", errorCategory: error.name });
-    const message = error.name === "AbortError"
-      ? `连接 AI 接口超时：${url}。当前网络可能无法直连。`
-      : getNetworkErrorMessage(error, url);
-
-    if (message) {
-      const wrapped = new Error(message);
-      wrapped.status = 502;
-      throw wrapped;
-    }
-
-    throw error;
+    throw networkError(error, url) || error;
   }
 
   const payload = await response.json().catch(() => ({}));
@@ -1626,23 +1598,21 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
   await finishUsage({ status: response.ok ? "completed" : "failed", responseId: parsedUsage.responseId, model: payload.model || requestBody.model,
     ...(payload.usage ? parsedUsage.usage : response.ok ? {} : { totalTokens: 0 }), errorCategory: response.ok ? "" : `http_${response.status}` });
   if (!response.ok) {
-    const rawMessage = payload.error?.message || payload.message || `AI request failed with status ${response.status}`;
-    const message = response.status === 401
-      ? "AI API Key 无效、已过期或没有权限。请在“接口”页重新填写并保存可用的 Key。"
+    const detail = payload.error?.message || payload.message || `AI request failed with status ${response.status}`;
+    const code = response.status === 401
+      ? "AI_AUTH_FAILED"
       : response.status === 403
-      ? "当前账号无权使用该模型或接口。请更换已开通的模型，或检查服务商账号权限。"
+      ? "AI_FORBIDDEN"
       : response.status === 429
-      ? "AI 服务额度不足或请求过于频繁。请检查账户余额/Token 配额，稍后再试。"
+      ? "AI_RATE_LIMITED"
       : url.includes("/images/generations") && response.status === 404
-      ? "当前 API 地址不支持图片生成接口 /images/generations。请使用支持图片生成的 OpenAI 兼容接口，或在接口配置中改成 OpenAI 官方地址并配置可用的图片模型。"
+      ? "AI_IMAGE_ENDPOINT_UNSUPPORTED"
       : response.status === 404
-      ? "AI 接口地址或请求类型不匹配。请检查 Base URL、接口类型（Responses/Chat）和模型名称。"
-      : rawMessage.includes("model")
-      ? `${rawMessage}。如果是模型不可用，请在 AI 设置里换成你账号可用的模型。`
-      : rawMessage;
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
+      ? "AI_ENDPOINT_MISMATCH"
+      : detail.includes("model")
+      ? "AI_MODEL_UNAVAILABLE"
+      : "AI_UPSTREAM_ERROR";
+    throw appError(code, { detail }, { status: response.status });
   }
 
   return payload;
@@ -1693,8 +1663,7 @@ async function readGeneratedImage(imageValue) {
 
   const imageUrl = String(imageValue || "").trim();
   if (!/^https?:\/\//i.test(imageUrl)) {
-    const error = new Error("图片模型没有返回可保存的封面图片。");
-    error.status = 502;
+    const error = appError("AI_IMAGE_EMPTY");
     throw error;
   }
 
@@ -1703,15 +1672,13 @@ async function readGeneratedImage(imageValue) {
   try {
     const response = await fetch(imageUrl, { signal: controller.signal });
     if (!response.ok) {
-      const error = new Error(`无法下载生成的封面：${response.status}`);
-      error.status = 502;
+      const error = appError("AI_IMAGE_DOWNLOAD_FAILED", { status: response.status });
       throw error;
     }
     const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     const extension = imageExtensionForMime(mime) || getExtensionFromImageUrl(imageUrl);
     if (!extension || !imageMimeForExtension(extension)) {
-      const error = new Error("生成的封面图片类型不受支持。");
-      error.status = 502;
+      const error = appError("AI_IMAGE_TYPE_UNSUPPORTED");
       throw error;
     }
     return { buffer: Buffer.from(await response.arrayBuffer()), mime: imageMimeForExtension(extension), extension };
@@ -1741,8 +1708,7 @@ async function createTypographicCover(work, imageValue) {
   }
 
   if (image.buffer.length > Math.floor(COVER_MAX_BYTES * 0.72)) {
-    const error = new Error("生成的封面图片过大，无法加入书名排版。请更换较小尺寸后重试。");
-    error.status = 413;
+    const error = appError("AI_COVER_TOO_LARGE");
     throw error;
   }
 
@@ -1842,8 +1808,7 @@ function buildChapterIllustrationPrompt(work, chapter, prompt) {
 async function generateImageData(imagePrompt, size = "1024x1536") {
   const config = getImageConfig(true);
   if (!config.configured) {
-    const error = new Error("未配置图片生成 API。请在接口配置里填写图片 API Key，或使用本身支持图片生成的 OpenAI/自定义兼容接口。");
-    error.status = 400;
+    const error = appError("AI_IMAGE_NOT_CONFIGURED");
     throw error;
   }
 
@@ -1864,8 +1829,7 @@ async function generateImageData(imagePrompt, size = "1024x1536") {
       : image.url || "";
 
     if (!dataUrl) {
-      const error = new Error("图片模型没有返回图片数据。");
-      error.status = 502;
+      const error = appError("AI_IMAGE_EMPTY");
       throw error;
     }
 
@@ -2018,19 +1982,11 @@ async function fetchAiModels(config, signal) {
   try {
     response = await fetch(request.url, { method: request.method, headers: request.headers, signal });
   } catch (error) {
-    const message = error.name === "AbortError" ? `连接 AI 接口超时：${request.url}。` : getNetworkErrorMessage(error, request.url);
-    if (message) {
-      const wrapped = new Error(message);
-      wrapped.status = 502;
-      throw wrapped;
-    }
-    throw error;
+    throw networkError(error, request.url) || error;
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error?.message || payload.message || `获取模型列表失败（${response.status}）`);
-    error.status = response.status;
-    throw error;
+    throw appError("AI_MODEL_LIST_FAILED", { detail: payload.error?.message || payload.message || `HTTP ${response.status}` }, { status: response.status });
   }
   return extractModelIds(payload);
 }
@@ -2048,7 +2004,7 @@ async function listSelectableAiModels() {
 
   const results = await Promise.all(Object.keys(PROVIDERS).map(async (provider) => {
     const config = getAiConfig(true, provider);
-    if (!config.apiKey) return { provider, models: [], error: "运行环境尚未配置" };
+    if (!config.apiKey) return { provider, models: [], error: "AI provider is not configured", errorCode: "AI_PROVIDER_NOT_CONFIGURED", errorParams: { provider: config.providerLabel } };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.min(config.timeoutMs, 10000));
     try {
@@ -2062,7 +2018,7 @@ async function listSelectableAiModels() {
         }))
       };
     } catch (error) {
-      return { provider, models: [], error: error.message || "无法获取模型列表" };
+      return { provider, models: [], error: error.message || "Could not load the model list", errorCode: error.code || "AI_MODEL_LIST_FAILED", errorParams: error.params || { detail: "" } };
     } finally {
       clearTimeout(timeout);
     }
@@ -2091,7 +2047,7 @@ async function testAiConnection(providerValue) {
   if (!config.apiKey) {
     return {
       ok: false,
-      message: "AI 服务尚未由运行环境配置，请联系应用管理员。",
+      ...toErrorResponse(appError("AI_PROVIDER_NOT_CONFIGURED", { provider: config.providerLabel })).body.error,
       provider: config.provider,
       endpoint: config.endpoint,
       model: config.model
@@ -2105,7 +2061,7 @@ async function testAiConnection(providerValue) {
     const models = await fetchAiModels(config, controller.signal);
     const model = selectWritingModel(config.provider, models, config.model);
     if (!model) {
-      throw new Error(`${config.providerLabel} 账号没有返回可用于小说写作的文本模型。`);
+      throw appError("AI_NO_WRITING_MODEL", { provider: config.providerLabel });
     }
     const testPrompt = "请只回复：连接成功";
     const request = buildTextRequest({ provider: config.provider, apiKey: config.apiKey, model, baseUrl: config.baseUrl, userPrompt: testPrompt, maxOutputTokens: 32 });
@@ -2115,7 +2071,7 @@ async function testAiConnection(providerValue) {
     if (!text) {
       return {
         ok: false,
-        message: "接口已响应，但没有返回文本。请检查模型和接口类型是否匹配。",
+        ...toErrorResponse(appError("AI_EMPTY_RESPONSE")).body.error,
         provider: config.provider,
         endpoint: config.endpoint,
         model
@@ -2135,10 +2091,13 @@ async function testAiConnection(providerValue) {
     };
   } catch (error) {
     const checkedAt = nowIso();
-    providerRuntimeStatus.set(config.provider, { available: false, model: config.model, message: error.message || "连接失败。", checkedAt });
+    const failure = toErrorResponse(error).body.error;
+    providerRuntimeStatus.set(config.provider, { available: false, model: config.model, message: failure.message, code: failure.code, params: failure.params, checkedAt });
     return {
       ok: false,
-      message: error.message || "连接失败。",
+      message: failure.message,
+      code: failure.code,
+      params: failure.params,
       provider: config.provider,
       endpoint: config.endpoint,
       model: config.model,
@@ -2224,8 +2183,7 @@ async function callOpenAiWriter(body) {
     }
 
     if (!text) {
-      const error = new Error("AI 不可用：接口已响应，但没有返回内容。请检查模型和接口类型。");
-      error.status = 502;
+      const error = appError("AI_EMPTY_RESPONSE");
       throw error;
     }
 
@@ -2325,8 +2283,7 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
     || !parsed.chapterMemory || typeof parsed.chapterMemory.summary !== "string"
     || !parsed.chapterMemory.summary.trim()
     || parsed.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim())) {
-    const error = new Error("AI 审校未返回有效的检查报告，本次结果不能写入。请重新生成。");
-    error.status = 502;
+    const error = appError("AI_REVIEW_INVALID");
     throw error;
   }
   const conflicts = (Array.isArray(parsed.conflicts) ? parsed.conflicts : []).slice(0, 40).map((item) => normalizeConflict({
@@ -2398,16 +2355,14 @@ async function createConstrainedGeneration(body) {
   const work = findWork(db, workId);
   const chapter = work && findChapter(work, chapterId);
   if (!work || !chapter) {
-    const error = new Error("作品或章节不存在，请刷新后重试。");
-    error.status = 404;
+    const error = appError("WORK_OR_CHAPTER_NOT_FOUND");
     throw error;
   }
   if (body.baseRevision !== undefined) ensureVersion(chapter.revision, body.baseRevision);
   const scene = body.sceneId ? chapter.scenes.find(s => s.id === body.sceneId) : null;
   if (body.sceneId && (!scene || scene.needsRelocation)) fail("场景需要重新定位后才能生成。", 409);
   if (body.baseRevision === undefined && body.baseChapterUpdatedAt && body.baseChapterUpdatedAt !== chapter.updatedAt) {
-    const error = new Error("章节已在别处更新，请刷新后重新生成，避免覆盖新内容。");
-    error.status = 409;
+    const error = appError("CHAPTER_STALE");
     throw error;
   }
 
@@ -2495,8 +2450,7 @@ async function createConstrainedGeneration(body) {
     const currentWork = findWork(stored, work.id);
     const currentChapter = currentWork && findChapter(currentWork, chapter.id);
     if (!currentChapter || hashChapterContent(currentChapter) !== baseContentHash) {
-      const error = new Error("生成期间章节内容已变化，本次结果未保存，请重新生成。");
-      error.status = 409;
+      const error = appError("CHAPTER_CHANGED_DURING_GENERATION");
       throw error;
     }
     currentWork.generationRecords.push(record);
@@ -2542,14 +2496,9 @@ function buildLocalChatReply(work, input) {
 }
 
 function upstreamAiError(response, payload = {}) {
-  const raw = payload?.error?.message || payload?.message || `AI request failed with status ${response.status}`;
-  const error = new Error(response.status === 401
-    ? "AI API Key 无效或没有权限，请检查设置。"
-    : response.status === 429
-      ? "AI 服务额度不足或请求过于频繁，请稍后重试。"
-      : raw);
-  error.status = response.status;
-  return error;
+  const detail = payload?.error?.message || payload?.message || `AI request failed with status ${response.status}`;
+  const code = response.status === 401 ? "AI_AUTH_FAILED" : response.status === 429 ? "AI_RATE_LIMITED" : "AI_UPSTREAM_ERROR";
+  return appError(code, { detail }, { status: response.status });
 }
 
 function extractStreamDelta(payload) {
@@ -2672,8 +2621,7 @@ function sendSseEvent(res, event, payload) {
 async function generateArtifactFields(work, type, instruction = "") {
   const definition = ARTIFACT_DEFINITIONS[type];
   if (!definition) {
-    const error = new Error("不支持的创作资料类型");
-    error.status = 400;
+    const error = appError("ARTIFACT_TYPE_UNSUPPORTED");
     throw error;
   }
   const config = getAiConfig(true);
@@ -2752,7 +2700,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     const chatId = parts[4];
     const chat = workspace.chats.find((item) => item.id === chatId);
     if (!chat) {
-      sendError(res, 404, "Chat not found");
+      sendError(res, "CHAT_NOT_FOUND");
       return true;
     }
     if (req.method === "PATCH" && parts.length === 5) {
@@ -2780,7 +2728,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       const body = await readBody(req);
       const content = String(body.content || "").trim().slice(0, 20000);
       if (!content) {
-        sendError(res, 400, "消息不能为空。");
+        sendError(res, "MESSAGE_EMPTY");
         return true;
       }
       const userMessage = createMessage("user", content, { retryOf: body.retryOf });
@@ -2824,7 +2772,8 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
           chat.updatedAt = nowIso();
           await writeDb(db);
         }
-        sendSseEvent(res, "error", { message: error.name === "AbortError" ? "生成已停止。" : error.message, status: error.name === "AbortError" ? 499 : error.status || 502, retryable: true, partialMessage: output ? assistantMessage : null });
+        const failure = error.name === "AbortError" ? toErrorResponse(appError("GENERATION_STOPPED")) : toErrorResponse(error.status ? error : appError("AI_UPSTREAM_ERROR", { detail: "" }));
+        sendSseEvent(res, "error", { ...failure.body.error, status: failure.status, retryable: true, partialMessage: output ? assistantMessage : null });
       } finally {
         clearTimeout(timeout);
         if (!res.writableEnded && !res.destroyed) {
@@ -2851,7 +2800,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     const workspace = ensureAiWorkspace(work);
     const proposal = workspace.proposals.find((item) => item.id === parts[4]);
     if (!proposal) {
-      sendError(res, 404, "Proposal not found");
+      sendError(res, "PROPOSAL_NOT_FOUND");
       return true;
     }
     if (req.method === "POST" && parts.length === 6 && parts[5] === "apply") {
@@ -2926,13 +2875,13 @@ async function handleAiApi(req, res, parts) {
       const db = await readDb();
       const work = findWork(db, normalizeText(body.workId || body.work?.id));
       const chapter = work && findChapter(work, normalizeText(body.chapterId || body.chapter?.id));
-      if (!work || !chapter) return sendError(res, 404, "作品或章节不存在，请刷新后重试。");
+      if (!work || !chapter) return sendError(res, "WORK_OR_CHAPTER_NOT_FOUND");
       result = await callOpenAiWriter({ ...body, work, chapter });
     }
     return sendJson(res, 200, result);
   }
 
-  return sendError(res, 404, "AI route not found");
+  return sendError(res, "ROUTE_NOT_FOUND");
 }
 
 async function handleSystemApi(req, res, parts) {
@@ -2947,17 +2896,18 @@ async function handleSystemApi(req, res, parts) {
     return;
   }
 
-  return sendError(res, 404, "System route not found");
+  return sendError(res, "ROUTE_NOT_FOUND");
 }
 
 async function handleApi(req, res, url) {
-  if (await betaApi(req, res, url)) return;
   const parts = url.pathname.split("/").filter(Boolean);
+  if (await handleAccountApi(req, res, parts)) return;
+  if (await betaApi(req, res, url)) return;
 
   if (parts.length === 1 && parts[0] === "api") {
     return sendJson(res, 200, {
       ok: true,
-      name: "墨台写作平台",
+      name: brand.name.default,
       version: PACKAGE_VERSION,
       desktop: process.env.MOTAI_DESKTOP === "1"
     });
@@ -2973,12 +2923,12 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { ok: true, preferences });
     }
 
-    return sendError(res, 405, "UI preferences method not allowed");
+    return sendError(res, "METHOD_NOT_ALLOWED");
   }
 
   if (parts[0] === "api" && parts[1] === "site-art") {
     if (req.method !== "POST" || parts.length !== 2) {
-      return sendError(res, 404, "API route not found");
+      return sendError(res, "ROUTE_NOT_FOUND");
     }
 
     const body = await readBody(req);
@@ -2994,10 +2944,10 @@ async function handleApi(req, res, url) {
   if (parts[0] === "api" && parts[1] === "wallpapers" && parts.length === 3) {
     const action = parts[2];
     if (req.method !== "POST" || !["upload", "generate"].includes(action)) {
-      return sendError(res, 405, "Wallpaper method not allowed");
+      return sendError(res, "METHOD_NOT_ALLOWED");
     }
 
-    const body = await readBody(req, Math.ceil(WALLPAPER_MAX_BYTES * 1.4), "壁纸图片不能超过 25MB。");
+    const body = await readBody(req, Math.ceil(WALLPAPER_MAX_BYTES * 1.4), appError("IMAGE_TOO_LARGE", { limitMb: Math.round(WALLPAPER_MAX_BYTES / 1048576) }));
     const name = normalizeText(body.name).slice(0, 80) || (action === "generate" ? "AI 生成壁纸" : "自定义壁纸");
     const theme = UI_WALLPAPER_THEMES.has(body.theme) ? body.theme : "";
     const wallpaperWork = action === "generate" && normalizeText(body.workId)
@@ -3034,7 +2984,7 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { ok: true, ...result });
     }
 
-    return sendError(res, 404, "Backup route not found");
+    return sendError(res, "ROUTE_NOT_FOUND");
   }
 
   if (parts[0] === "api" && parts[1] === "ai") {
@@ -3046,7 +2996,7 @@ async function handleApi(req, res, url) {
   }
 
   if (parts[0] !== "api" || parts[1] !== "works") {
-    return sendError(res, 404, "API route not found");
+    return sendError(res, "ROUTE_NOT_FOUND");
   }
 
   const db = await readDb();
@@ -3065,7 +3015,8 @@ async function handleApi(req, res, url) {
     const chapterTitle = normalizeText(body.chapterTitle) || "第一章";
     const work = {
       id: createId("work"),
-      ownerId: "local",
+      ownerId: req.user.id,
+      language: normalizeStoryLanguage(body.language),
       title,
       author: normalizeText(body.author).slice(0, 40) || "未署名",
       premise: normalizeText(body.premise),
@@ -3112,7 +3063,7 @@ async function handleApi(req, res, url) {
   const work = findWork(db, workId);
 
   if (!work) {
-    return sendError(res, 404, "Work not found");
+    return sendError(res, "WORK_NOT_FOUND");
   }
 
   if (await handleStudioWorkspaceApi(req, res, parts, db, work)) {
@@ -3187,7 +3138,7 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && parts.length === 4 && parts[3] === "export") {
     const file = buildWorkExportFile(work, url.searchParams.get("format"));
     if (!file) {
-      return sendError(res, 400, "Unsupported export format");
+      return sendError(res, "EXPORT_FORMAT_UNSUPPORTED");
     }
     return sendDownload(res, file);
   }
@@ -3238,7 +3189,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && parts.length === 5 && parts[3] === "cover" && parts[4] === "upload") {
-    const body = await readBody(req, Math.ceil(COVER_MAX_BYTES * 1.4), "封面图片不能超过 25MB。");
+    const body = await readBody(req, Math.ceil(COVER_MAX_BYTES * 1.4), appError("IMAGE_TOO_LARGE", { limitMb: Math.round(COVER_MAX_BYTES / 1048576) }));
     recordCoverHistory(work, await createTypographicCover(work, body.image), {
       source: "upload",
       prompt: "本地上传"
@@ -3254,7 +3205,7 @@ async function handleApi(req, res, url) {
     const selectedId = normalizeText(body.historyId);
     const selected = history.find((item) => item.id === selectedId);
     if (!selected) {
-      return sendError(res, 404, "未找到该封面历史记录");
+      return sendError(res, "COVER_HISTORY_NOT_FOUND");
     }
     work.cover = selected.cover;
     work.updatedAt = nowIso();
@@ -3265,7 +3216,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && parts.length === 5 && parts[3] === "cover" && parts[4] === "rebuild") {
     const currentCoverName = localCoverFileName(work.cover);
     if (!currentCoverName) {
-      return sendError(res, 400, "当前封面不是可重新排版的本地图片，请先生成或上传封面。" );
+      return sendError(res, "COVER_NOT_RELAYOUTABLE");
     }
     const sourceBuffer = await fsp.readFile(path.join(COVER_DIR, currentCoverName));
     const sourceExtension = path.extname(currentCoverName).toLowerCase();
@@ -3274,7 +3225,7 @@ async function handleApi(req, res, url) {
     if (sourceExtension === ".svg") {
       const embedded = sourceBuffer.toString("utf8").match(/<image\s+[^>]*href="(data:[^"]+)"/iu);
       if (!embedded) {
-        return sendError(res, 422, "当前封面缺少可重新排版的背景图，请重新生成或上传封面。" );
+        return sendError(res, "COVER_BACKGROUND_MISSING");
       }
       imageValue = embedded[1];
     }
@@ -3297,21 +3248,18 @@ async function handleApi(req, res, url) {
       const storedWork = findWork(stored, work.id);
       const proposal = storedWork?.canonProposals.find((item) => item.id === proposalId);
       if (!proposal) {
-        const error = new Error("事实提案不存在。");
-        error.status = 404;
+        const error = appError("CANON_PROPOSAL_NOT_FOUND");
         throw error;
       }
       if (proposal.status !== "pending") {
-        const error = new Error("这份事实提案已经处理，不能重复操作。");
-        error.status = 409;
+        const error = appError("CANON_PROPOSAL_ALREADY_HANDLED");
         throw error;
       }
       const sourceGeneration = storedWork.generationRecords.find((item) => item.id === proposal.generationRecordId);
       const sourceChapter = storedWork.chapters.find(c => c.id === proposal.chapterId);
       const directReview = !proposal.generationRecordId && proposal.sourceRevision === sourceChapter?.revision;
       if (!directReview && (!sourceGeneration || sourceGeneration.status !== "accepted")) {
-        const error = new Error("请先接受对应正文，再确认或拒绝事实更新。");
-        error.status = 409;
+        const error = appError("CANON_PROPOSAL_REQUIRES_ACCEPTED_TEXT");
         throw error;
       }
       const decidedAt = nowIso();
@@ -3337,7 +3285,7 @@ async function handleApi(req, res, url) {
   }
 
   if (parts[3] !== "chapters") {
-    return sendError(res, 404, "API route not found");
+    return sendError(res, "ROUTE_NOT_FOUND");
   }
 
   if (req.method === "POST" && parts.length === 4) {
@@ -3368,11 +3316,11 @@ async function handleApi(req, res, url) {
   const chapter = findChapter(work, chapterId);
 
   if (!chapter) {
-    return sendError(res, 404, "Chapter not found");
+    return sendError(res, "CHAPTER_NOT_FOUND");
   }
 
   if (req.method === "POST" && parts.length === 8 && parts[5] === "generations" && parts[7] === "accept") {
-    const body = await readBody(req, 2 * 1024 * 1024, "章节内容过大，无法写入。");
+    const body = await readBody(req, 2 * 1024 * 1024, "RICH_CONTENT_TOO_LARGE");
     const generationId = parts[6];
     const result = await dataStore.transact((stored) => {
       const upgraded = upgradeDatabase(stored).db;
@@ -3381,23 +3329,19 @@ async function handleApi(req, res, url) {
       const storedChapter = storedWork && findChapter(storedWork, chapter.id);
       const record = storedWork?.generationRecords.find((item) => item.id === generationId);
       if (!storedChapter || !record || record.chapterId !== storedChapter.id) {
-        const error = new Error("生成记录或章节不存在，请重新生成。");
-        error.status = 404;
+        const error = appError("GENERATION_NOT_FOUND");
         throw error;
       }
       if (body.baseChapterUpdatedAt && body.baseChapterUpdatedAt !== storedChapter.updatedAt) {
-        const error = new Error("章节已更新，不能写入基于旧版本生成的内容。");
-        error.status = 409;
+        const error = appError("GENERATION_STALE_REVISION");
         throw error;
       }
       if (hashChapterContent(storedChapter) !== record.baseContentHash) {
-        const error = new Error("章节正文已变化，不能写入基于旧正文生成的内容。");
-        error.status = 409;
+        const error = appError("GENERATION_STALE_CONTENT");
         throw error;
       }
       if (!canAcceptGeneration(record)) {
-        const error = new Error("生成结果仍有未解决的硬冲突，不能写入正文。请先重新生成或修改指令。");
-        error.status = 409;
+        const error = appError("GENERATION_HAS_HARD_CONFLICTS");
         throw error;
       }
       const richContent = normalizeRichContent(body.richContent);
@@ -3405,8 +3349,7 @@ async function handleApi(req, res, url) {
       const generated = selectedGenerationOutput(record);
       const comparable = (value) => String(value || "").replace(/\s+/g, "");
       if (!generated || !comparable(content).includes(comparable(generated))) {
-        const error = new Error("待写入正文中没有找到本次 AI 生成内容，已阻止错误写入。");
-        error.status = 400;
+        const error = appError("GENERATION_TEXT_MISSING");
         throw error;
       }
       const acceptedAt = nowIso();
@@ -3434,7 +3377,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && parts.length === 7 && parts[5] === "images" && ["generate", "upload"].includes(parts[6])) {
     const action = parts[6];
-    const body = await readBody(req, Math.ceil(COVER_MAX_BYTES * 1.4), "章节插图不能超过 25MB。");
+    const body = await readBody(req, Math.ceil(COVER_MAX_BYTES * 1.4), appError("IMAGE_TOO_LARGE", { limitMb: 25 }));
     let imagePath = "";
     let source = "upload";
     let prompt = "";
@@ -3494,7 +3437,7 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, work });
   }
 
-  return sendError(res, 405, "Method not allowed");
+  return sendError(res, "METHOD_NOT_ALLOWED");
 }
 
 function isPathInside(root, filePath) {
@@ -4227,8 +4170,7 @@ async function callStoryBibleGenerator(work) {
     const storyBible = normalizeStoryBible(extractJsonObject(text));
     const quality = validateStoryBibleQuality(work, storyBible);
     if (!quality.ok) {
-      const error = new Error(`生成内容太泛：${quality.issues.join("；")}。请补充简介细节或重新生成。`);
-      error.status = 422;
+      const error = appError("AI_OUTPUT_TOO_GENERIC", { detail: quality.issues.join("; ") });
       throw error;
     }
 
@@ -4465,51 +4407,144 @@ function buildTestStoryBible(work) {
   };
 }
 
+// Identity and per-user preferences. Every handler here receives the user from
+// the single auth entry point (src/auth.js) and reads/writes only that user's data.
+async function handleAccountApi(req, res, parts) {
+  if (parts[0] !== "api") return false;
+  const user = req.user;
+
+  if (parts[1] === "session" && parts.length === 2) {
+    if (req.method !== "GET") return sendError(res, "METHOD_NOT_ALLOWED"), true;
+    await readDb();
+    const preferences = await preferenceRepository.get(user.id);
+    sendJson(res, 200, {
+      user: { id: user.id, kind: user.kind, displayName: user.displayName },
+      brand: { codename: brand.codename },
+      preferences
+    });
+    return true;
+  }
+
+  if (parts[1] === "me" && parts[2] === "preferences" && parts.length === 3) {
+    await readDb();
+    if (req.method === "GET") {
+      sendJson(res, 200, { preferences: await preferenceRepository.get(user.id) });
+      return true;
+    }
+    if (req.method === "PATCH") {
+      const preferences = await preferenceRepository.update(user.id, await readBody(req, 16 * 1024));
+      sendJson(res, 200, { preferences });
+      return true;
+    }
+    sendError(res, "METHOD_NOT_ALLOWED");
+    return true;
+  }
+
+  return false;
+}
+
+async function serveFile(res, filePath, { cache = "no-store" } = {}) {
+  const ext = path.extname(filePath).toLowerCase();
+  const stat = await fsp.stat(filePath);
+  if (!stat.isFile()) throw Object.assign(new Error("Not a file"), { code: "ENOENT" });
+  res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream", "Cache-Control": cache });
+  fs.createReadStream(filePath).pipe(res);
+}
+
+// Serves the built new frontend. Hashed assets are cached; any other path under
+// /app/ falls back to index.html so client-side routes work.
+async function serveWebApp(req, res, url) {
+  const relative = decodeURIComponent(url.pathname.slice(WEB_URL_PREFIX.length)).replace(/^\/+/, "");
+  const resolved = path.resolve(WEB_DIST_DIR, relative || "index.html");
+  if (!isPathInside(WEB_DIST_DIR, resolved)) {
+    res.writeHead(403);
+    return res.end("Forbidden");
+  }
+  try {
+    return await serveFile(res, resolved, { cache: relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store" });
+  } catch {
+    if (relative.startsWith("assets/") || path.extname(relative)) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("Not found");
+    }
+  }
+  try {
+    return await serveFile(res, path.join(WEB_DIST_DIR, "index.html"));
+  } catch {
+    res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+    return res.end("The new frontend has not been built yet. Run: npm run build:web");
+  }
+}
+
+// Shared translation files, used by the legacy frontend to translate error codes.
+async function serveLocale(res, url) {
+  const match = /^\/locales\/([A-Za-z-]+)\.json$/.exec(url.pathname);
+  const resolved = match ? path.resolve(LOCALES_DIR, `${match[1]}.json`) : "";
+  if (!resolved || !isPathInside(LOCALES_DIR, resolved)) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    return res.end("Not found");
+  }
+  try {
+    return await serveFile(res, resolved);
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    return res.end("Not found");
+  }
+}
+
 function createAppServer() {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
       if (url.pathname.startsWith("/api")) {
+        req.user = authenticate(req);
+        if (!req.user) return sendError(res, "AUTH_REQUIRED");
         await handleApi(req, res, url);
+        return;
+      }
+
+      if (url.pathname === WEB_URL_PREFIX) {
+        res.writeHead(308, { Location: `${WEB_URL_PREFIX}/` });
+        return res.end();
+      }
+
+      if (url.pathname.startsWith(`${WEB_URL_PREFIX}/`)) {
+        await serveWebApp(req, res, url);
+        return;
+      }
+
+      if (url.pathname.startsWith("/locales/")) {
+        await serveLocale(res, url);
         return;
       }
 
       await serveStatic(req, res, url);
     } catch (error) {
-      if (error.message === "REQUEST_TOO_LARGE") {
-        sendError(res, 413, "Request body is too large");
-        return;
-      }
-
-      if (error.message === "BACKUP_TOO_LARGE") {
-        sendError(res, 413, "备份文件超过 50MB，无法恢复。请拆分作品或清理过大的封面后重试。");
+      if (res.headersSent) {
+        console.error(error);
+        res.end();
         return;
       }
 
       if (error instanceof SyntaxError) {
-        sendError(res, 400, "Invalid JSON body");
+        sendError(res, "INVALID_JSON");
         return;
       }
 
       if (error.name === "AbortError") {
-        sendError(res, 504, "AI 请求超时。请检查网络、代理或 OpenAI API 地址。");
+        sendError(res, "UPSTREAM_TIMEOUT");
         return;
       }
 
-      const networkMessage = getNetworkErrorMessage(error);
-      if (networkMessage) {
-        sendError(res, 502, networkMessage);
+      const networkCode = getNetworkErrorCode(error);
+      if (networkCode) {
+        sendError(res, networkCode, { url: getOpenAiBaseUrl() });
         return;
       }
 
-      if (error.status) {
-        sendError(res, error.status, error.message);
-        return;
-      }
-
-      console.error(error);
-      sendError(res, 500, "Internal server error");
+      if (!error.status) console.error(error);
+      sendError(res, error);
     }
   });
 }
@@ -4517,7 +4552,7 @@ function createAppServer() {
 if (require.main === module) {
   const server = createAppServer();
   server.listen(PORT, "127.0.0.1", () => {
-    console.log(`墨台写作平台已启动：http://127.0.0.1:${PORT}`);
+    console.log(`${brand.name.default} is running: http://127.0.0.1:${PORT} (new frontend: /app/)`);
   });
 }
 

@@ -39,7 +39,7 @@ test("artifact proposals support partial apply and one-step revert", () => {
 
   assert.throws(
     () => applyArtifactProposal(work, proposal, []),
-    (error) => error.status === 400 && /至少选择一个/.test(error.message)
+    (error) => error.status === 400 && error.code === "PROPOSAL_NOTHING_SELECTED"
   );
   assert.equal(proposal.status, "pending");
 

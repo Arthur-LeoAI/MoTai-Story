@@ -1,4 +1,5 @@
 "use strict";
+const { appError } = require("./errors");
 
 // Story intervals are half-open [from, until). Reader order is independent of
 // story time so flashbacks do not accidentally reveal later information.
@@ -103,12 +104,12 @@ function classifyConflict(conflict = {}) {
 }
 
 function adjudicateConflict(record, conflictId, { reason, baseRevision, canonRevision, currentRevision, currentCanonRevision } = {}) {
-  const fail = (message, status) => { const error = new Error(message); error.status = status; error.statusCode = status; throw error; };
-  if (![baseRevision, canonRevision, currentRevision, currentCanonRevision].every((value) => Number.isSafeInteger(value) && value >= 0)) fail("需要正文与设定版本", 400);
-  if (baseRevision !== currentRevision || canonRevision !== currentCanonRevision || record.needsReview) fail("正文或设定已变化，请重新审校", 409);
-  if (typeof reason !== "string" || !reason.trim()) fail("请填写误判依据", 400);
+  const fail = (code) => { throw appError(code); };
+  if (![baseRevision, canonRevision, currentRevision, currentCanonRevision].every((value) => Number.isSafeInteger(value) && value >= 0)) fail("REVISIONS_REQUIRED");
+  if (baseRevision !== currentRevision || canonRevision !== currentCanonRevision || record.needsReview) fail("REVIEW_BASIS_STALE");
+  if (typeof reason !== "string" || !reason.trim()) fail("ADJUDICATION_REASON_REQUIRED");
   const conflict = (record.conflicts || []).find((item) => item.id === conflictId);
-  if (!conflict) fail("未找到冲突", 404);
+  if (!conflict) fail("CONFLICT_NOT_FOUND");
   conflict.status = "resolved";
   conflict.resolution = { type: "false_positive", note: reason.trim(), baseRevision, canonRevision, evidence: structuredClone(conflict.evidence || []) };
   return conflict;

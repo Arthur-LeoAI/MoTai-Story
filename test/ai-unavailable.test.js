@@ -42,7 +42,7 @@ test("missing API configuration is reported and never produces preset writing", 
   const status = await jsonRequest("/api/ai/test", { method: "POST", body: "{}" });
   assert.equal(status.response.status, 200);
   assert.equal(status.payload.ok, false);
-  assert.match(status.payload.message, /运行环境配置/);
+  assert.equal(status.payload.code, "AI_PROVIDER_NOT_CONFIGURED");
 
   const created = await jsonRequest("/api/works", {
     method: "POST",
@@ -58,6 +58,7 @@ test("missing API configuration is reported and never produces preset writing", 
     })
   });
   assert.equal(writing.response.status, 503);
-  assert.match(writing.payload.error, /AI 不可用/);
+  assert.equal(writing.payload.error.code, "AI_UNAVAILABLE");
+  assert.equal(typeof writing.payload.error.message, "string");
   assert.equal(Object.hasOwn(writing.payload, "text"), false);
 });
