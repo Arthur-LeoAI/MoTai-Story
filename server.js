@@ -15,6 +15,7 @@ const {
   normalizeChapterPlanning,
   normalizeCoverStyle,
   normalizeStoryBible,
+  STORY_FOCUSES,
   normalizeStoryLanguage,
   normalizeText,
   nowIso,
@@ -3003,6 +3004,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && parts.length === 2) {
     const works = db.works
+      .filter((work) => (work.ownerId || "local") === req.user.id)
       .map(workSummary)
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     return sendJson(res, 200, { works });
@@ -3011,16 +3013,20 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && parts.length === 2) {
     const body = await readBody(req);
     const timestamp = nowIso();
-    const title = normalizeText(body.title) || "未命名作品";
-    const chapterTitle = normalizeText(body.chapterTitle) || "第一章";
+    // Default names are story content, so they follow the story's language.
+    const language = normalizeStoryLanguage(body.language);
+    const english = language === "en";
+    const title = normalizeText(body.title) || (english ? "Untitled story" : "未命名作品");
+    const chapterTitle = normalizeText(body.chapterTitle) || (english ? "Chapter 1" : "第一章");
     const work = {
       id: createId("work"),
       ownerId: req.user.id,
-      language: normalizeStoryLanguage(body.language),
+      language,
+      ...(STORY_FOCUSES.includes(body.focus) ? { focus: body.focus } : {}),
       title,
-      author: normalizeText(body.author).slice(0, 40) || "未署名",
+      author: normalizeText(body.author).slice(0, 40) || (english ? "" : "未署名"),
       premise: normalizeText(body.premise),
-      genre: normalizeText(body.genre) || "原创",
+      genre: normalizeText(body.genre) || (english ? "" : "原创"),
       status: normalizeText(body.status) || "draft",
       tags: Array.isArray(body.tags) ? body.tags.map(normalizeText).filter(Boolean).slice(0, 8) : [],
       targetCharacters: Number(body.targetCharacters) || 80000,
@@ -3098,6 +3104,16 @@ async function handleApi(req, res, url) {
       if (Object.prototype.hasOwnProperty.call(body, field)) {
         work[field] = normalizeText(body[field]);
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "focus")) {
+      if (!STORY_FOCUSES.includes(body.focus)) throw appError("BAD_REQUEST");
+      work.focus = body.focus;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "language")) {
+      if (normalizeStoryLanguage(body.language, "") !== body.language) throw appError("BAD_REQUEST");
+      work.language = body.language;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "targetCharacters")) {

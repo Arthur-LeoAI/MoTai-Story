@@ -1,14 +1,66 @@
 {
   "app": {
     "documentTitle": "$t(brand.name)",
+    "documentTitleWithPage": "{{page}} · $t(brand.name)",
     "skipToContent": "跳到正文",
     "headerNav": "偏好设置",
+    "legacyLink": "打开当前的工作台",
+    "loading": "加载中…",
+    "notFoundTitle": "这个页面不存在",
+    "backHome": "回到我的作品"
+  },
+  "home": {
     "eyebrow": "新的故事",
     "heading": "今天，讲一个什么故事？",
     "tagline": "一句话就够了。点子由你来出，写作的技巧交给我。",
-    "foundationNote": "这是地基阶段的预览，各个页面将在下一阶段陆续上线。",
-    "legacyLink": "打开当前的工作台",
-    "loadError": "无法连接服务器。偏好设置已保存在本机。"
+    "premiseLabel": "用一句话说说，它讲的是什么？",
+    "premisePlaceholder": "一位制图师收到一张没有署名的地图，笔迹是她失踪的妹妹的。",
+    "storyLanguage": "写作语言",
+    "beginHeading": "你想怎样开始？",
+    "shape": {
+      "label": "梳理思路",
+      "title": "我有一个想法",
+      "body": "我们先聊一聊。我用大白话向你提问，再替你勾勒出人物、世界和主要事件，由你来决定留下哪些。",
+      "opens": "从「灵感」开始"
+    },
+    "write": {
+      "label": "专注写作",
+      "title": "我已经在写了",
+      "body": "把稿子带来。我会读完它，记下谁是谁、发生过什么，然后陪你从停笔的地方接着写。",
+      "opens": "从「正文」开始"
+    },
+    "begin": "开始",
+    "beginning": "正在打开你的故事…",
+    "changeLater": "每部作品都可以随时更改。",
+    "libraryHeading": "我的作品",
+    "emptyLibrary": "还没有作品。你的故事会出现在这里。",
+    "status": {
+      "shape": "梳理中",
+      "write": "写作中"
+    },
+    "chapters_other": "{{count}} 章",
+    "noText": "尚未动笔",
+    "length": {
+      "words_other": "{{formatted}} 词",
+      "characters_other": "{{formatted}} 字"
+    },
+    "edited": "{{when}}编辑",
+    "continueChapter": "继续写第 {{number}} 章",
+    "continueShaping": "接着梳理这个想法"
+  },
+  "nav": {
+    "label": "作品栏目",
+    "story": "作品",
+    "ideate": "灵感",
+    "cast": "人物",
+    "world": "世界",
+    "timeline": "时间线",
+    "plot": "情节",
+    "write": "正文"
+  },
+  "section": {
+    "comingTitle": "「{{section}}」正在重做",
+    "comingBody": "这个页面会在重新设计的后续步骤中上线。在那之前，所有功能仍可在当前的工作台里使用。"
   },
   "language": {
     "label": "界面语言",

@@ -1,14 +1,69 @@
 {
   "app": {
     "documentTitle": "$t(brand.name)",
+    "documentTitleWithPage": "{{page}} · $t(brand.name)",
     "skipToContent": "Skip to content",
     "headerNav": "Preferences",
+    "legacyLink": "Open the current workspace",
+    "loading": "Loading…",
+    "notFoundTitle": "This page does not exist",
+    "backHome": "Back to your library"
+  },
+  "home": {
     "eyebrow": "A new story",
     "heading": "What tale shall we tell?",
     "tagline": "One sentence is enough. You bring the idea; the craft is my part.",
-    "foundationNote": "This is the foundation preview. Pages arrive in the next phase.",
-    "legacyLink": "Open the current workspace",
-    "loadError": "Could not reach the server. Your preferences are kept on this device."
+    "premiseLabel": "In a sentence, what is it about?",
+    "premisePlaceholder": "A mapmaker receives an unsigned map drawn in her lost sister's hand.",
+    "storyLanguage": "Written in",
+    "beginHeading": "How would you like to begin?",
+    "shape": {
+      "label": "Shape",
+      "title": "I have an idea",
+      "body": "We talk it through. I ask plain questions, then sketch your cast, your world and the main events for you to approve.",
+      "opens": "Opens in Ideate"
+    },
+    "write": {
+      "label": "Write",
+      "title": "I'm already writing",
+      "body": "Bring your manuscript. I read it, note who is who and what has happened, and help you carry on from where you stopped.",
+      "opens": "Opens in Write"
+    },
+    "begin": "Begin",
+    "beginning": "Opening your story…",
+    "changeLater": "You can change this for any story, at any time.",
+    "libraryHeading": "Your library",
+    "emptyLibrary": "No stories yet. Yours will appear here.",
+    "status": {
+      "shape": "Shaping",
+      "write": "Writing"
+    },
+    "chapters_one": "{{count}} chapter",
+    "chapters_other": "{{count}} chapters",
+    "noText": "nothing written yet",
+    "length": {
+      "words_one": "{{formatted}} word",
+      "words_other": "{{formatted}} words",
+      "characters_one": "{{formatted}} character",
+      "characters_other": "{{formatted}} characters"
+    },
+    "edited": "Edited {{when}}",
+    "continueChapter": "Continue Chapter {{number}}",
+    "continueShaping": "Carry on shaping the idea"
+  },
+  "nav": {
+    "label": "Story sections",
+    "story": "Story",
+    "ideate": "Ideate",
+    "cast": "Cast",
+    "world": "World",
+    "timeline": "Timeline",
+    "plot": "Plot",
+    "write": "Write"
+  },
+  "section": {
+    "comingTitle": "{{section}} is being rebuilt",
+    "comingBody": "This page arrives in a later step of the redesign. Until then, everything still works in the current workspace."
   },
   "language": {
     "label": "Interface language",

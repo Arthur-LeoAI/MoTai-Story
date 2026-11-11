@@ -176,3 +176,36 @@ test("quota, conflict and validation guards answer with their own codes, not a 5
   const review = await call(`/api/works/${created.body.work.id}/chapters/chapter_missing/review`, "POST", { baseRevision: 0 });
   assert.notEqual(review.status, 500);
 });
+
+test("stories carry a focus, language-aware length and their last edited chapter", async () => {
+  const shaped = await call("/api/works", "POST", { premise: "A mapmaker.", language: "en", focus: "shape" });
+  assert.equal(shaped.status, 201);
+  assert.equal(shaped.body.work.title, "Untitled story");
+  assert.equal(shaped.body.work.chapters[0].title, "Chapter 1");
+  const id = shaped.body.work.id;
+  const chapter = shaped.body.work.chapters[0];
+
+  const list = async () => (await call("/api/works")).body.works.find((work) => work.id === id);
+  let summary = await list();
+  assert.equal(summary.focus, "shape");
+  assert.equal(summary.stats.wordUnit, "words");
+  assert.equal(summary.stats.wordCount, 0);
+  assert.deepEqual(summary.lastEditedChapter, { id: chapter.id, title: "Chapter 1", number: 1 });
+
+  const saved = await call(`/api/works/${id}/chapters/${chapter.id}`, "PATCH", { baseRevision: chapter.revision, content: "The ferry had no bell." });
+  assert.equal(saved.status, 200);
+  summary = await list();
+  assert.equal(summary.stats.wordCount, 5);
+  assert.equal(summary.focus, "shape", "an explicit choice is kept even once there is text");
+
+  const switched = await call(`/api/works/${id}`, "PATCH", { focus: "write" });
+  assert.equal(switched.status, 200);
+  assert.equal((await list()).focus, "write");
+  assert.equal((await call(`/api/works/${id}`, "PATCH", { focus: "everything" })).body.error.code, "BAD_REQUEST");
+  assert.equal((await call(`/api/works/${id}`, "PATCH", { language: "xx" })).body.error.code, "BAD_REQUEST");
+
+  const chinese = await call("/api/works", "POST", { title: "旧作二" });
+  const chineseSummary = (await call("/api/works")).body.works.find((work) => work.id === chinese.body.work.id);
+  assert.equal(chineseSummary.stats.wordUnit, "characters");
+  assert.equal(chineseSummary.focus, "shape", "no choice and no text reads as shape");
+});

@@ -48,6 +48,8 @@ test("work summary calculates chapter progress without exposing chapter bodies",
   assert.equal(countCharacters("一 二\n三"), 3);
   assert.deepEqual(getWorkStats(work), {
     totalCharacters: 5,
+    wordCount: 5,
+    wordUnit: "characters",
     chapterCount: 2,
     completedChapters: 1,
     progress: 50

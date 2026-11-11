@@ -6,6 +6,9 @@ module.exports = defineConfig({
   testDir: "./e2e",
   testMatch: "*.spec.js",
   timeout: 30_000,
+  // All specs share one server and one temporary database, and the JSON store
+  // rejects overlapping writes (409), so spec files must not run in parallel.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   globalSetup: require.resolve("./e2e/setup.cjs"),
   use: {

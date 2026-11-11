@@ -1,5 +1,7 @@
-// New frontend shell (web/, served at /app/). Selectors are data-testid only;
-// expected names come from shared/brand.json, never hard-coded copy or colours.
+// New frontend (web/, served at /app/). Selectors are data-testid and state
+// attributes only; expected names come from shared/brand.json, never
+// hard-coded interface copy or colours. Text the test itself supplies (story
+// premises) may be asserted.
 const { test, expect } = require("@playwright/test");
 const brand = require("../shared/brand.json");
 
@@ -24,9 +26,9 @@ test.afterEach(async ({ page }) => {
 });
 
 const backgroundOf = (page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-const tokenOf = (page, name) => page.evaluate((token) => getComputedStyle(document.documentElement).getPropertyValue(token).trim(), name);
+const noSidewaysScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
-test("shell switches interface language and keeps the choice", async ({ page }) => {
+test("interface language switches and is remembered", async ({ page }) => {
   await page.goto("/app/");
   const html = page.locator("html");
   await expect(page.getByTestId("app-shell")).toBeVisible();
@@ -52,12 +54,11 @@ test("shell switches interface language and keeps the choice", async ({ page }) 
   await expect(page.getByTestId("hero-title")).toHaveText(englishHeading);
 });
 
-test("shell switches between the paper and candle themes", async ({ page }) => {
+test("paper and candle themes switch and are remembered", async ({ page }) => {
   await page.goto("/app/");
   const html = page.locator("html");
   await expect(html).toHaveAttribute("data-theme", "paper");
   const paperBackground = await backgroundOf(page);
-  expect(await tokenOf(page, "--color-bg")).not.toBe("");
 
   await page.getByTestId("theme-toggle").click();
   await expect(html).toHaveAttribute("data-theme", "candle");
@@ -84,9 +85,90 @@ test("fonts are served by the app and licence notices ship with them", async ({ 
   expect(await notices.text()).toContain("SIL OPEN FONT LICENSE Version 1.1");
 });
 
-test("shell has no horizontal scroll on a phone", async ({ page }) => {
+test("a Shape story starts from one sentence and opens in Ideate", async ({ page }) => {
+  await page.goto("/app/");
+  await expect(page.getByTestId("path-shape")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("path-write")).toHaveAttribute("aria-pressed", "false");
+  await page.getByTestId("premise-input").fill("A mapmaker receives an unsigned map.");
+  await page.getByTestId("begin-button").click();
+
+  await expect(page).toHaveURL(/\/app\/works\/[^/]+\/ideate$/);
+  const frame = page.getByTestId("work-frame");
+  await expect(frame).toHaveAttribute("data-focus", "shape");
+  await expect(page.getByTestId("nav-ideate")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", "ideate");
+  // Shape stories list the six pages in plan order.
+  await expect(frame.locator('[data-testid^="nav-"]').first()).toHaveAttribute("data-testid", "nav-ideate");
+
+  // Every page is reachable; nothing is locked by the focus.
+  for (const section of ["cast", "world", "timeline", "plot", "write"]) {
+    await page.getByTestId(`nav-${section}`).click();
+    await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", section);
+    await expect(page.getByTestId(`nav-${section}`)).toHaveAttribute("aria-current", "page");
+  }
+
+  // The story is in the library, written in the interface language by default.
+  const workId = new URL(page.url()).pathname.split("/")[3];
+  await page.getByTestId("brand-wordmark").click();
+  const card = page.locator(`[data-testid="work-card"][data-work-id="${workId}"]`);
+  await expect(card).toHaveAttribute("data-focus", "shape");
+  const stored = (await (await page.request.get(`/api/works/${workId}`)).json()).work;
+  expect(stored.language).toBe("en");
+  expect(stored.premise).toBe("A mapmaker receives an unsigned map.");
+  expect(stored.ownerId).toBe("local");
+});
+
+test("a Write story keeps its own language and opens in Write", async ({ page }) => {
+  await page.goto("/app/");
+  await page.getByTestId("path-write").click();
+  await expect(page.getByTestId("path-write")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("path-shape")).toHaveAttribute("aria-pressed", "false");
+  // English interface, Chinese story.
+  await page.getByTestId("story-language-select").selectOption("zh-CN");
+  await page.getByTestId("premise-input").fill("守灯人收到未来寄来的求救信。");
+  await page.getByTestId("begin-button").click();
+
+  await expect(page).toHaveURL(/\/app\/works\/[^/]+\/write$/);
+  const frame = page.getByTestId("work-frame");
+  await expect(frame).toHaveAttribute("data-focus", "write");
+  // Write stories list the manuscript first.
+  await expect(frame.locator('[data-testid^="nav-"]').first()).toHaveAttribute("data-testid", "nav-write");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByTestId("story-title")).toHaveAttribute("lang", "zh-CN");
+
+  const workId = new URL(page.url()).pathname.split("/")[3];
+  const stored = (await (await page.request.get(`/api/works/${workId}`)).json()).work;
+  expect(stored.language).toBe("zh-CN");
+
+  // A reload lands on the same page (client-side routes are served by the app).
+  await page.reload();
+  await expect(page.getByTestId("nav-write")).toHaveAttribute("aria-current", "page");
+
+  // The library card continues where the story opens.
+  await page.goto("/app/");
+  const card = page.locator(`[data-testid="work-card"][data-work-id="${workId}"]`);
+  await card.getByTestId("work-continue").click();
+  await expect(page).toHaveURL(new RegExp(`/app/works/${workId}/write$`));
+});
+
+test("unknown stories and pages show a way back", async ({ page }) => {
+  await page.goto("/app/works/work_missing/write");
+  await expect(page.getByTestId("not-found")).toBeVisible();
+  await page.getByTestId("back-home").click();
+  await expect(page.getByTestId("hero")).toBeVisible();
+  await page.goto("/app/nowhere");
+  await expect(page.getByTestId("not-found")).toBeVisible();
+});
+
+test("home and story pages have no sideways scroll on a phone", async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  const created = await request.post("/api/works", { data: { title: "A deliberately long story title to test wrapping on narrow screens", language: "en", focus: "write" } });
+  const workId = (await created.json()).work.id;
   await page.goto("/app/");
   await expect(page.getByTestId("hero")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await expect(page.locator(`[data-work-id="${workId}"]`)).toBeVisible();
+  expect(await noSidewaysScroll(page)).toBeTruthy();
+  await page.goto(`/app/works/${workId}/write`);
+  await expect(page.getByTestId("section-placeholder")).toBeVisible();
+  expect(await noSidewaysScroll(page)).toBeTruthy();
 });

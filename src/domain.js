@@ -54,13 +54,25 @@ function countCharacters(text) {
     .length;
 }
 
+// Length in the unit readers of that language expect: words for English,
+// characters for Chinese.
+function countWords(text, language) {
+  if (language !== "en") return countCharacters(text);
+  const plain = String(text || "").replace(/!\[[^\]]*\]\([^)]+\)/g, " ").trim();
+  return plain ? plain.split(/\s+/).length : 0;
+}
+
 function getWorkStats(work) {
   const chapters = Array.isArray(work?.chapters) ? work.chapters : [];
   const totalCharacters = chapters.reduce((sum, chapter) => sum + countCharacters(chapter.content), 0);
+  const language = normalizeStoryLanguage(work?.language);
+  const wordCount = chapters.reduce((sum, chapter) => sum + countWords(chapter.content, language), 0);
   const completedChapters = chapters.filter((chapter) => chapter.status === "done").length;
 
   return {
     totalCharacters,
+    wordCount,
+    wordUnit: language === "en" ? "words" : "characters",
     chapterCount: chapters.length,
     completedChapters,
     progress: work?.targetCharacters
@@ -159,12 +171,35 @@ function normalizeStoryLanguage(value, fallback = LEGACY_STORY_LANGUAGE) {
   return STORY_LANGUAGES.includes(value) ? value : fallback;
 }
 
+// Which side of the app a story leans on: "shape" (working out the idea) or
+// "write" (working on the manuscript). Chosen per story; when it was never
+// chosen, a story that already has text counts as "write".
+const STORY_FOCUSES = Object.freeze(["shape", "write"]);
+
+function resolveStoryFocus(work) {
+  if (STORY_FOCUSES.includes(work?.focus)) return work.focus;
+  const hasText = (work?.chapters || []).some((chapter) => countCharacters(chapter.content) > 0);
+  return hasText ? "write" : "shape";
+}
+
+// The chapter edited most recently, for "continue where you stopped".
+function lastEditedChapter(work) {
+  const chapters = Array.isArray(work?.chapters) ? work.chapters : [];
+  let best = -1;
+  chapters.forEach((chapter, index) => {
+    if (best < 0 || String(chapter.updatedAt || "") > String(chapters[best].updatedAt || "")) best = index;
+  });
+  return best < 0 ? null : { id: chapters[best].id, title: chapters[best].title, number: best + 1 };
+}
+
 function workSummary(work) {
   return {
     id: work.id,
     title: work.title,
     language: normalizeStoryLanguage(work.language),
-    author: normalizeText(work.author) || "未署名",
+    focus: resolveStoryFocus(work),
+    lastEditedChapter: lastEditedChapter(work),
+    author: normalizeText(work.author) || (normalizeStoryLanguage(work.language) === "en" ? "" : "未署名"),
     premise: work.premise,
     genre: work.genre,
     status: work.status,
@@ -191,7 +226,10 @@ function findChapter(work, chapterId) {
 
 module.exports = {
   COVER_STYLE_PALETTES,
+  STORY_FOCUSES,
   STORY_LANGUAGES,
+  countWords,
+  resolveStoryFocus,
   STORY_BIBLE_FIELDS,
   clampNumber,
   countCharacters,

@@ -31,7 +31,11 @@ test.afterEach(async ({ page }, testInfo) => {
   expect(pageErrors.get(page), "No browser console warnings/errors or uncaught exceptions").toEqual([]);
 });
 
-test("workspace: AI chat, story-material draft and rich-text writing", async ({ page }) => {
+test("workspace: AI chat, story-material draft and rich-text writing", async ({ page, request }) => {
+  // This flow starts from an empty library. Other specs share the same
+  // temporary database, so remove whatever they created first.
+  const { works } = await (await request.get("/api/works")).json();
+  for (const work of works) expect((await request.delete(`/api/works/${work.id}`)).ok()).toBeTruthy();
   await page.goto("/");
   await expect(id(page, "ai-availability-button")).toHaveAttribute("data-status", "available");
   await expect(id(page, "nav-ai")).toHaveAttribute("aria-current", "page");

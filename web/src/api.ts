@@ -52,8 +52,32 @@ export interface Session {
   preferences: Preferences;
 }
 
+// The language a story is written in; independent of the interface language.
+export type StoryLanguage = "en" | "zh-CN";
+export type StoryFocus = "shape" | "write";
+
+export interface WorkSummary {
+  id: string;
+  title: string;
+  language: StoryLanguage;
+  focus: StoryFocus;
+  genre: string;
+  premise: string;
+  updatedAt: string;
+  lastEditedChapter: { id: string; title: string; number: number } | null;
+  stats: { wordCount: number; wordUnit: "words" | "characters"; chapterCount: number };
+}
+
+export interface NewWork {
+  premise: string;
+  language: StoryLanguage;
+  focus: StoryFocus;
+}
+
 export const api = {
   session: () => request<Session>("/api/session"),
   updatePreferences: (patch: Partial<Pick<Preferences, "uiLocale" | "theme">>) =>
-    request<{ preferences: Preferences }>("/api/me/preferences", { method: "PATCH", body: JSON.stringify(patch) })
+    request<{ preferences: Preferences }>("/api/me/preferences", { method: "PATCH", body: JSON.stringify(patch) }),
+  listWorks: () => request<{ works: WorkSummary[] }>("/api/works"),
+  createWork: (work: NewWork) => request<{ work: { id: string } }>("/api/works", { method: "POST", body: JSON.stringify(work) })
 };
