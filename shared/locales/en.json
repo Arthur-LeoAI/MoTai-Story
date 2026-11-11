@@ -43,7 +43,6 @@
     "UPSTREAM_ERROR": "An outside service returned an error.",
     "SERVICE_UNAVAILABLE": "The service is not available right now.",
     "UPSTREAM_TIMEOUT": "The AI request timed out. Check your network, proxy or API address.",
-
     "STORE_REVISION_CONFLICT": "The data was updated elsewhere. Refresh and try again; your unsaved edits are kept.",
     "DATABASE_VERSION_UNSUPPORTED": "Database version {{incoming}} is newer than the supported version {{supported}}.",
     "BASE_REVISION_REQUIRED": "The base version is missing. Refresh and try again.",
@@ -51,7 +50,6 @@
     "REVISION_NOT_FOUND": "That version does not exist.",
     "REVISION_MISMATCH": "That version does not belong to this chapter.",
     "REVISIONS_REQUIRED": "The text and canon versions are required.",
-
     "WORK_NOT_FOUND": "Story not found.",
     "CHAPTER_NOT_FOUND": "Chapter not found.",
     "WORK_OR_CHAPTER_NOT_FOUND": "The story or chapter does not exist. Refresh and try again.",
@@ -68,7 +66,6 @@
     "RICH_CONTENT_INVALID": "The rich text content is not valid.",
     "RICH_CONTENT_TOO_LARGE": "The rich text content is too large.",
     "EXPORT_FORMAT_UNSUPPORTED": "This export format is not supported.",
-
     "CHAT_NOT_FOUND": "Conversation not found.",
     "MESSAGE_EMPTY": "The message cannot be empty.",
     "PROPOSAL_NOT_FOUND": "Draft not found.",
@@ -76,7 +73,6 @@
     "PROPOSAL_NOTHING_SELECTED": "Choose at least one part to apply.",
     "PROPOSAL_NOT_APPLIED": "Only an applied draft can be undone.",
     "ARTIFACT_TYPE_UNSUPPORTED": "This kind of story material is not supported.",
-
     "CANON_PROPOSAL_NOT_FOUND": "Canon proposal not found.",
     "CANON_PROPOSAL_ALREADY_HANDLED": "This canon proposal has already been handled.",
     "CANON_PROPOSAL_INCOMPLETE": "The canon proposal is incomplete.",
@@ -87,7 +83,6 @@
     "CONFLICT_NOT_FOUND": "Conflict not found.",
     "ADJUDICATION_REASON_REQUIRED": "Give a reason for marking this as a false alarm.",
     "REVIEW_BASIS_STALE": "The text or canon has changed. Review again.",
-
     "GENERATION_NOT_FOUND": "The generation record does not exist. Generate again.",
     "GENERATION_STALE": "The result or canon has changed. Generate again.",
     "GENERATION_STALE_REVISION": "The chapter was updated; content generated from an older version cannot be inserted.",
@@ -101,7 +96,6 @@
     "TASK_CANCELLED": "Cancelled. Any draft generated so far is kept.",
     "REQUEST_ID_REQUIRED": "The request ID is missing.",
     "REQUEST_ID_REUSED": "This request ID was already used for another operation.",
-
     "IMPORT_PREVIEW_NOT_FOUND": "Import preview not found.",
     "IMPORT_CHAPTERS_INVALID": "The chapter list is not valid.",
     "IMPORT_TEXT_TOO_LARGE": "A manuscript cannot exceed one million characters.",
@@ -118,7 +112,6 @@
     "DOCX_ENCRYPTED_OR_TOO_LARGE": "The DOCX is encrypted, uses an unsupported compression, or expands beyond 40 MB.",
     "DOCX_NO_BODY": "The DOCX has no body text.",
     "DOCX_EXTERNAL_ENTITY": "Documents with external entities are not supported.",
-
     "IMAGE_INVALID": "Upload a valid image file.",
     "IMAGE_EMPTY": "The image data is empty.",
     "IMAGE_TYPE_UNSUPPORTED": "Only PNG, JPG or WebP images are supported.",
@@ -126,7 +119,6 @@
     "COVER_HISTORY_NOT_FOUND": "That cover is not in the history.",
     "COVER_NOT_RELAYOUTABLE": "The current cover is not a local image that can be re-laid out. Generate or upload a cover first.",
     "COVER_BACKGROUND_MISSING": "The current cover has no background image to re-lay out. Generate or upload the cover again.",
-
     "BACKUP_TOO_LARGE": "The backup file is larger than 50 MB and cannot be restored. Split the library or remove large covers and try again.",
     "BACKUP_FORMAT_INVALID": "The backup file format is not valid.",
     "BACKUP_UNSUPPORTED": "This is not a restorable backup, or its version is not supported yet.",
@@ -135,7 +127,6 @@
     "BACKUP_COVERS_TOO_LARGE": "Covers in the backup exceed the 40 MB restore limit.",
     "BACKUP_IMAGES_TOO_LARGE": "Covers and chapter images together exceed 40 MB, so a single-file backup cannot be created. Remove some large images first.",
     "BACKUP_LOCAL_IMAGE_MISSING": "A local image could not be backed up: {{fileName}}",
-
     "URL_SCHEME_INVALID": "{{field}} must start with http:// or https://",
     "AI_UNAVAILABLE": "AI is not available: no API key is configured. Open the AI settings, configure it and test the connection.",
     "AI_PROVIDER_NOT_CONFIGURED": "{{provider}} is not configured on this server, so its models cannot be selected.",
@@ -162,6 +153,10 @@
     "AI_IMAGE_EMPTY": "The image model returned no image data.",
     "AI_IMAGE_DOWNLOAD_FAILED": "The generated image could not be downloaded (status {{status}}).",
     "AI_IMAGE_TYPE_UNSUPPORTED": "The generated image type is not supported.",
-    "AI_COVER_TOO_LARGE": "The generated cover is too large to add the title. Choose a smaller size and try again."
+    "AI_COVER_TOO_LARGE": "The generated cover is too large to add the title. Choose a smaller size and try again.",
+    "WORK_UPDATED_ELSEWHERE": "This story was updated in another window. Your unsaved content is kept.",
+    "SCENE_NEEDS_RELOCATION": "This scene has to be placed in the text again before generating.",
+    "BACKUP_HISTORY_INVALID": "A chapter history reference in the backup is not valid.",
+    "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel."
   }
 }

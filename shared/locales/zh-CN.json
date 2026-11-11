@@ -43,7 +43,6 @@
     "UPSTREAM_ERROR": "外部服务返回了错误。",
     "SERVICE_UNAVAILABLE": "服务暂时不可用。",
     "UPSTREAM_TIMEOUT": "AI 请求超时。请检查网络、代理或 API 地址。",
-
     "STORE_REVISION_CONFLICT": "数据已更新，请刷新后重试；未保存的编辑仍保留。",
     "DATABASE_VERSION_UNSUPPORTED": "数据库版本 {{incoming}} 高于当前支持的版本 {{supported}}。",
     "BASE_REVISION_REQUIRED": "缺少基础版本，请刷新后再试。",
@@ -51,7 +50,6 @@
     "REVISION_NOT_FOUND": "版本不存在。",
     "REVISION_MISMATCH": "版本不属于当前章节。",
     "REVISIONS_REQUIRED": "需要正文与设定版本。",
-
     "WORK_NOT_FOUND": "作品不存在。",
     "CHAPTER_NOT_FOUND": "章节不存在。",
     "WORK_OR_CHAPTER_NOT_FOUND": "作品或章节不存在，请刷新后重试。",
@@ -68,7 +66,6 @@
     "RICH_CONTENT_INVALID": "富文本内容格式无效。",
     "RICH_CONTENT_TOO_LARGE": "富文本内容过大。",
     "EXPORT_FORMAT_UNSUPPORTED": "不支持该导出格式。",
-
     "CHAT_NOT_FOUND": "对话不存在。",
     "MESSAGE_EMPTY": "消息不能为空。",
     "PROPOSAL_NOT_FOUND": "草案不存在。",
@@ -76,7 +73,6 @@
     "PROPOSAL_NOTHING_SELECTED": "请至少选择一个要写入的部分。",
     "PROPOSAL_NOT_APPLIED": "只有已经写入的草案可以撤销。",
     "ARTIFACT_TYPE_UNSUPPORTED": "不支持的创作资料类型。",
-
     "CANON_PROPOSAL_NOT_FOUND": "事实提案不存在。",
     "CANON_PROPOSAL_ALREADY_HANDLED": "这份事实提案已经处理，不能重复操作。",
     "CANON_PROPOSAL_INCOMPLETE": "事实提案不完整。",
@@ -87,7 +83,6 @@
     "CONFLICT_NOT_FOUND": "未找到冲突。",
     "ADJUDICATION_REASON_REQUIRED": "请填写误判依据。",
     "REVIEW_BASIS_STALE": "正文或设定已变化，请重新审校。",
-
     "GENERATION_NOT_FOUND": "生成记录或章节不存在，请重新生成。",
     "GENERATION_STALE": "生成结果或设定已变化，请重新生成。",
     "GENERATION_STALE_REVISION": "章节已更新，不能写入基于旧版本生成的内容。",
@@ -101,7 +96,6 @@
     "TASK_CANCELLED": "已取消；已生成的草稿仍保留。",
     "REQUEST_ID_REQUIRED": "缺少请求标识。",
     "REQUEST_ID_REUSED": "请求标识已用于其他操作。",
-
     "IMPORT_PREVIEW_NOT_FOUND": "导入预览不存在。",
     "IMPORT_CHAPTERS_INVALID": "章节列表无效。",
     "IMPORT_TEXT_TOO_LARGE": "稿件不能超过 100 万个字符。",
@@ -118,7 +112,6 @@
     "DOCX_ENCRYPTED_OR_TOO_LARGE": "DOCX 已加密、压缩格式不支持或解压后超过 40MB。",
     "DOCX_NO_BODY": "DOCX 缺少正文。",
     "DOCX_EXTERNAL_ENTITY": "不支持包含外部实体的文档。",
-
     "IMAGE_INVALID": "请上传有效的图片文件。",
     "IMAGE_EMPTY": "图片数据为空。",
     "IMAGE_TYPE_UNSUPPORTED": "仅支持 PNG、JPG 或 WebP 图片。",
@@ -126,7 +119,6 @@
     "COVER_HISTORY_NOT_FOUND": "未找到该封面历史记录。",
     "COVER_NOT_RELAYOUTABLE": "当前封面不是可重新排版的本地图片，请先生成或上传封面。",
     "COVER_BACKGROUND_MISSING": "当前封面缺少可重新排版的背景图，请重新生成或上传封面。",
-
     "BACKUP_TOO_LARGE": "备份文件超过 50MB，无法恢复。请拆分作品或清理过大的封面后重试。",
     "BACKUP_FORMAT_INVALID": "备份文件格式不正确。",
     "BACKUP_UNSUPPORTED": "不是可恢复的备份文件，或备份版本暂不受支持。",
@@ -135,7 +127,6 @@
     "BACKUP_COVERS_TOO_LARGE": "备份中的封面总大小超过恢复上限 40MB。",
     "BACKUP_IMAGES_TOO_LARGE": "封面与章节插图总大小超过 40MB，无法创建单文件备份。请先移除部分过大的图片。",
     "BACKUP_LOCAL_IMAGE_MISSING": "本地图片无法备份：{{fileName}}",
-
     "URL_SCHEME_INVALID": "{{field}} 必须以 http:// 或 https:// 开头",
     "AI_UNAVAILABLE": "AI 不可用：尚未配置 API Key。请打开 AI 设置完成配置并测试连接。",
     "AI_PROVIDER_NOT_CONFIGURED": "{{provider}} 尚未由运行环境配置，不能选择该服务商的模型。",
@@ -162,6 +153,10 @@
     "AI_IMAGE_EMPTY": "图片模型没有返回可保存的图片数据。",
     "AI_IMAGE_DOWNLOAD_FAILED": "无法下载生成的图片：{{status}}",
     "AI_IMAGE_TYPE_UNSUPPORTED": "生成的图片类型不受支持。",
-    "AI_COVER_TOO_LARGE": "生成的封面图片过大，无法加入书名排版。请更换较小尺寸后重试。"
+    "AI_COVER_TOO_LARGE": "生成的封面图片过大，无法加入书名排版。请更换较小尺寸后重试。",
+    "WORK_UPDATED_ELSEWHERE": "作品已在其他窗口更新，未保存内容仍保留。",
+    "SCENE_NEEDS_RELOCATION": "场景需要重新定位后才能生成。",
+    "BACKUP_HISTORY_INVALID": "备份中的章节历史引用无效。",
+    "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。"
   }
 }

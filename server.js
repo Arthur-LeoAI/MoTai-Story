@@ -214,7 +214,7 @@ async function writeDb(db, { automaticBackup = true } = {}) {
       const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
       const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
       for (const w of [...changes, ...removed]) {
-        if (JSON.stringify(stored.works.find(x => x.id === w.id)) !== JSON.stringify(baseline.works.find(x => x.id === w.id))) fail("作品已在其他窗口更新，未保存内容仍保留。", 409);
+        if (JSON.stringify(stored.works.find(x => x.id === w.id)) !== JSON.stringify(baseline.works.find(x => x.id === w.id))) fail("WORK_UPDATED_ELSEWHERE");
       }
       stored.works = stored.works.filter(w => !removed.some(x => x.id === w.id));
       for (const w of changes) { const at = stored.works.findIndex(x => x.id === w.id); if (at < 0) stored.works.unshift(w); else stored.works[at] = w; }
@@ -1286,7 +1286,7 @@ async function restoreBackupPayload(value) {
   for (const work of backup.database.works) for (const chapter of [...work.chapters, ...(work.deletedChapters || [])]) {
     for (const revision of chapter.revisions || []) {
       const item = history[revision.id];
-      if (!/^revision_[a-zA-Z0-9]+$/.test(revision.id) || !item || item.workId !== work.id || item.chapter?.id !== chapter.id) fail("备份中的章节历史引用无效。", 400);
+      if (!/^revision_[a-zA-Z0-9]+$/.test(revision.id) || !item || item.workId !== work.id || item.chapter?.id !== chapter.id) fail("BACKUP_HISTORY_INVALID");
     }
   }
   const restoreBase = (await readDb()).storeRevision;
@@ -1573,7 +1573,7 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
     db.usage ||= []; db.settings ||= { dailyTokenLimit: 200000 };
     const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
     const used = db.usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
-    if (used + reserved > db.settings.dailyTokenLimit) fail("今日 AI 用量已达到上限，请在用量面板查看。", 429);
+    if (used + reserved > db.settings.dailyTokenLimit) fail("AI_DAILY_LIMIT_REACHED");
     db.usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
   });
   const finishUsage = async values => dataStore.transact(db => { const u = db.usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
@@ -2325,7 +2325,7 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
 
 async function reviewChapterTask(input) {
   const db = await readDb(), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
-  if (!chapter) fail("章节不存在。", 404); ensureVersion(chapter.revision, input.baseRevision);
+  if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, input.baseRevision);
   const task = taskContext.getStore(); if (task) { task.stage = "review"; await task.update({ status: "checking" }); }
   const context = selectContinuityContext(work, chapter.id);
   const scene = chapter.scenes?.[0];
@@ -2360,7 +2360,7 @@ async function createConstrainedGeneration(body) {
   }
   if (body.baseRevision !== undefined) ensureVersion(chapter.revision, body.baseRevision);
   const scene = body.sceneId ? chapter.scenes.find(s => s.id === body.sceneId) : null;
-  if (body.sceneId && (!scene || scene.needsRelocation)) fail("场景需要重新定位后才能生成。", 409);
+  if (body.sceneId && (!scene || scene.needsRelocation)) fail("SCENE_NEEDS_RELOCATION");
   if (body.baseRevision === undefined && body.baseChapterUpdatedAt && body.baseChapterUpdatedAt !== chapter.updatedAt) {
     const error = appError("CHAPTER_STALE");
     throw error;

@@ -60,6 +60,7 @@
     "files": [
       "server.js",
       "src/**",
+      "shared/**",
       "public/**",
       "desktop/**",
       "resources/motai.ico",

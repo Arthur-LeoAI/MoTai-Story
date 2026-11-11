@@ -145,3 +145,34 @@ test("shared locale files are served for the legacy frontend", async () => {
   assert.equal(body.errors.WORK_NOT_FOUND, "作品不存在。");
   assert.equal((await fetch(`${base}/locales/..%2Fbrand.json`)).status, 404);
 });
+
+test("every error helper call in the server uses a code from the catalog", () => {
+  const files = ["server.js", ...fs.readdirSync(path.join(__dirname, "..", "src")).map((name) => path.join("src", name))];
+  const unknown = [];
+  let calls = 0;
+  for (const file of files) {
+    const text = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    // fail("…"), domainError("…"), invalid("…"), appError("…"), sendError(res, "…")
+    for (const match of text.matchAll(/\b(?:fail|domainError|invalid|appError|sendError\(res,)\s*\(?\s*(["'`])([^"'`\n]*)\1/g)) {
+      calls += 1;
+      if (!Object.hasOwn(ERROR_STATUS, match[2])) unknown.push(`${file}: ${match[0]}`);
+    }
+  }
+  assert.ok(calls > 100, `expected to scan the error calls, found ${calls}`);
+  assert.deepEqual(unknown, []);
+});
+
+test("the desktop package ships the shared files the server loads at startup", () => {
+  const packaged = require("../package.json").build.files;
+  assert.ok(packaged.includes("shared/**"));
+});
+
+test("quota, conflict and validation guards answer with their own codes, not a 500", async () => {
+  for (const code of ["WORK_UPDATED_ELSEWHERE", "SCENE_NEEDS_RELOCATION", "BACKUP_HISTORY_INVALID", "AI_DAILY_LIMIT_REACHED"]) {
+    assert.equal(toErrorResponse(appError(code)).body.error.code, code);
+  }
+  assert.equal(toErrorResponse(appError("AI_DAILY_LIMIT_REACHED")).status, 429);
+  const created = await call("/api/works", "POST", { title: "审校缺章" });
+  const review = await call(`/api/works/${created.body.work.id}/chapters/chapter_missing/review`, "POST", { baseRevision: 0 });
+  assert.notEqual(review.status, 500);
+});
