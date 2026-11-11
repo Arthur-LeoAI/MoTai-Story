@@ -1,6 +1,6 @@
 {
   "app": {
-    "documentTitle": "{{brand}}",
+    "documentTitle": "$t(brand.name)",
     "skipToContent": "跳到正文",
     "headerNav": "偏好设置",
     "eyebrow": "新的故事",
@@ -38,6 +38,7 @@
     "REQUEST_TOO_LARGE": "请求内容过大。",
     "UNPROCESSABLE": "请求无法处理。",
     "PRECONDITION_REQUIRED": "缺少基础版本。",
+    "NETWORK_UNREACHABLE": "无法连接服务器，请确认它正在运行。",
     "INTERNAL_ERROR": "服务器出错了。",
     "UPSTREAM_ERROR": "外部服务返回了错误。",
     "SERVICE_UNAVAILABLE": "服务暂时不可用。",

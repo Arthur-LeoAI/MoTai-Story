@@ -1,6 +1,6 @@
 {
   "app": {
-    "documentTitle": "{{brand}}",
+    "documentTitle": "$t(brand.name)",
     "skipToContent": "Skip to content",
     "headerNav": "Preferences",
     "eyebrow": "A new story",
@@ -38,6 +38,7 @@
     "REQUEST_TOO_LARGE": "The request body is too large.",
     "UNPROCESSABLE": "The request could not be processed.",
     "PRECONDITION_REQUIRED": "A base version is required.",
+    "NETWORK_UNREACHABLE": "The server could not be reached. Check that it is running.",
     "INTERNAL_ERROR": "Something went wrong on the server.",
     "UPSTREAM_ERROR": "An outside service returned an error.",
     "SERVICE_UNAVAILABLE": "The service is not available right now.",

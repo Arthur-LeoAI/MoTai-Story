@@ -1,0 +1,145 @@
+/*
+ * Design tokens. Components use only these semantic names, never raw colours.
+ * Palette values come from the approved mockup (project/sumi.css):
+ * "paper" = light theme, "candle" = dark theme.
+ * scripts/check-tokens.cjs verifies WCAG 2.1 AA contrast for text tokens.
+ */
+
+:root {
+  /* Spacing (multiples of 4) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius: the printed-book look keeps corners nearly square */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-round: 999px;
+
+  /* Elevation: card / popover / dialog */
+  --shadow-1: 0 1px 2px rgb(42 33 26 / 0.08);
+  --shadow-2: 0 4px 16px rgb(42 33 26 / 0.12);
+  --shadow-3: 0 12px 40px rgb(42 33 26 / 0.18);
+
+  /* Motion */
+  --duration-hover: 120ms;
+  --duration-expand: 200ms;
+  --duration-page: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Type families. Latin: period faces; Chinese: Songti (Noto Serif SC). */
+  --font-text: "EB Garamond", "Noto Serif SC", "Songti SC", SimSun, serif;
+  --font-display: "Cormorant Garamond", "Noto Serif SC", "Songti SC", serif;
+  --font-fell: "IM Fell English", "Noto Serif SC", "Songti SC", serif;
+  --font-fell-sc: "IM Fell English SC", "Noto Serif SC", "Songti SC", serif;
+  --font-cjk: "Noto Serif SC", "Songti SC", SimSun, serif;
+
+  /* Type scale */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-body: 17px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-display: 60px;
+  --text-manuscript: 18px;
+
+  --line-tight: 1.1;
+  --line-ui: 1.45;
+  --line-latin: 1.6;
+  --line-cjk: 1.8;
+
+  --control-height: 44px;
+}
+
+/* Light theme: paper */
+:root,
+:root[data-theme="paper"] {
+  --color-bg: #f4ede0;
+  --color-surface: #fbf7ee;
+  --color-surface-raised: #fffcf5;
+  --color-surface-sunk: #ebe2d0;
+  --color-border: #d9cdb8;
+  --color-border-strong: #b5a68c;
+
+  --color-text: #2a211a;
+  --color-text-muted: #5e5044;
+  --color-text-subtle: #6e5f51;
+
+  --color-accent: #a3301e;
+  --color-accent-hover: #8a2818;
+  --color-accent-soft: #f1dcd3;
+  --color-on-accent: #fff8ee;
+
+  --color-success: #2a6a5d;
+  --color-success-soft: #dcebe5;
+  --color-warning: #7f5c0c;
+  --color-warning-soft: #f2e6c6;
+  --color-danger: #8e2f45;
+  --color-danger-soft: #f3dce1;
+  --color-info: #2f4a8a;
+  --color-info-soft: #dde3f2;
+
+  /* Entity colours, only for telling entity types apart in diagrams */
+  --color-entity-character: #2f4a8a;
+  --color-entity-location: #2a6a5d;
+  --color-entity-faction: #7f5c0c;
+  --color-entity-event: #8e2f45;
+  --color-entity-rule: #4a4744;
+
+  --focus-ring: var(--color-accent);
+}
+
+/* Dark theme: candlelight */
+:root[data-theme="candle"] {
+  --color-bg: #1b1612;
+  --color-surface: #261f19;
+  --color-surface-raised: #2f2720;
+  --color-surface-sunk: #14100d;
+  --color-border: #45392d;
+  --color-border-strong: #6b5a48;
+
+  --color-text: #efe4d0;
+  --color-text-muted: #bbac96;
+  --color-text-subtle: #a99a85;
+
+  --color-accent: #e67258;
+  --color-accent-hover: #ee8a73;
+  --color-accent-soft: #3b231c;
+  --color-on-accent: #1b1612;
+
+  --color-success: #86c6b7;
+  --color-success-soft: #1d2e2a;
+  --color-warning: #ddb95f;
+  --color-warning-soft: #33291a;
+  --color-danger: #e594a8;
+  --color-danger-soft: #3a2228;
+  --color-info: #9db3ea;
+  --color-info-soft: #222a3d;
+
+  --color-entity-character: #9db3ea;
+  --color-entity-location: #86c6b7;
+  --color-entity-faction: #ddb95f;
+  --color-entity-event: #e594a8;
+  --color-entity-rule: #bdb7ae;
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 4px 16px rgb(0 0 0 / 0.45);
+  --shadow-3: 0 12px 40px rgb(0 0 0 / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-hover: 0ms;
+    --duration-expand: 0ms;
+    --duration-page: 0ms;
+  }
+}

@@ -54,12 +54,15 @@ function walk(dir) {
     return entry.isDirectory() ? walk(full) : /\.(tsx?|jsx?)$/.test(entry.name) ? [full] : [];
   });
 }
+// Keys added at runtime from shared/brand.json (see web/src/i18n.ts).
+const RUNTIME_KEYS = new Set(["brand.name"]);
 let usedKeys = 0;
 for (const file of walk(webSrc)) {
   const text = fs.readFileSync(file, "utf8");
-  for (const match of text.matchAll(/\bt\(\s*["'`]([\w.-]+)["'`]/g)) {
+  // Only literal keys; template keys such as `language.names.${code}` are skipped.
+  for (const match of text.matchAll(/\bt\(\s*(["'`])([\w.-]+)\1/g)) {
     usedKeys += 1;
-    if (!(match[1] in base)) problems.push(`${path.relative(root, file)}: unknown translation key ${match[1]}`);
+    if (!(match[2] in base) && !RUNTIME_KEYS.has(match[2])) problems.push(`${path.relative(root, file)}: unknown translation key ${match[2]}`);
   }
 }
 
