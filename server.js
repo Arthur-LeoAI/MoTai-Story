@@ -54,6 +54,8 @@ const {
 } = require("./src/continuity");
 const {
   ARTIFACT_DEFINITIONS,
+  ARTIFACT_ENGLISH,
+  publicChat,
   applyArtifactProposal,
   autoChatTitle,
   createArtifactProposal,
@@ -2462,10 +2464,38 @@ async function createConstrainedGeneration(body) {
   return { generation: record, text: selectedGenerationOutput(record), canAccept: canAcceptGeneration(record), fallback: false };
 }
 
+// Story material as "Name: text" lines with English field names.
+function englishStoryMaterial(storyBible) {
+  const bible = normalizeStoryBible(storyBible);
+  return Object.values(ARTIFACT_ENGLISH)
+    .flatMap((group) => Object.entries(group.fields))
+    .filter(([key]) => bible[key])
+    .map(([key, name]) => `- ${name}: ${limitText(bible[key], 900)}`)
+    .join("\n");
+}
+
+// The assistant answers in the language the story is written in, whatever the
+// interface language is.
 function buildChatSystemPrompt(work) {
+  if (normalizeStoryLanguage(work.language) === "en") {
+    return [
+      "You are a creative partner for a novelist. Your first job is to help the author, through natural conversation, get clear on the idea, the conflict, what the characters want, and an outline they can act on.",
+      "Be direct, concrete and useful. When something is missing, ask only the single most important question; never send a long questionnaire. Use plain words, not craft jargon.",
+      "Never claim to have changed the story's material; that happens only when the author approves a draft in the interface. Do not show your reasoning.",
+      "Always reply in English.",
+      "",
+      "The story:",
+      `Title: ${work.title || "Untitled story"}`,
+      `Genre: ${work.genre || "not decided"}`,
+      `Premise: ${work.premise || "none yet"}`,
+      "",
+      "Story material so far:",
+      englishStoryMaterial(work.storyBible) || "Nothing yet. Start by helping the author say the idea clearly."
+    ].join("\n");
+  }
   const storyBible = compactStoryBible(work.storyBible);
   return [
-    "你是墨台里的中文小说创作伙伴。你的首要任务是通过自然对话帮助作者澄清灵感、冲突、人物动机和可执行的大纲。",
+    "你是一位中文小说创作伙伴。你的首要任务是通过自然对话帮助作者澄清灵感、冲突、人物动机和可执行的大纲。",
     "回答要直接、具体、有创作推动力。信息不足时一次只追问最关键的问题，不要一次抛出长问卷。",
     "不要声称已经修改作品资料；资料写入由界面中的草案确认流程完成。不要展示内部推理过程。",
     "",
@@ -2632,19 +2662,27 @@ async function generateArtifactFields(work, type, instruction = "") {
     return Object.fromEntries(fieldNames.map((field) => [field, result.storyBible[field] || ""]));
   }
   if (!config.apiKey) throw aiUnavailableError();
-  const prompt = [
+  const english = normalizeStoryLanguage(work.language) === "en";
+  const fieldNotes = english ? ARTIFACT_ENGLISH[type].fields : definition.fields;
+  const prompt = (english ? [
+    `Draft the ${ARTIFACT_ENGLISH[type].label} for the novel "${work.title || "Untitled story"}".`,
+    `Premise: ${work.premise || "none yet"}`,
+    `Material so far:\n${englishStoryMaterial(work.storyBible) || "none yet"}`,
+    instruction ? `The author also asks: ${instruction}` : "",
+    "Be specific and directly usable for a long novel. Do not overwrite core facts the author has already settled. Write every value in English."
+  ] : [
     `请为小说《${work.title || "未命名作品"}》优化${definition.label}。`,
     `作品简介：${work.premise || "暂无"}`,
     `当前资料：${compactStoryBible(work.storyBible) || "暂无"}`,
     instruction ? `作者补充要求：${instruction}` : "",
     "输出必须具体、可直接用于长篇创作，不要覆盖作者已经确定的核心事实。"
-  ].filter(Boolean).join("\n\n");
+  ]).filter(Boolean).join("\n\n");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
     let output;
     if (config.endpoint === "chat") {
-      const properties = Object.fromEntries(fieldNames.map((field) => [field, { type: "string", description: definition.fields[field] }]));
+      const properties = Object.fromEntries(fieldNames.map((field) => [field, { type: "string", description: fieldNotes[field] }]));
       const toolName = "propose_story_artifact";
       const payload = await fetchAiJson(`${config.baseUrl}/chat/completions`, config.apiKey, {
         model: config.model,
@@ -2656,7 +2694,7 @@ async function generateArtifactFields(work, type, instruction = "") {
           type: "function",
           function: {
             name: toolName,
-            description: `生成${definition.label}草案`,
+            description: english ? `Draft the ${ARTIFACT_ENGLISH[type].label}` : `生成${definition.label}草案`,
             parameters: { type: "object", properties, required: fieldNames, additionalProperties: false }
           }
         }],
@@ -2669,7 +2707,7 @@ async function generateArtifactFields(work, type, instruction = "") {
     } else {
       const payload = await fetchAiJson(`${config.baseUrl}/responses`, config.apiKey, {
         model: config.model,
-        input: `${prompt}\n\n只输出 JSON，字段为：${fieldNames.join("、")}`,
+        input: english ? `${prompt}\n\nOutput JSON only, with the fields: ${fieldNames.join(", ")}` : `${prompt}\n\n只输出 JSON，字段为：${fieldNames.join("、")}`,
         max_output_tokens: config.maxOutputTokens
       }, controller.signal);
       output = extractJsonObject(extractResponseText(payload));
@@ -2685,7 +2723,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     const workspace = ensureAiWorkspace(work, { createChat: true });
     if (req.method === "GET" && parts.length === 4) {
       await writeDb(db);
-      sendJson(res, 200, { activeChatId: workspace.activeChatId, chats: workspace.chats, proposals: workspace.proposals });
+      sendJson(res, 200, { activeChatId: workspace.activeChatId, chats: workspace.chats.map(publicChat), proposals: workspace.proposals });
       return true;
     }
     if (req.method === "POST" && parts.length === 4) {
@@ -2695,7 +2733,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       workspace.activeChatId = chat.id;
       work.updatedAt = nowIso();
       await writeDb(db);
-      sendJson(res, 201, { chat, activeChatId: chat.id });
+      sendJson(res, 201, { chat: publicChat(chat), activeChatId: chat.id });
       return true;
     }
     const chatId = parts[4];
@@ -2712,7 +2750,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       workspace.activeChatId = chat.id;
       chat.updatedAt = nowIso();
       await writeDb(db);
-      sendJson(res, 200, { chat, activeChatId: chat.id });
+      sendJson(res, 200, { chat: publicChat(chat), activeChatId: chat.id });
       return true;
     }
     if (req.method === "DELETE" && parts.length === 5) {
@@ -2722,7 +2760,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       }
       workspace.activeChatId = workspace.chats[0].id;
       await writeDb(db);
-      sendJson(res, 200, { ok: true, activeChatId: workspace.activeChatId, chats: workspace.chats });
+      sendJson(res, 200, { ok: true, activeChatId: workspace.activeChatId, chats: workspace.chats.map(publicChat) });
       return true;
     }
     if (req.method === "POST" && parts.length === 7 && parts[5] === "messages" && parts[6] === "stream") {
@@ -4574,6 +4612,7 @@ if (require.main === module) {
 
 module.exports = {
   buildAiPrompt,
+  buildChatSystemPrompt,
   buildImagePrompt,
   buildStoryBiblePrompt,
   createAppServer

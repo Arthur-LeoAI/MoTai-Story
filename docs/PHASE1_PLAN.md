@@ -8,7 +8,7 @@ Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuil
 | Step | Contents | Status |
 |---|---|---|
 | 1 | App frame and routing; Home: new story from one sentence, Shape/Write choice per story, story language, library | Done |
-| 2 | Ideate: chat, chat history, streaming, story-material drafts (proposal dialog) | Not started |
+| 2 | Ideate: chat, chat history, streaming, story-material drafts | Done |
 | 3 | Write: editor, chapters, AI panel (continue/expand/shorten/polish), diff preview, checks, canon proposals, history, scenes, focus mode | Not started |
 | 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Not started |
 | 5 | English and Chinese sample stories; first-run flow; retire `public/`; rename remaining brand identifiers with "read old, write new" | Not started |
@@ -24,6 +24,23 @@ Cast, World, Timeline and Plot stay as placeholders through phase 1. They are bu
 - Library cards show length in the story's own unit: words for English stories, characters for Chinese ones.
 - Default names created by the server ("Untitled story", "Chapter 1") follow the story language.
 - The works list returns only the current user's stories.
+
+## Step 2: what exists now
+
+- Ideate is a real page: a conversation with the assistant that streams its reply, can be stopped, and can be retried after a failure. Failures are explained by translating the server's error code.
+- Conversations: start a new one, switch, rename, delete. The one last opened is remembered.
+- "Draft with AI" for the four kinds of story material (outline, characters, world, timeline). A draft appears in the conversation; the writer keeps it part by part, can undo a kept draft, or discard it. Nothing is saved before that.
+- The side panel shows the premise and what story material exists so far (read-only).
+- The assistant's instructions follow the **story** language: English stories get English instructions and "reply in English"; Chinese stories keep the existing Chinese instructions. Prompts no longer contain the product name.
+- Field names in drafts are translated in the interface from their keys; the stored Chinese labels are ignored by the new frontend.
+
+Checked only with the built-in test AI, which always answers in Chinese. How a real model follows the English instructions has not been tried.
+
+## Not in step 2
+
+- From the Ideate mockup: answer chips under a question, "add this character to Cast" capture, the cast medallions and "still to find out" list. They need the structured story data of phase 2.
+- Editing story material by hand: it stays in the legacy workspace until Cast / World / Timeline are built.
+- An "AI is not connected" indicator and model choice: step 4 (settings).
 
 ## Not in step 1 (so nobody looks for it)
 

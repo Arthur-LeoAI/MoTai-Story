@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
@@ -63,6 +63,8 @@ export interface WorkSummary {
   focus: StoryFocus;
   genre: string;
   premise: string;
+  /** Free-text story material, keyed by field (see ARTIFACT_FIELDS). */
+  storyBible: Record<string, string>;
   updatedAt: string;
   lastEditedChapter: { id: string; title: string; number: number } | null;
   stats: { wordCount: number; wordUnit: "words" | "characters"; chapterCount: number };

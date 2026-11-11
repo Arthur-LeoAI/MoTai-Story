@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, NavLink, useParams } from "react-router-dom";
 import { api, errorText, type WorkSummary } from "../api";
 import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from "../components/common";
+import Ideate from "./Ideate";
 import { isSection, numeral, orderedSections, workPath, type Section } from "../sections";
 
 type Loaded = { state: "loading" } | { state: "ready"; work: WorkSummary } | { state: "missing"; message: string };
@@ -102,10 +103,17 @@ export default function WorkFrame() {
           <PreferenceControls />
         </div>
       </aside>
-      <main id="main" className="frame-main">
-        <SectionPlaceholder section={section} />
-        <Notice />
-      </main>
+      {section === "ideate" ? (
+        <main id="main" className="frame-main frame-main-wide">
+          {loaded.state === "ready" ? <Ideate key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          <Notice />
+        </main>
+      ) : (
+        <main id="main" className="frame-main">
+          <SectionPlaceholder section={section} />
+          <Notice />
+        </main>
+      )}
     </div>
   );
 }

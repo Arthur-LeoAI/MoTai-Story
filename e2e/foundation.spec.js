@@ -96,7 +96,8 @@ test("a Shape story starts from one sentence and opens in Ideate", async ({ page
   const frame = page.getByTestId("work-frame");
   await expect(frame).toHaveAttribute("data-focus", "shape");
   await expect(page.getByTestId("nav-ideate")).toHaveAttribute("aria-current", "page");
-  await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", "ideate");
+  await expect(page.getByTestId("ideate")).toBeVisible();
+  await expect(page.getByTestId("story-premise")).toHaveText("A mapmaker receives an unsigned map.");
   // Shape stories list the six pages in plan order.
   await expect(frame.locator('[data-testid^="nav-"]').first()).toHaveAttribute("data-testid", "nav-ideate");
 

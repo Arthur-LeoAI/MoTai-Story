@@ -209,3 +209,36 @@ test("stories carry a focus, language-aware length and their last edited chapter
   assert.equal(chineseSummary.stats.wordUnit, "characters");
   assert.equal(chineseSummary.focus, "shape", "no choice and no text reads as shape");
 });
+
+test("the chat assistant is told to answer in the story's language", () => {
+  const { buildChatSystemPrompt } = require("../server");
+  const english = buildChatSystemPrompt({ language: "en", title: "Ferry", premise: "A mapmaker.", storyBible: { logline: "Maps lie." } });
+  assert.match(english, /Always reply in English/);
+  assert.match(english, /Core concept: Maps lie./);
+  assert.doesNotMatch(english, /[一-鿿]/, "no Chinese instructions in an English story's prompt");
+  const chinese = buildChatSystemPrompt({ title: "旧作" });
+  assert.match(chinese, /中文小说创作伙伴/);
+  for (const name of Object.values(brand.name)) assert.ok(!english.includes(name) && !chinese.includes(name), "prompts do not hard-code the brand name");
+});
+
+test("conversations say when they are still unnamed, and drafts carry field keys", async () => {
+  const created = await call("/api/works", "POST", { title: "Talk", language: "en", focus: "shape" });
+  const id = created.body.work.id;
+  const loaded = await call(`/api/works/${id}/chats`);
+  assert.equal(loaded.status, 200);
+  assert.equal(loaded.body.chats.length, 1);
+  assert.equal(loaded.body.chats[0].untitled, true);
+  const chatId = loaded.body.chats[0].id;
+
+  const renamed = await call(`/api/works/${id}/chats/${chatId}`, "PATCH", { title: "Villains" });
+  assert.equal(renamed.body.chat.untitled, false);
+  assert.equal(renamed.body.chat.title, "Villains");
+  const cleared = await call(`/api/works/${id}/chats/${chatId}`, "PATCH", { title: "" });
+  assert.equal(cleared.body.chat.untitled, true);
+
+  const draft = await call(`/api/works/${id}/chats/${chatId}/proposals`, "POST", { type: "characters" });
+  assert.equal(draft.status, 201);
+  assert.deepEqual(draft.body.proposal.sections.map((section) => section.key).sort(), ["characters", "relationships"]);
+  const unknown = await call(`/api/works/${id}/chats/${chatId}/proposals`, "POST", { type: "spaceships" });
+  assert.equal(unknown.body.error.code, "ARTIFACT_TYPE_UNSUPPORTED");
+});

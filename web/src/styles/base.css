@@ -155,3 +155,10 @@ a:hover {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+.rule2 {
+  height: 0;
+  border: 0;
+  border-top: 3px double var(--color-border-strong);
+  margin: 0;
+}
