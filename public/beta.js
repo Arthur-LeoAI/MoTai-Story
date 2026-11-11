@@ -13,7 +13,7 @@ async function refreshBetaWork() {
   renderChapters(); renderHeader(); renderLibrary(); loadChapterIntoEditor();
 }
 function betaForm(html, onSubmit) {
-  betaBody().innerHTML = `<form id="betaForm">${html}<button class="primary-button" type="submit">保存</button></form>`;
+  betaBody().innerHTML = `<form id="betaForm" data-testid="beta-form">${html}<button class="primary-button" type="submit" data-testid="beta-form-submit">保存</button></form>`;
   document.querySelector("#betaForm").onsubmit = async e => { e.preventDefault(); const button = e.target.querySelector('[type=submit]'); button.disabled = true; try { await onSubmit(Object.fromEntries(new FormData(e.target))); } catch (error) { betaMessage(error.message); } finally { button.disabled = false; } };
 }
 async function showBeta(type) {
@@ -25,17 +25,17 @@ async function showBeta(type) {
   if (type === "history") {
     if (!chapter) return betaMessage("请选择章节。");
     const { revisions } = await request(`${root}/chapters/${chapter.id}/revisions`);
-    betaBody().innerHTML = '<button class="primary-button" id="makeSnapshot">保存命名版本</button>' + [...revisions].reverse().map(r => `<div class="beta-row"><strong>${escapeHtml(r.name || r.source)}</strong> · ${escapeHtml(formatDate(r.createdAt))} · ${r.characters} 字 <button class="quiet-button" data-revision="${r.id}">比较与恢复</button></div>`).join("");
+    betaBody().innerHTML = '<button class="primary-button" id="makeSnapshot" data-testid="make-snapshot">保存命名版本</button>' + [...revisions].reverse().map(r => `<div class="beta-row" data-testid="revision-row"><strong>${escapeHtml(r.name || r.source)}</strong> · ${escapeHtml(formatDate(r.createdAt))} · ${r.characters} 字 <button class="quiet-button" data-revision="${r.id}" data-testid="revision-compare">比较与恢复</button></div>`).join("");
     document.querySelector("#makeSnapshot").onclick = async () => { const name = prompt("版本名称", "重要修改前"); if (name === null) return; await request(`${root}/chapters/${chapter.id}/revisions`, { method: "POST", body: JSON.stringify({ baseRevision: chapter.revision, name }) }); await showBeta(type); };
     betaBody().querySelectorAll("[data-revision]").forEach(button => button.onclick = async () => {
       const id = button.dataset.revision, { chapter: old } = await request(`${root}/chapters/${chapter.id}/revisions/${id}`);
-      betaBody().innerHTML = `<div class="beta-diff"><section>历史版本<pre>${escapeHtml(old.content)}</pre></section><section>当前版本<pre>${escapeHtml(chapter.content)}</pre></section></div><button id="restoreRevision" class="primary-button">恢复此版本（保留当前稿件）</button>`;
+      betaBody().innerHTML = `<div class="beta-diff"><section>历史版本<pre>${escapeHtml(old.content)}</pre></section><section>当前版本<pre>${escapeHtml(chapter.content)}</pre></section></div><button id="restoreRevision" data-testid="restore-revision" class="primary-button">恢复此版本（保留当前稿件）</button>`;
       document.querySelector("#restoreRevision").onclick = async () => { try { await request(`${root}/chapters/${chapter.id}/revisions/${id}/restore`, { method: "POST", body: JSON.stringify({ baseRevision: chapter.revision }) }); await refreshBetaWork(); await showBeta("history"); showToast("已恢复，恢复前正文已保留在历史中。"); } catch (e) { betaMessage(e.message); } };
     });
   } else if (type === "scenes") {
     if (!chapter) return betaMessage("请选择章节。");
     const scenes = structuredClone(chapter.scenes || []);
-    betaBody().innerHTML = `<p>场景排序表示规划顺序，不移动已写正文。</p><button id="addScene" class="quiet-button">新建场景</button><button id="addVolume" class="quiet-button">新建分卷</button><div id="sceneList"></div>`;
+    betaBody().innerHTML = `<p>场景排序表示规划顺序，不移动已写正文。</p><button id="addScene" data-testid="add-scene" class="quiet-button">新建场景</button><button id="addVolume" class="quiet-button">新建分卷</button><div id="sceneList" data-testid="scene-list"></div>`;
     const editScene = scene => {
       betaForm(field("title", "名称", scene.title) + field("targetCharacters", "目标字数（200～2000）", scene.targetCharacters || 800, "number") + field("povId", "视角人物 ID", scene.povId) + field("participants", "出场人物", scene.participants) + field("location", "地点", scene.location) + field("timeLabel", "时间说明", scene.timeLabel) + field("storyTime", "故事时间序号（未知留空）", scene.storyTime, "number") + `<label>倒叙 <input type="checkbox" name="flashback" ${scene.flashback ? "checked" : ""}></label>` + [ ["goal", "场景目标"], ["conflict", "冲突"], ["must", "必须发生"], ["mustNot", "不得发生"], ["ending", "结束状态"] ].map(([key, label]) => area(key, label, scene[key])).join("") + field("start", "正文起点", scene.start || 0, "number") + field("end", "正文终点", scene.end || 0, "number") + `<label>状态<select name="status">${["planned", "draft", "done"].map(s => `<option value="${s}" ${s === scene.status ? "selected" : ""}>${betaStatus(s)}</option>`).join("")}</select></label>`, async data => {
         Object.assign(scene, data, { targetCharacters: Number(data.targetCharacters), storyTime: data.storyTime === "" ? null : Number(data.storyTime), flashback: Boolean(data.flashback), start: Number(data.start), end: Number(data.end), needsRelocation: false });
@@ -67,11 +67,11 @@ async function showBeta(type) {
     const [usage, taskList] = await Promise.all([request("/api/usage"), request(`/api/tasks${work ? `?workId=${work.id}` : ""}`)]);
     betaBody().innerHTML = `<p>已报告用量 ${usage.totalTokens} token；每日上限 ${usage.dailyTokenLimit}。未知用量调用 ${usage.unknownCalls} 次，按预留用量占用额度。</p><p>未配置价格，因此不估算金额。</p>` + taskList.tasks.map(t => `<div class="beta-row">${escapeHtml(betaStatus(t.status))} · ${escapeHtml(formatDate(t.createdAt))}<p>${escapeHtml(taskErrorText(t))}</p><details><summary>查看草稿</summary><p style="white-space:pre-wrap">${escapeHtml(t.result?.text || t.draft || "暂无")}</p></details></div>`).join("");
   } else if (type === "import") {
-    betaBody().innerHTML = '<p>支持 TXT、Markdown、DOCX，最大20MB。仅导入稿件，不会自动调用 AI。</p><input id="importFile" type="file" accept=".txt,.md,.markdown,.docx"><label>编码<select id="importEncoding"><option value="auto">自动</option><option value="utf-8">UTF-8</option><option value="gb18030">GB18030</option></select></label><button id="parseImport" class="primary-button">读取并预览</button>';
+    betaBody().innerHTML = '<p>支持 TXT、Markdown、DOCX，最大20MB。仅导入稿件，不会自动调用 AI。</p><input id="importFile" data-testid="import-file" type="file" accept=".txt,.md,.markdown,.docx"><label>编码<select id="importEncoding"><option value="auto">自动</option><option value="utf-8">UTF-8</option><option value="gb18030">GB18030</option></select></label><button id="parseImport" data-testid="parse-import" class="primary-button">读取并预览</button>';
     document.querySelector("#parseImport").onclick = async e => { const file = document.querySelector("#importFile").files[0]; if (!file) return betaMessage("请选择文件。"); e.target.disabled = true; try {
       const base64 = await new Promise((resolve,reject) => { const r = new FileReader(); r.onload = () => resolve(r.result.split(",")[1]); r.onerror = reject; r.readAsDataURL(file); });
       const { preview } = await request("/api/imports", { method: "POST", body: JSON.stringify({ fileName: file.name, base64, encoding: document.querySelector("#importEncoding").value }) });
-      betaForm(field("title", "作品名称", preview.title) + `<p>${escapeHtml(preview.warnings.join("；"))}</p><div id="importChapters">${preview.chapters.map((c,i) => `<section class="beta-row" data-import-index="${i}">${field(`title${i}`, "章节标题", c.title)}${area(`content${i}`, "正文", c.content)}<button type="button" data-split="${i}">从光标处分章</button><button type="button" data-join="${i}">合并下一章</button></section>`).join("")}</div>`, async data => {
+      betaForm(field("title", "作品名称", preview.title) + `<p>${escapeHtml(preview.warnings.join("；"))}</p><div id="importChapters">${preview.chapters.map((c,i) => `<section class="beta-row" data-testid="import-chapter" data-import-index="${i}">${field(`title${i}`, "章节标题", c.title)}${area(`content${i}`, "正文", c.content)}<button type="button" data-split="${i}">从光标处分章</button><button type="button" data-join="${i}">合并下一章</button></section>`).join("")}</div>`, async data => {
         const chapters = [...document.querySelectorAll("[data-import-index]")].map(row => ({ sourceIndex: /^\d+$/.test(row.dataset.importIndex) ? Number(row.dataset.importIndex) : null, title: row.querySelector("input").value, content: row.querySelector("textarea").value }));
         const { work } = await request(`/api/imports/${preview.id}/confirm`, { method: "POST", body: JSON.stringify({ title: data.title, chapters }) });
         await loadWorks(); await loadWork(work.id); closeDialog("betaDialog"); showToast("作品已导入。可在正式设定中提取事实。");
