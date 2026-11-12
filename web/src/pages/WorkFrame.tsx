@@ -5,6 +5,7 @@ import { api, errorText, type WorkSummary } from "../api";
 import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from "../components/common";
 import Ideate from "./Ideate";
 import Write from "./Write";
+import Companion from "../components/Companion";
 import { isSection, numeral, orderedSections, workPath, type Section } from "../sections";
 
 type Loaded = { state: "loading" } | { state: "ready"; work: WorkSummary } | { state: "missing"; message: string };
@@ -106,7 +107,7 @@ export default function WorkFrame() {
       </aside>
       {section === "write" ? (
         <main id="main" className="frame-main frame-main-wide">
-          {loaded.state === "ready" ? <Write key={loaded.work.id} summary={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          {loaded.state === "ready" ? <Write key={loaded.work.id} summary={loaded.work} companion={(context) => <Companion context={context} />} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
           <Notice />
         </main>
       ) : section === "ideate" ? (

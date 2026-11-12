@@ -163,3 +163,118 @@ test("Write has no sideways scroll on a phone", async ({ page, request }) => {
   await page.keyboard.type("Words on a phone.");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
+
+test("the assistant continues the chapter and the text is added only on request", async ({ page, request }) => {
+  const workId = await newStory(request, { language: "zh-CN", title: "雾港" });
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("雾从海面一直漫到守灯塔的窗下。");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  await page.getByTestId("assist-mode").selectOption("continue");
+  await page.getByTestId("assist-instruction").fill("让求救信带来新的行动压力。");
+  let started;
+  page.on("request", (req) => { if (req.url().endsWith("/api/tasks") && req.method() === "POST") started = req.postDataJSON(); });
+  await page.getByTestId("assist-generate").click();
+  const result = page.getByTestId("assist-result");
+  await expect(result).toBeVisible({ timeout: 15000 });
+  expect(started).toMatchObject({ workId, mode: "continue", instruction: "让求救信带来新的行动压力。", selectedText: "" });
+  expect(started.range.length).toBe(0);
+  await expect(page.getByTestId("assist-checks")).toHaveAttribute("data-state", "passed");
+  const added = (await page.getByTestId("assist-hunk-after").allInnerTexts()).join("");
+  expect(added.trim()).not.toBe("");
+  // Nothing changes until the writer adds it.
+  await expect(editor(page)).not.toContainText(added.trim().slice(0, 8));
+
+  await page.getByTestId("assist-accept").click();
+  await expect(page.getByTestId("assist-notice")).toBeVisible();
+  await expect(result).toHaveCount(0);
+  await expect.poll(async () => (await editor(page).innerText()).replace(/\s/g, "")).toContain(added.replace(/\s/g, "").slice(0, 20));
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].content.replace(/\s/g, "")).toContain(added.replace(/\s/g, "").slice(0, 20));
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved");
+
+  // The merge queued a review; Checks lists whatever it found.
+  await page.getByTestId("tab-checks").click();
+  await expect(page.getByTestId("checks")).toBeVisible();
+  await expect(page.getByTestId("checks-empty").or(page.getByTestId("fact-proposal").first())).toBeVisible({ timeout: 15000 });
+});
+
+test("rewriting needs a selection, and a discarded suggestion leaves the text alone", async ({ page, request }) => {
+  const workId = await newStory(request, { language: "zh-CN", title: "润色" });
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("林舟沿着河岸走向旧灯塔。");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  await page.getByTestId("assist-mode").selectOption("polish");
+  await page.getByTestId("assist-generate").click();
+  await expect(page.getByTestId("assist-error")).toBeVisible();
+
+  await editor(page).click();
+  await page.keyboard.press("Control+A");
+  await page.getByTestId("assist-generate").click();
+  const result = page.getByTestId("assist-result");
+  await expect(result).toBeVisible({ timeout: 15000 });
+  // The test AI may return the passage unchanged; then there is nothing to add.
+  await expect(page.getByTestId("assist-hunk").first().or(page.getByTestId("assist-no-change"))).toBeVisible();
+  if (await page.getByTestId("assist-no-change").count()) await expect(page.getByTestId("assist-accept")).toBeDisabled();
+  await page.getByTestId("assist-discard").click();
+  await expect(result).toHaveCount(0);
+  await expect(editor(page)).toHaveText("林舟沿着河岸走向旧灯塔。");
+});
+
+test("a suggestion that contradicts the story cannot be added", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await page.route("**/api/tasks", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ task: { id: "task_mock", status: "completed", result: {
+      text: "Kael waited at the ferry.",
+      canAccept: false,
+      generation: {
+        id: "generation_blocked", status: "blocked", provider: "test", model: "mock", rewriteCount: 2,
+        hunks: [{ id: "h0", index: 0, length: 0, before: "", after: "Kael waited at the ferry." }],
+        context: { canonFactIds: [], chapterMemoryChapterIds: [] },
+        conflicts: [
+          { id: "c1", severity: "hard", status: "open", kind: "contradiction", message: "Kael is still in the capital.", evidence: [{ excerpt: "Kael stayed at the capital." }] },
+          { id: "c2", severity: "soft", status: "open", kind: "suggestion", message: "His voice sounds different here.", evidence: [] }
+        ]
+      }
+    } } }) });
+  });
+  await page.getByTestId("assist-generate").click();
+  const result = page.getByTestId("assist-result");
+  await expect(result).toHaveAttribute("data-can-accept", "false");
+  await expect(result).toHaveAttribute("data-rewrites", "2");
+  await expect(page.getByTestId("assist-checks")).toHaveAttribute("data-state", "conflicts");
+  await expect(page.getByTestId("assist-conflict")).toHaveCount(2);
+  await expect(page.locator('[data-testid="assist-conflict"][data-severity="hard"]')).toContainText("Kael is still in the capital.");
+  await expect(page.getByTestId("assist-accept")).toBeDisabled();
+});
+
+test("new facts from a chapter are confirmed one by one", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await page.getByTestId("tab-checks").click();
+  await expect(page.getByTestId("checks-empty")).toBeVisible();
+  const chapterId = await page.getByTestId("manuscript").getAttribute("data-chapter-id");
+
+  const proposal = { id: "canon_e2e", chapterId, status: "pending", changes: [
+    { operation: "add", fact: { id: "fact_1", category: "event_state", predicate: "The letter has arrived", value: "Chapter 1" } },
+    { operation: "add", fact: { id: "fact_2", category: "timeline", predicate: "Countdown", value: "Three days left" } }
+  ] };
+  let confirmed;
+  await page.route(`**/api/works/${workId}`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ work: { canonProposals: confirmed ? [] : [proposal] } }) }));
+  await page.route(`**/chapters/${chapterId}/review`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposal }) }));
+  await page.route("**/canon-proposals/canon_e2e/confirm", async (route) => {
+    confirmed = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposal: { ...proposal, status: "accepted" } }) });
+  });
+
+  await page.getByTestId("checks-review").click();
+  await expect(page.getByTestId("fact-item")).toHaveCount(2);
+  await page.getByTestId("fact-checkbox").nth(1).uncheck();
+  await page.getByTestId("fact-confirm").click();
+  await expect(page.getByTestId("checks-empty")).toBeVisible();
+  expect(confirmed).toEqual({ factIds: ["fact_1"] });
+});

@@ -242,3 +242,17 @@ test("conversations say when they are still unnamed, and drafts carry field keys
   const unknown = await call(`/api/works/${id}/chats/${chatId}/proposals`, "POST", { type: "spaceships" });
   assert.equal(unknown.body.error.code, "ARTIFACT_TYPE_UNSUPPORTED");
 });
+
+test("writing prompts ask for English prose in English stories", () => {
+  const { buildAiPrompt } = require("../server");
+  assert.match(buildAiPrompt({ work: { language: "en" }, chapter: {}, mode: "continue" }), /^Output language: English/);
+  assert.doesNotMatch(buildAiPrompt({ work: {}, chapter: {}, mode: "continue" }), /Output language/);
+});
+
+test("new chapters are named in the story's language", async () => {
+  const english = (await call("/api/works", "POST", { title: "Names", language: "en" })).body.work;
+  const added = await call(`/api/works/${english.id}/chapters`, "POST", {});
+  assert.equal(added.body.chapter.title, "Chapter 2");
+  const chinese = (await call("/api/works", "POST", { title: "命名" })).body.work;
+  assert.equal((await call(`/api/works/${chinese.id}/chapters`, "POST", {})).body.chapter.title, "第2章");
+});

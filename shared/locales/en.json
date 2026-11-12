@@ -162,6 +162,73 @@
     "focus": "Focus",
     "exitFocus": "Leave focus"
   },
+  "companion": {
+    "assist": "Assistant",
+    "checks": "Checks"
+  },
+  "assist": {
+    "what": "What should I do?",
+    "modes": {
+      "continue": "Continue the chapter",
+      "expand": "Expand the selection",
+      "shorten": "Tighten the selection",
+      "polish": "Polish the selection",
+      "custom": "Follow my instruction"
+    },
+    "hints": {
+      "continue": "Adds new text at the end of this chapter.",
+      "expand": "Select a passage first. I add detail without changing what happens.",
+      "shorten": "Select a passage first. I keep what matters and cut the rest.",
+      "polish": "Select a passage first. Same events, better telling.",
+      "custom": "Works on the selection if there is one, otherwise adds at the end."
+    },
+    "tellPlainly": "Tell it plainly",
+    "instructionPlaceholder": "What should happen, in your own words. It does not need to be well written.",
+    "generate": "Write it",
+    "again": "Try again",
+    "selectFirst": "Select some text in the chapter first.",
+    "status": {
+      "queued": "Waiting to start…",
+      "generating": "Writing…",
+      "checking": "Checking against your story…",
+      "completed": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped",
+      "interrupted": "Interrupted"
+    },
+    "result": "Suggested text",
+    "chooseChanges": "Choose which changes to take.",
+    "checksPassed": "Nothing here disagrees with what the story has established.",
+    "severity": {
+      "hard": "Contradiction",
+      "soft": "Worth a look"
+    },
+    "conflictStatus": {
+      "open": "open",
+      "resolved": "fixed",
+      "dismissed": "set aside"
+    },
+    "falseAlarm": "It is fine as written",
+    "falseAlarmReason": "Why is this fine? (Saved with the check.)",
+    "accept": "Add to the chapter",
+    "blocked": "Fix the contradiction first",
+    "accepted": "Added to the chapter. The earlier text is kept in the chapter's history.",
+    "unchanged": "Your text changes only when you add this.",
+    "noChange": "The suggestion is the same as your text, so there is nothing to change."
+  },
+  "checks": {
+    "intro": "I read the chapter, compare it with what the story has established, and list new facts for you to confirm.",
+    "review": "Check this chapter",
+    "reviewing": "Checking…",
+    "reviewed": "Checked.",
+    "nothingPending": "No new facts waiting for you.",
+    "newFacts": "New facts from this chapter",
+    "confirm_one": "Keep {{count}} fact",
+    "confirm_other": "Keep {{count}} facts",
+    "reject": "Not now",
+    "confirmed": "Facts kept.",
+    "rejected": "Left out."
+  },
   "language": {
     "label": "Interface language",
     "storyLanguageNote": "The interface language does not change the language of your stories.",

@@ -2129,7 +2129,10 @@ async function callOpenAiWriter(body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   const prompt = buildAiPrompt(body);
-  const systemText = "你是专业的中文小说写作助手，擅长续写、润色、扩写、章节大纲和剧情构思。你尊重作者原有设定，避免替作者擅自改变核心剧情。";
+  const english = normalizeStoryLanguage(body.work?.language) === "en";
+  const systemText = english
+    ? "You are a skilled fiction-writing assistant: continuing, polishing, expanding and condensing prose, outlining chapters and plotting. You respect the author's established material and never change the core story on your own. The story is written in English: write every word of your output in English, even though some instructions below are in Chinese."
+    : "你是专业的中文小说写作助手，擅长续写、润色、扩写、章节大纲和剧情构思。你尊重作者原有设定，避免替作者擅自改变核心剧情。";
 
   try {
     let payload;
@@ -4283,7 +4286,11 @@ function buildAiPrompt(body) {
           "不得输出免责声明；不得脱离设定库、当前章节标题和匹配章纲。"
         ].join("\n");
 
+  const languageRule = normalizeStoryLanguage(work.language) === "en"
+    ? ["Output language: English. The manuscript is in English; write all prose in English and match its style. (The instructions below are in Chinese; follow them, but answer in English.)", ""]
+    : [];
   return [
+    ...languageRule,
     `任务：${getModeInstruction(mode)}`,
     "",
     "题材策略：",

@@ -13,7 +13,9 @@ type SaveState = "saved" | "saving" | "error" | "conflict";
 export interface WriteContext {
   work: Work;
   chapter: Chapter;
-  editor: ManuscriptHandle | null;
+  getEditor: () => ManuscriptHandle | null;
+  /** The open chapter as last saved (its revision moves on with every save). */
+  currentChapter: () => Chapter;
   /** Saves pending edits; resolves once the server has them (or rejects). */
   flush: () => Promise<void>;
   /** Re-reads the story from the server and shows the given chapter text. */
@@ -378,7 +380,7 @@ export default function Write({ summary, companion }: WriteProps) {
 
       {chapter && companion ? (
         <aside className="write-companion" aria-label={t("write.companion")}>
-          {companion({ work, chapter, editor: editorRef.current, flush, reload: () => load(chapter.id).then(() => undefined), busy })}
+          {companion({ work, chapter, getEditor: () => editorRef.current, currentChapter: () => workRef.current?.chapters.find((item) => item.id === chapter.id) ?? chapter, flush, reload: () => load(chapter.id).then(() => undefined), busy })}
         </aside>
       ) : null}
     </div>

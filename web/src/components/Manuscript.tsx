@@ -7,6 +7,12 @@ export interface ManuscriptHandle {
   contents: () => RichContent;
   text: () => string;
   focus: () => void;
+  /** The last selection the writer made (kept while they use the side panel); null if none. */
+  selection: () => { index: number; length: number } | null;
+  /** Text in a range; used for "rewrite the selected text". */
+  textIn: (range: { index: number; length: number }) => string;
+  /** Length of the document, including Quill's final newline. */
+  length: () => number;
 }
 
 interface ManuscriptProps {
@@ -30,6 +36,7 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
   const hostRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<Quill | null>(null);
   const onChangeRef = useRef(onChange);
+  const selectionRef = useRef<{ index: number; length: number } | null>(null);
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -42,6 +49,10 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
     });
     quill.on("text-change", (_delta, _old, source) => {
       if (source === "user") onChangeRef.current();
+    });
+    // Keep the last real selection: clicking into the side panel blurs the editor.
+    quill.on("selection-change", (range) => {
+      if (range) selectionRef.current = { index: range.index, length: range.length };
     });
     quillRef.current = quill;
     return () => {
@@ -57,6 +68,7 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
     if (!quill) return;
     quill.setContents((initial?.ops ?? []) as never, "silent");
     quill.history.clear();
+    selectionRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentKey]);
 
@@ -72,7 +84,10 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
   useImperativeHandle(ref, () => ({
     contents: () => ({ version: 1, ops: (quillRef.current?.getContents().ops ?? []) as RichContent["ops"] }),
     text: () => quillRef.current?.getText() ?? "",
-    focus: () => quillRef.current?.focus()
+    focus: () => quillRef.current?.focus(),
+    selection: () => selectionRef.current,
+    textIn: (range) => quillRef.current?.getText(range.index, range.length) ?? "",
+    length: () => quillRef.current?.getLength() ?? 1
   }), []);
 
   return <div className="manuscript-host" ref={hostRef} />;

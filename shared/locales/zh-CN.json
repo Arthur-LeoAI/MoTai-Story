@@ -157,6 +157,72 @@
     "focus": "专注",
     "exitFocus": "退出专注"
   },
+  "companion": {
+    "assist": "写作助手",
+    "checks": "一致性检查"
+  },
+  "assist": {
+    "what": "要我做什么？",
+    "modes": {
+      "continue": "续写本章",
+      "expand": "扩写选中内容",
+      "shorten": "精简选中内容",
+      "polish": "润色选中内容",
+      "custom": "按我的指令"
+    },
+    "hints": {
+      "continue": "在本章末尾接着写。",
+      "expand": "先选中一段。我会补充细节，但不改变发生的事。",
+      "shorten": "先选中一段。我会保留要紧的，删去其余。",
+      "polish": "先选中一段。事情不变，讲得更好。",
+      "custom": "有选中内容时处理选中内容，否则写在末尾。"
+    },
+    "tellPlainly": "用大白话说",
+    "instructionPlaceholder": "用自己的话说说接下来发生什么，不用写得好。",
+    "generate": "写出来",
+    "again": "再写一版",
+    "selectFirst": "请先在正文中选中一段文字。",
+    "status": {
+      "queued": "等待开始…",
+      "generating": "正在写…",
+      "checking": "正在对照设定检查…",
+      "completed": "完成",
+      "failed": "失败",
+      "cancelled": "已停止",
+      "interrupted": "已中断"
+    },
+    "result": "建议的文字",
+    "chooseChanges": "选择要采用的修改。",
+    "checksPassed": "没有与已确定设定冲突的地方。",
+    "severity": {
+      "hard": "矛盾",
+      "soft": "值得留意"
+    },
+    "conflictStatus": {
+      "open": "待处理",
+      "resolved": "已修复",
+      "dismissed": "已搁置"
+    },
+    "falseAlarm": "这样写没问题",
+    "falseAlarmReason": "为什么没问题？（会和这条检查一起保存。）",
+    "accept": "加入本章",
+    "blocked": "请先解决矛盾",
+    "accepted": "已加入本章。之前的文字保留在本章历史中。",
+    "unchanged": "只有加入本章后，你的正文才会改变。",
+    "noChange": "建议的文字与原文相同，没有需要修改的地方。"
+  },
+  "checks": {
+    "intro": "我会通读本章，与已确定的设定对照，并列出新的事实供你确认。",
+    "review": "检查本章",
+    "reviewing": "正在检查…",
+    "reviewed": "检查完成。",
+    "nothingPending": "没有待确认的新事实。",
+    "newFacts": "本章出现的新事实",
+    "confirm_other": "保留 {{count}} 条",
+    "reject": "暂不保留",
+    "confirmed": "已保留这些事实。",
+    "rejected": "已略过。"
+  },
   "language": {
     "label": "界面语言",
     "storyLanguageNote": "界面语言不会改变作品的写作语言。",
