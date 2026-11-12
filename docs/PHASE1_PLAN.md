@@ -9,7 +9,7 @@ Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuil
 |---|---|---|
 | 1 | App frame and routing; Home: new story from one sentence, Shape/Write choice per story, story language, library | Done |
 | 2 | Ideate: chat, chat history, streaming, story-material drafts | Done |
-| 3 | Write: editor, chapters, AI panel (continue/expand/shorten/polish), diff preview, checks, canon proposals, history, scenes, focus mode | Not started |
+| 3 | Write: editor, chapters, AI panel (continue/expand/shorten/polish), diff preview, checks, canon proposals, history, scenes, focus mode | Done |
 | 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Not started |
 | 5 | English and Chinese sample stories; first-run flow; retire `public/`; rename remaining brand identifiers with "read old, write new" | Not started |
 
@@ -24,6 +24,28 @@ Cast, World, Timeline and Plot stay as placeholders through phase 1. They are bu
 - Library cards show length in the story's own unit: words for English stories, characters for Chinese ones.
 - Default names created by the server ("Untitled story", "Chapter 1") follow the story language.
 - The works list returns only the current user's stories.
+
+## Step 3: what exists now
+
+- **Editor**: the chapter as a printed page (Quill, no toolbar; type and paragraph indent follow the story language). Autosave after a short pause and before switching chapters or leaving. Length in words (English) or characters (Chinese).
+- **Save conflicts**: if the chapter was saved in another window, nothing is overwritten silently. The writer chooses "keep this version" (the other one stays in history) or "load the saved version".
+- **Chapters**: add, open, rename, reorder with buttons, move to the trash and restore. New chapters are named in the story's language. The open chapter is in the address (`?chapter=…`).
+- **Focus mode**: only the page; Escape leaves it.
+- **Assistant tab**: continue, expand, tighten, polish, or follow an instruction in plain words. Runs as a background task with live status and Stop. The suggestion is shown change by change and enters the chapter only when the writer adds it; the earlier text stays in history.
+- **Checks**: a suggestion shows its consistency checks; a hard contradiction blocks adding it; a check can be marked "fine as written" with a reason. The Checks tab reviews the chapter and lists new facts to confirm one by one; after AI text is added, its queued review refreshes this list.
+- **Scenes tab**: plan the scenes of a chapter (goal, obstacle, must / must not happen, ending, place, people, time, flashback, status), reorder, and tie a scene to a passage by selecting it.
+- **History tab**: save a named version, compare an old version with the current text, restore it.
+- Writing prompts for English stories now ask for English prose.
+
+Checked with the built-in test AI only.
+
+## Not in step 3
+
+- The writing prompt, the consistency analysis and the fact extraction are still written for Chinese. English stories get an "answer in English" instruction on top; whether the checks catch problems in English prose has not been tried. A proper English prompt set is its own piece of work (plan 2.2).
+- From the Write mockup: the scene brief tab, "the same scene in three styles" and the style library (plan 5.9, phase 5).
+- Writing preferences (style, length targets), volumes and story-time fields of scenes (`storyTime`, point of view): still only in the legacy workspace.
+- Chapter illustrations and export: step 4 or later.
+- On wide screens the page shows two side columns (story pages, chapters). The mockup folds chapters behind a button; revisit when the layout is reviewed.
 
 ## Step 2: what exists now
 

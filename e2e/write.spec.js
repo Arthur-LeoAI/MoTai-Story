@@ -278,3 +278,76 @@ test("new facts from a chapter are confirmed one by one", async ({ page, request
   await expect(page.getByTestId("checks-empty")).toBeVisible();
   expect(confirmed).toEqual({ factIds: ["fact_1"] });
 });
+
+test("a named version can be compared and restored", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("Original opening line.");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  await page.getByTestId("tab-history").click();
+  await page.getByTestId("version-name").fill("Before the rewrite");
+  await page.getByTestId("version-save").click();
+  await expect(page.getByTestId("history-notice")).toBeVisible();
+  const named = page.getByTestId("version-row").filter({ hasText: "Before the rewrite" });
+  await expect(named).toHaveCount(1);
+
+  await editor(page).click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("A completely different line.");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  await page.getByTestId("version-row").filter({ hasText: "Before the rewrite" }).getByTestId("version-compare-open").click();
+  await expect(page.getByTestId("version-old")).toContainText("Original opening line.");
+  await page.getByTestId("version-restore").click();
+  await expect(editor(page)).toContainText("Original opening line.");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].content).toContain("Original opening line.");
+  // The replaced text is kept too.
+  await expect(page.locator('[data-testid="version-row"][data-source="restore"]').first()).toBeVisible();
+});
+
+test("scenes are planned, edited, reordered and kept after a reload", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("Mira waits at the ferry.");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  await page.getByTestId("tab-scenes").click();
+  const rows = page.getByTestId("scene-row");
+  // Every chapter starts with one scene covering its text (set by the server).
+  await expect(rows).toHaveCount(1);
+  page.once("dialog", (dialog) => dialog.accept());
+  await rows.first().getByTestId("scene-delete").click();
+  await expect(page.getByTestId("scenes-empty")).toBeVisible();
+
+  await page.getByTestId("scene-add").click();
+  await page.getByTestId("scene-title").fill("At the ferry");
+  await page.getByTestId("scene-goal").fill("Show whose side Kael is on.");
+  await page.getByTestId("scene-save").click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first().getByTestId("scene-row-goal")).toHaveText("Show whose side Kael is on.");
+
+  await page.getByTestId("scene-add").click();
+  await page.getByTestId("scene-title").fill("Crossing");
+  await page.getByTestId("scene-status").selectOption("draft");
+  await page.getByTestId("scene-save").click();
+  await expect(rows).toHaveCount(2);
+
+  await rows.nth(1).getByTestId("scene-up").click();
+  await expect(rows.first()).toContainText("Crossing");
+  await expect(rows.first()).toHaveAttribute("data-status", "draft");
+
+  await rows.nth(1).getByTestId("scene-edit").click();
+  await page.getByTestId("scene-goal").fill("Kael lets her go.");
+  await page.getByTestId("scene-save").click();
+  await expect(rows.nth(1).getByTestId("scene-row-goal")).toHaveText("Kael lets her go.");
+
+  await page.reload();
+  await page.getByTestId("tab-scenes").click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("Crossing");
+  // Planning never changes the chapter text.
+  await expect(editor(page)).toHaveText("Mira waits at the ferry.");
+});

@@ -102,11 +102,14 @@ test("a Shape story starts from one sentence and opens in Ideate", async ({ page
   await expect(frame.locator('[data-testid^="nav-"]').first()).toHaveAttribute("data-testid", "nav-ideate");
 
   // Every page is reachable; nothing is locked by the focus.
-  for (const section of ["cast", "world", "timeline", "plot", "write"]) {
+  for (const section of ["cast", "world", "timeline", "plot"]) {
     await page.getByTestId(`nav-${section}`).click();
     await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", section);
     await expect(page.getByTestId(`nav-${section}`)).toHaveAttribute("aria-current", "page");
   }
+  await page.getByTestId("nav-write").click();
+  await expect(page.getByTestId("manuscript")).toBeVisible();
+  await expect(page.getByTestId("nav-write")).toHaveAttribute("aria-current", "page");
 
   // The story is in the library, written in the interface language by default.
   const workId = new URL(page.url()).pathname.split("/")[3];
@@ -129,7 +132,8 @@ test("a Write story keeps its own language and opens in Write", async ({ page })
   await page.getByTestId("premise-input").fill("守灯人收到未来寄来的求救信。");
   await page.getByTestId("begin-button").click();
 
-  await expect(page).toHaveURL(/\/app\/works\/[^/]+\/write$/);
+  // The open chapter is part of the address (?chapter=…).
+  await expect(page).toHaveURL(/\/app\/works\/[^/]+\/write(\?|$)/);
   const frame = page.getByTestId("work-frame");
   await expect(frame).toHaveAttribute("data-focus", "write");
   // Write stories list the manuscript first.
@@ -149,7 +153,7 @@ test("a Write story keeps its own language and opens in Write", async ({ page })
   await page.goto("/app/");
   const card = page.locator(`[data-testid="work-card"][data-work-id="${workId}"]`);
   await card.getByTestId("work-continue").click();
-  await expect(page).toHaveURL(new RegExp(`/app/works/${workId}/write$`));
+  await expect(page).toHaveURL(new RegExp(`/app/works/${workId}/write(\\?|$)`));
 });
 
 test("unknown stories and pages show a way back", async ({ page }) => {
@@ -170,6 +174,6 @@ test("home and story pages have no sideways scroll on a phone", async ({ page, r
   await expect(page.locator(`[data-work-id="${workId}"]`)).toBeVisible();
   expect(await noSidewaysScroll(page)).toBeTruthy();
   await page.goto(`/app/works/${workId}/write`);
-  await expect(page.getByTestId("section-placeholder")).toBeVisible();
+  await expect(page.getByTestId("manuscript")).toBeVisible();
   expect(await noSidewaysScroll(page)).toBeTruthy();
 });

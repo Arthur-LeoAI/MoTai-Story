@@ -159,7 +159,9 @@
   },
   "companion": {
     "assist": "写作助手",
-    "checks": "一致性检查"
+    "checks": "一致性检查",
+    "scenes": "场景",
+    "history": "历史"
   },
   "assist": {
     "what": "要我做什么？",
@@ -222,6 +224,58 @@
     "reject": "暂不保留",
     "confirmed": "已保留这些事实。",
     "rejected": "已略过。"
+  },
+  "history": {
+    "intro": "每次保存都会保留被替换的文字。给版本起个名字，以后更好找。",
+    "nameLabel": "版本名称",
+    "namePlaceholder": "大改之前",
+    "save": "保存版本",
+    "savedVersion": "版本已保存。",
+    "empty": "还没有历史版本。",
+    "compare": "比较",
+    "current": "当前",
+    "restore": "恢复这个版本",
+    "restoreNote": "你现在的文字也会保留在历史中。",
+    "restored": "已恢复。恢复前的文字保留在历史中。",
+    "sources": {
+      "auto": "较早的文字",
+      "manual": "手动保存的版本",
+      "ai": "加入 AI 文字之前",
+      "restore": "恢复之前",
+      "delete": "删除之前",
+      "import": "导入时"
+    }
+  },
+  "scenes": {
+    "intro": "规划本章的场景。顺序只表示规划，不会移动已写的正文。",
+    "add": "新建场景",
+    "empty": "还没有规划场景。",
+    "untitled": "未命名场景",
+    "edit": "编辑",
+    "deleteConfirm": "从规划中删除这个场景？正文不受影响。",
+    "moveUp": "将「{{title}}」上移",
+    "moveDown": "将「{{title}}」下移",
+    "place": "在正文中的位置：先选中那段文字，再点按钮。",
+    "needsPlace": "这个场景周围的正文已改动，请重新选中它对应的文字。",
+    "useSelection": "使用选中的文字",
+    "status": {
+      "planned": "计划中",
+      "draft": "已起草",
+      "done": "已完成"
+    },
+    "fields": {
+      "title": "名称",
+      "goal": "这场戏要达成什么",
+      "conflict": "阻碍是什么",
+      "must": "必须发生",
+      "mustNot": "不得发生",
+      "ending": "怎样结束",
+      "location": "地点",
+      "participants": "出场人物",
+      "timeLabel": "时间",
+      "flashback": "以倒叙呈现",
+      "status": "状态"
+    }
   },
   "language": {
     "label": "界面语言",

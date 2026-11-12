@@ -13,8 +13,10 @@ import {
   type WriteMode
 } from "../assistApi";
 import type { WriteContext } from "../pages/Write";
+import { HistoryPanel, ScenesPanel } from "./ChapterTools";
 
-type Tab = "assist" | "checks";
+const TABS = ["assist", "checks", "scenes", "history"] as const;
+type Tab = (typeof TABS)[number];
 
 interface Run {
   /** Chapter revision the result was generated from; it can only be merged onto that. */
@@ -336,7 +338,7 @@ export default function Companion({ context }: { context: WriteContext }) {
   return (
     <div className="companion" data-testid="companion">
       <div role="tablist" aria-label={t("write.companion")} className="tabs">
-        {(["assist", "checks"] as const).map((item) => (
+        {TABS.map((item) => (
           <button
             key={item}
             type="button"
@@ -361,6 +363,8 @@ export default function Companion({ context }: { context: WriteContext }) {
         <div hidden={tab !== "checks"}>
           <Checks context={context} refreshKey={checksKey} />
         </div>
+        {tab === "scenes" ? <ScenesPanel context={context} /> : null}
+        {tab === "history" ? <HistoryPanel context={context} /> : null}
       </div>
     </div>
   );

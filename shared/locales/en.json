@@ -164,7 +164,9 @@
   },
   "companion": {
     "assist": "Assistant",
-    "checks": "Checks"
+    "checks": "Checks",
+    "scenes": "Scenes",
+    "history": "History"
   },
   "assist": {
     "what": "What should I do?",
@@ -228,6 +230,58 @@
     "reject": "Not now",
     "confirmed": "Facts kept.",
     "rejected": "Left out."
+  },
+  "history": {
+    "intro": "Every save keeps the text it replaced. Name a version to find it easily.",
+    "nameLabel": "Version name",
+    "namePlaceholder": "Before the big change",
+    "save": "Save a version",
+    "savedVersion": "Version saved.",
+    "empty": "No versions yet.",
+    "compare": "Compare",
+    "current": "Now",
+    "restore": "Restore this version",
+    "restoreNote": "The text you have now is kept in the history too.",
+    "restored": "Restored. The text from before is kept in the history.",
+    "sources": {
+      "auto": "Earlier text",
+      "manual": "Saved version",
+      "ai": "Before AI text was added",
+      "restore": "Before a restore",
+      "delete": "Before deleting",
+      "import": "As imported"
+    }
+  },
+  "scenes": {
+    "intro": "Plan the scenes of this chapter. The order is the plan; it does not move written text.",
+    "add": "New scene",
+    "empty": "No scenes planned.",
+    "untitled": "Untitled scene",
+    "edit": "Edit",
+    "deleteConfirm": "Delete this scene from the plan? The chapter text stays.",
+    "moveUp": "Move “{{title}}” up",
+    "moveDown": "Move “{{title}}” down",
+    "place": "Where in the chapter: select the passage, then use the button.",
+    "needsPlace": "The text around this scene changed. Select its passage again.",
+    "useSelection": "Use the selected text",
+    "status": {
+      "planned": "Planned",
+      "draft": "Drafted",
+      "done": "Done"
+    },
+    "fields": {
+      "title": "Name",
+      "goal": "What this scene must achieve",
+      "conflict": "What stands in the way",
+      "must": "Must happen",
+      "mustNot": "Must not happen",
+      "ending": "How it ends",
+      "location": "Where",
+      "participants": "Who is there",
+      "timeLabel": "When",
+      "flashback": "Told as a flashback",
+      "status": "Status"
+    }
   },
   "language": {
     "label": "Interface language",
