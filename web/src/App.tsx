@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
+import Settings from "./pages/Settings";
 import WorkFrame, { NotFound } from "./pages/WorkFrame";
 import { PreferencesProvider } from "./preferences";
 import type { Theme } from "./theme";
@@ -13,6 +14,7 @@ export default function App({ initialTheme }: { initialTheme: Theme }) {
       <BrowserRouter basename={BASENAME}>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/works/:workId/:section" element={<WorkFrame />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -6,6 +6,7 @@ import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from
 import Ideate from "./Ideate";
 import Write from "./Write";
 import Companion from "../components/Companion";
+import { StorySearch, StorySettingsDialog } from "../components/StoryTools";
 import { isSection, numeral, orderedSections, workPath, type Section } from "../sections";
 
 type Loaded = { state: "loading" } | { state: "ready"; work: WorkSummary } | { state: "missing"; message: string };
@@ -51,6 +52,7 @@ export default function WorkFrame() {
   const { t } = useTranslation();
   const { workId = "", section = "" } = useParams();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -82,12 +84,30 @@ export default function WorkFrame() {
       <a className="skip-link" href="#main">{t("app.skipToContent")}</a>
       <aside className="frame-side">
         <Wordmark size={26} />
-        <div className="story-chip" data-testid="story-chip">
+        <button
+          type="button"
+          className="story-chip"
+          disabled={loaded.state !== "ready"}
+          onClick={() => setSettingsOpen(true)}
+          aria-label={loaded.state === "ready" ? t("story.open", { title: loaded.work.title }) : undefined}
+          data-testid="story-chip"
+        >
           <span className="caps">{t("nav.story")}</span>
           <span lang={loaded.state === "ready" ? loaded.work.language : undefined} data-testid="story-title">
             {loaded.state === "ready" ? loaded.work.title : t("app.loading")}
           </span>
-        </div>
+        </button>
+        {loaded.state === "ready" ? (
+          <>
+            <StorySearch work={loaded.work} />
+            <StorySettingsDialog
+              work={loaded.work}
+              open={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              onSaved={(work) => setLoaded({ state: "ready", work })}
+            />
+          </>
+        ) : null}
         <nav className="frame-nav" aria-label={t("nav.label")}>
           {sections.map((item, index) => (
             <NavLink

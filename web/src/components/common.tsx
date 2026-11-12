@@ -59,6 +59,7 @@ export function PreferenceControls() {
           <option key={code} value={code} lang={code}>{t(`language.names.${code}`)}</option>
         ))}
       </select>
+      <Link className="btn quiet" to="/settings" data-testid="settings-link">{t("settings.title")}</Link>
       <button
         type="button"
         className="btn quiet"

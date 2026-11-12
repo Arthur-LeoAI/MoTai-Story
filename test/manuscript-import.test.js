@@ -75,3 +75,15 @@ test('DOCX CRC corruption, encryption and excessive extracted size are rejected'
   oversized.writeUInt32LE(41 * 1024 * 1024, directory + 24);
   await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: oversized.toString('base64') }), { code: "DOCX_ENCRYPTED_OR_TOO_LARGE" });
 });
+
+test('English chapter headings are recognised and untitled openings follow the story language', async () => {
+  const text = 'Prologue\nThe map.\nChapter 1\nShe waited.\nCHAPTER IV: The Ferry\nHe came.\nPart Two\nLater.';
+  const english = await parseManuscript({ fileName: 'a.txt', base64: Buffer.from(text, 'utf8').toString('base64'), language: 'en' });
+  assert.deepEqual(english.chapters.map((chapter) => chapter.title), ['Prologue', 'Chapter 1', 'CHAPTER IV: The Ferry', 'Part Two']);
+  const plain = Buffer.from('No headings at all.', 'utf8').toString('base64');
+  assert.equal((await parseManuscript({ fileName: 'b.txt', base64: plain, language: 'en' })).chapters[0].title, 'Chapter 1');
+  assert.equal((await parseManuscript({ fileName: 'b.txt', base64: plain })).chapters[0].title, '第一章');
+  // A sentence that merely starts with "Chapter" is not a heading.
+  const sentence = Buffer.from('Chapter and verse were quoted at length by the old priest.', 'utf8').toString('base64');
+  assert.equal((await parseManuscript({ fileName: 'c.txt', base64: sentence, language: 'en' })).chapters.length, 1);
+});

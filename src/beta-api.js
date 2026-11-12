@@ -1,5 +1,5 @@
 "use strict";
-const { createId, nowIso } = require("./domain");
+const { createId, nowIso, normalizeStoryLanguage, STORY_FOCUSES } = require("./domain");
 const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = require("./studio");
 const { upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
@@ -52,12 +52,16 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
           if (!Array.isArray(chapters) || !chapters.length || chapters.length > 10000) fail("IMPORT_CHAPTERS_INVALID");
           if (chapters.reduce((n, c) => n + String(c.content || "").length, 0) > 1000000) fail("IMPORT_TEXT_TOO_LARGE");
           const timestamp = nowIso();
-          const work = { id: createId("work"), ownerId: "local", title: String(body.title || preview.title || "导入作品").slice(0, 100), genre: "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
+          // Imported stories belong to the requester, are written in the language
+          // the writer chose, and open in Write (they already have text).
+          const language = normalizeStoryLanguage(body.language);
+          const english = language === "en";
+          const work = { id: createId("work"), ownerId: req.user?.id || "local", language, focus: STORY_FOCUSES.includes(body.focus) ? body.focus : "write", title: String(body.title || preview.title || (english ? "Imported story" : "导入作品")).slice(0, 100), genre: english ? "" : "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
             // Only reuse the server-parsed Delta. Titles are editable and not unique;
             // neither a title lookup nor a client-supplied Delta establishes provenance.
             const original = Number.isInteger(c.sourceIndex) ? preview.chapters[c.sourceIndex] : null;
             const delta = original?.richContent && c.content === original.content ? normalizeRichContent(original.richContent) : plainTextToRichContent(String(c.content || ""));
-            return { id: createId("chapter"), title: String(c.title || "未命名章节").slice(0, 100), richContent: delta, content: richContentToMarkdown(delta), createdAt: timestamp, updatedAt: timestamp, status: "draft" };
+            return { id: createId("chapter"), title: String(c.title || (english ? "Untitled chapter" : "未命名章节")).slice(0, 100), richContent: delta, content: richContentToMarkdown(delta), createdAt: timestamp, updatedAt: timestamp, status: "draft" };
           }) };
           db.works.push(work); upgradeWorkspace(db);
           for (const chapter of work.chapters) await service.snapshot(work, chapter, "import");

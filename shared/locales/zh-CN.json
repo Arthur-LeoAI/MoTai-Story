@@ -277,6 +277,84 @@
       "status": "状态"
     }
   },
+  "settings": {
+    "title": "设置",
+    "general": "语言和主题在每个页面的顶部。",
+    "ai": {
+      "heading": "AI",
+      "intro": "选择与你一起写作的模型。连接信息在服务器所在的环境里配置，这里不需要填写任何密钥。",
+      "testMode": "这台服务器使用内置的测试 AI，回答都是固定的示例。",
+      "model": "写作模型",
+      "noModels": "没有可用的模型。请检查服务器上的 AI 配置。",
+      "configured": "已配置",
+      "notConfigured": "未配置",
+      "test": "测试连接",
+      "checking": "正在检测…",
+      "connected": "已连接：{{model}}",
+      "keysNote": "API Key 只保存在服务器的运行环境中，不会在本页显示或发送。"
+    },
+    "usage": {
+      "heading": "用量",
+      "total": "今天已用 {{used}} 个 token，每日上限 {{limit}}。",
+      "unknown_other": "有 {{count}} 次调用没有报告用量。",
+      "noPrices": "没有配置价格，因此不估算费用。",
+      "recent": "最近的 AI 任务",
+      "noTasks": "还没有 AI 任务。"
+    },
+    "backup": {
+      "heading": "备份",
+      "intro": "一个备份文件包含全部作品、历史版本和封面。",
+      "last_other": "最近一次自动备份在{{when}}。每 {{hours}} 小时备份一次，保留最近 {{count}} 份。",
+      "none": "还没有自动备份。每 {{hours}} 小时备份一次。",
+      "download": "下载备份",
+      "restore": "从备份恢复…",
+      "replaceNote": "恢复会用备份内容替换整个作品库。",
+      "confirm_other": "这个备份包含 {{count}} 部作品，将替换你的整个作品库。继续吗？",
+      "restored_other": "已恢复 {{count}} 部作品。"
+    }
+  },
+  "import": {
+    "title": "导入稿件",
+    "formats": "Word、纯文本或 Markdown",
+    "intro": "会根据“第一章”“Chapter 1”这样的标题拆分章节。导入前请检查。",
+    "file": "文件",
+    "encoding": "文本编码",
+    "encodings": {
+      "auto": "自动识别",
+      "utf-8": "UTF-8",
+      "gb18030": "GB18030（较旧的中文文件）"
+    },
+    "reading": "正在读取文件…",
+    "storyTitle": "作品名称",
+    "chapters_other": "识别到 {{count}} 章",
+    "confirm": "导入",
+    "warnings": {
+      "DOCX_TEXT_ONLY": "Word 文件只导入正文及加粗、斜体、下划线；图片、页眉页脚、批注和复杂样式不导入。",
+      "DECODED_GB18030": "已按 GB18030 解码，请确认文字是否正常。"
+    }
+  },
+  "story": {
+    "title": "作品设置",
+    "open": "「{{title}}」的作品设置",
+    "name": "作品名称",
+    "genre": "类型",
+    "focus": "从哪里开始",
+    "languageNote": "作品的写作语言。写作助手会用这种语言写。",
+    "export": "导出",
+    "formats": {
+      "docx": "Word",
+      "markdown": "Markdown",
+      "txt": "纯文本",
+      "html": "网页"
+    },
+    "delete": "删除这部作品",
+    "deleteConfirm": "删除「{{title}}」及其全部章节？删除后无法恢复。"
+  },
+  "search": {
+    "label": "搜索本作品",
+    "placeholder": "搜索本作品（Ctrl+K）",
+    "none": "没有找到。"
+  },
   "language": {
     "label": "界面语言",
     "storyLanguageNote": "界面语言不会改变作品的写作语言。",

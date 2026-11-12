@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { api, errorText, type StoryFocus, type StoryLanguage, type WorkSummary } from "../api";
+import ImportDialog from "../components/ImportDialog";
 import { Notice, Ornament, PreferenceControls, RuleHeading, Wordmark, useDocumentTitle } from "../components/common";
 import { formatCount, formatRelativeTime } from "../format";
 import { UI_LOCALES } from "../i18n";
@@ -71,6 +72,7 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [works, setWorks] = useState<WorkSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -162,13 +164,24 @@ export default function Home() {
           <RuleHeading>{t("home.libraryHeading")}</RuleHeading>
           {works === null ? (
             <p className="muted library-empty" data-testid="library-loading">{t("app.loading")}</p>
-          ) : works.length === 0 ? (
-            <p className="muted library-empty" data-testid="library-empty">{t("home.emptyLibrary")}</p>
           ) : (
-            <div className="card-grid">
-              {works.map((work) => <WorkCard key={work.id} work={work} />)}
-            </div>
+            <>
+              {works.length === 0 ? <p className="muted library-empty" data-testid="library-empty">{t("home.emptyLibrary")}</p> : null}
+              <div className="card-grid">
+                {works.map((work) => <WorkCard key={work.id} work={work} />)}
+                <button type="button" className="card import-card" onClick={() => setImporting(true)} data-testid="import-open">
+                  <span className="display import-card-title">{t("import.title")}</span>
+                  <span className="muted">{t("import.formats")}</span>
+                </button>
+              </div>
+            </>
           )}
+          <ImportDialog
+            open={importing}
+            defaultLanguage={storyLanguage ?? locale}
+            onClose={() => setImporting(false)}
+            onImported={(workId) => navigate(workPath(workId, "write"))}
+          />
         </section>
 
         <Notice />

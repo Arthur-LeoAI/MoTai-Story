@@ -256,3 +256,16 @@ test("new chapters are named in the story's language", async () => {
   const chinese = (await call("/api/works", "POST", { title: "命名" })).body.work;
   assert.equal((await call(`/api/works/${chinese.id}/chapters`, "POST", {})).body.chapter.title, "第2章");
 });
+
+test("imported stories record their owner, story language and Write focus", async () => {
+  const base64 = Buffer.from("Chapter 1\nShe waited.\nChapter 2\nHe came.", "utf8").toString("base64");
+  const preview = await call("/api/imports", "POST", { fileName: "ferry.txt", base64, language: "en" });
+  assert.equal(preview.status, 200);
+  assert.deepEqual(preview.body.preview.chapters.map((chapter) => chapter.title), ["Chapter 1", "Chapter 2"]);
+  const confirmed = await call(`/api/imports/${preview.body.preview.id}/confirm`, "POST", { title: "Ferry", language: "en" });
+  assert.equal(confirmed.status, 201);
+  assert.equal(confirmed.body.work.ownerId, "local");
+  assert.equal(confirmed.body.work.language, "en");
+  assert.equal(confirmed.body.work.focus, "write");
+  assert.equal(confirmed.body.work.genre, "");
+});

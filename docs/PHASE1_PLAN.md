@@ -10,7 +10,7 @@ Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuil
 | 1 | App frame and routing; Home: new story from one sentence, Shape/Write choice per story, story language, library | Done |
 | 2 | Ideate: chat, chat history, streaming, story-material drafts | Done |
 | 3 | Write: editor, chapters, AI panel (continue/expand/shorten/polish), diff preview, checks, canon proposals, history, scenes, focus mode | Done |
-| 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Not started |
+| 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Done |
 | 5 | English and Chinese sample stories; first-run flow; retire `public/`; rename remaining brand identifiers with "read old, write new" | Not started |
 
 Cast, World, Timeline and Plot stay as placeholders through phase 1. They are built in phases 2–4; their current legacy equivalent is the story-material page.
@@ -24,6 +24,20 @@ Cast, World, Timeline and Plot stay as placeholders through phase 1. They are bu
 - Library cards show length in the story's own unit: words for English stories, characters for Chinese ones.
 - Default names created by the server ("Untitled story", "Chapter 1") follow the story language.
 - The works list returns only the current user's stories.
+
+## Step 4: what exists now
+
+- **Settings** (`/app/settings`, linked from every page): choose the writing model from those the server offers, test the connection, see which providers are configured. No key or secret is entered or shown; they stay in the server's environment. Usage today against the daily limit, and recent AI tasks with their outcome. Backup: download, restore from a file (with a confirmation naming how many stories it replaces), and the automatic backup schedule.
+- **Import a manuscript** (Home, library card): TXT, Markdown or DOCX; choose the story language and the text encoding; preview the chapters found; import. The new story opens in Write. English headings ("Chapter 1", "CHAPTER IV", "Chapter Two: …", "Part Two", "Prologue", "Epilogue") are now recognised besides Chinese ones; imported stories record their owner, language and Write focus.
+- **Story settings** (click the story name in the side panel): title, premise, genre, Shape / Write focus, story language; export as Word, Markdown, plain text or web page; delete the story.
+- **Search** within a story (side panel, Ctrl/⌘+K): finds chapters by title or text and opens the chapter in Write.
+
+## Not in step 4
+
+- Generated covers, wallpapers and chapter illustrations: not part of the new interface yet.
+- Writing preferences and volumes: still only in the legacy workspace.
+- Search covers chapter text and titles only; searching story material and facts comes with the structured data of phase 2.
+- The backup file name and format id still contain the old name ("墨台备份", `motai-backup`); renaming with "read old, write new" is step 5.
 
 ## Step 3: what exists now
 

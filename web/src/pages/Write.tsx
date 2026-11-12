@@ -248,6 +248,14 @@ export default function Write({ summary, companion }: WriteProps) {
     await load(target.id);
   });
 
+  // A link elsewhere (search) may point at another chapter of this story.
+  const wantedChapter = params.get("chapter") ?? "";
+  useEffect(() => {
+    if (!work || !wantedChapter || wantedChapter === chapter?.id) return;
+    if (work.chapters.some((item) => item.id === wantedChapter)) void openChapter(wantedChapter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedChapter]);
+
   // ---- Focus mode ---------------------------------------------------------
 
   useEffect(() => {

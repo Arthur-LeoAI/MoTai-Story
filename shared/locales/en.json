@@ -283,6 +283,89 @@
       "status": "Status"
     }
   },
+  "settings": {
+    "title": "Settings",
+    "general": "Language and theme are at the top of every page.",
+    "ai": {
+      "heading": "AI",
+      "intro": "Choose the model that writes with you. Connection details are set where the server runs; nothing secret is entered here.",
+      "testMode": "This server runs with the built-in test AI. Its answers are fixed samples.",
+      "model": "Writing model",
+      "noModels": "No models are available. Check the AI configuration on the server.",
+      "configured": "configured",
+      "notConfigured": "not configured",
+      "test": "Test the connection",
+      "checking": "Checking…",
+      "connected": "Connected: {{model}}",
+      "keysNote": "API keys stay in the server's environment and are never shown or sent from this page."
+    },
+    "usage": {
+      "heading": "Usage",
+      "total": "{{used}} tokens used today, of a daily limit of {{limit}}.",
+      "unknown_one": "{{count}} call did not report its usage.",
+      "unknown_other": "{{count}} calls did not report their usage.",
+      "noPrices": "No prices are configured, so no costs are estimated.",
+      "recent": "Recent AI tasks",
+      "noTasks": "No AI tasks yet."
+    },
+    "backup": {
+      "heading": "Backup",
+      "intro": "A backup holds every story, its history and its covers in one file.",
+      "last_one": "Last automatic backup {{when}}. One is made every {{hours}} hours; the last {{count}} is kept.",
+      "last_other": "Last automatic backup {{when}}. One is made every {{hours}} hours; the last {{count}} are kept.",
+      "none": "No automatic backup yet. One is made every {{hours}} hours.",
+      "download": "Download a backup",
+      "restore": "Restore from a backup…",
+      "replaceNote": "Restoring replaces the whole library with the backup's contents.",
+      "confirm_one": "This backup holds {{count}} story. It will replace your whole library. Continue?",
+      "confirm_other": "This backup holds {{count}} stories. It will replace your whole library. Continue?",
+      "restored_one": "Restored {{count}} story.",
+      "restored_other": "Restored {{count}} stories."
+    }
+  },
+  "import": {
+    "title": "Import a manuscript",
+    "formats": "Word, text or Markdown",
+    "intro": "Chapters are found from headings such as “Chapter 1” or “第一章”. Check them before importing.",
+    "file": "File",
+    "encoding": "Text encoding",
+    "encodings": {
+      "auto": "Detect automatically",
+      "utf-8": "UTF-8",
+      "gb18030": "GB18030 (older Chinese files)"
+    },
+    "reading": "Reading the file…",
+    "storyTitle": "Story title",
+    "chapters_one": "{{count}} chapter found",
+    "chapters_other": "{{count}} chapters found",
+    "confirm": "Import",
+    "warnings": {
+      "DOCX_TEXT_ONLY": "From Word files only the text and bold, italic and underline are imported; images, headers, comments and complex styles are not.",
+      "DECODED_GB18030": "Read as GB18030. Check that the text looks right."
+    }
+  },
+  "story": {
+    "title": "Story settings",
+    "open": "Story settings for “{{title}}”",
+    "name": "Title",
+    "genre": "Genre",
+    "focus": "Where to start",
+    "languageNote": "The language the story is written in. The assistant writes in this language.",
+    "export": "Export",
+    "formats": {
+      "docx": "Word",
+      "markdown": "Markdown",
+      "txt": "Plain text",
+      "html": "Web page"
+    },
+    "delete": "Delete this story",
+    "deleteConfirm": "Delete “{{title}}” and all of its chapters? This cannot be undone."
+  },
+  "search": {
+    "label": "Search this story",
+    "placeholder": "Search this story (Ctrl+K)",
+    "none": "Nothing found."
+  },
   "language": {
     "label": "Interface language",
     "storyLanguageNote": "The interface language does not change the language of your stories.",
