@@ -83,7 +83,9 @@ export async function streamMessage(
   chatId: string,
   content: string,
   handlers: StreamHandlers,
-  signal: AbortSignal
+  signal: AbortSignal,
+  /** Id of the saved user message to answer again, instead of saving `content` as a new one. */
+  retryOf = ""
 ): Promise<void> {
   let response: Response;
   try {
@@ -91,7 +93,7 @@ export async function streamMessage(
       method: "POST",
       signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content })
+      body: JSON.stringify(retryOf ? { content, retryOf } : { content })
     });
   } catch (cause) {
     if (signal.aborted) throw new StreamError(499, "GENERATION_STOPPED", "Stopped");

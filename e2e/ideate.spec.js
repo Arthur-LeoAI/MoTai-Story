@@ -212,3 +212,52 @@ test("Ideate has no sideways scroll on a phone", async ({ page, request }) => {
   await expect(page.getByTestId("draft-card").first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
+
+test("drafts wait while a reply is being written", async ({ page, request }) => {
+  const workId = await newStory(request, { title: "One at a time" });
+  await page.goto(`/app/works/${workId}/ideate`);
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route("**/messages/stream", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.getByTestId("chat-input").fill("Hold on");
+  await page.getByTestId("chat-send").click();
+  await expect(page.getByTestId("chat-streaming")).toBeVisible();
+  await expect(page.getByTestId("draft-outline")).toBeDisabled();
+  release();
+  await expect(assistantReplies(page)).toHaveCount(1);
+  await expect(page.getByTestId("draft-outline")).toBeEnabled();
+});
+
+test("retrying after a reply fails does not save the question twice", async ({ page, request }) => {
+  const workId = await newStory(request, { title: "Once" });
+  await page.goto(`/app/works/${workId}/ideate`);
+  let calls = 0;
+  let retryBody;
+  await page.route("**/messages/stream", async (route) => {
+    calls += 1;
+    if (calls > 1) {
+      retryBody = route.request().postDataJSON();
+      return route.continue();
+    }
+    // The server saves the question, then the reply fails.
+    const real = await route.fetch();
+    const meta = (await real.text()).split("\n\n").find((block) => block.startsWith("event: meta"));
+    const failure = `event: error\ndata: ${JSON.stringify({ code: "AI_NETWORK_RESET", message: "fallback", params: { url: "https://example.invalid" }, status: 502, retryable: true, partialMessage: null })}\n\n`;
+    await route.fulfill({ status: 200, contentType: "text/event-stream; charset=utf-8", body: `${meta}\n\n${failure}` });
+  });
+  await page.getByTestId("chat-input").fill("Only once, please");
+  await page.getByTestId("chat-send").click();
+  await expect(page.getByTestId("chat-failure")).toBeVisible();
+  await expect(userTurns(page)).toHaveCount(1);
+  await page.getByTestId("chat-retry").click();
+  await expect(assistantReplies(page)).toHaveCount(1);
+  await expect(userTurns(page)).toHaveCount(1);
+  expect(retryBody.retryOf).toMatch(/^message_/);
+
+  const { chats } = await (await request.get(`/api/works/${workId}/chats`)).json();
+  const saved = chats.find((chat) => chat.messages.some((message) => message.content === "Only once, please"));
+  expect(saved.messages.filter((message) => message.role === "user")).toHaveLength(1);
+});

@@ -16,6 +16,8 @@ export interface WriteContext {
   getEditor: () => ManuscriptHandle | null;
   /** The open chapter as last saved (its revision moves on with every save). */
   currentChapter: () => Chapter;
+  /** The story as this page last read or saved it. */
+  currentWork: () => Work;
   /** Saves pending edits; resolves once the server has them (or rejects). */
   flush: () => Promise<void>;
   /** Re-reads the story from the server and shows the given chapter text. */
@@ -100,11 +102,16 @@ export default function Write({ summary, companion }: WriteProps) {
     setSaveState("saving");
     const run = (async () => {
       try {
-        const { chapter: saved } = await writeApi.saveChapter(current.id, target.id, target.revision, change);
-        setWork((previous) => previous && {
-          ...previous,
-          chapters: previous.chapters.map((item) => (item.id === saved.id ? saved : item))
-        });
+        const { chapter: saved, work: savedWork } = await writeApi.saveChapter(current.id, target.id, target.revision, change);
+        // A new title changes the chapter list's revision; keep it so later
+        // structure edits are checked against what this page has seen.
+        const next = workRef.current && {
+          ...workRef.current,
+          structureRevision: savedWork?.structureRevision ?? workRef.current.structureRevision,
+          chapters: workRef.current.chapters.map((item) => (item.id === saved.id ? saved : item))
+        };
+        workRef.current = next;
+        setWork(next);
         if (editVersionRef.current === startedAt) {
           dirtyRef.current = false;
           setSaveState("saved");
@@ -218,8 +225,10 @@ export default function Write({ summary, companion }: WriteProps) {
     if (!window.confirm(t("write.deleteConfirm", { title: target.title }))) return;
     const latest = workRef.current?.chapters.find((item) => item.id === target.id) ?? target;
     await writeApi.deleteChapter(summary.id, latest);
+    // Stay on the open chapter unless that is the one going to the trash.
     const remaining = workRef.current?.chapters.filter((item) => item.id !== target.id) ?? [];
-    await load(remaining[0]?.id ?? "");
+    const stay = chapter && chapter.id !== target.id ? chapter.id : remaining[0]?.id ?? "";
+    await load(stay);
     if (trash) setTrash((await writeApi.trash(summary.id)).chapters);
   });
 
@@ -231,10 +240,14 @@ export default function Write({ summary, companion }: WriteProps) {
     const to = from + offset;
     if (from < 0 || to < 0 || to >= ids.length) return;
     ids.splice(to, 0, ids.splice(from, 1)[0]);
-    const { work: fresh } = await writeApi.work(summary.id);
-    await writeApi.reorder(summary.id, ids, fresh.structureRevision);
-    const { work: reordered } = await writeApi.work(summary.id);
-    setWork(reordered);
+    // The order shown here was read at `current.structureRevision`; if another
+    // window changed the chapter list since, the server refuses (409) and we reload.
+    try {
+      await writeApi.reorder(summary.id, ids, current.structureRevision);
+    } finally {
+      const { work: reordered } = await writeApi.work(summary.id);
+      setWork(reordered);
+    }
   });
 
   const toggleTrash = () => run(async () => {
@@ -247,6 +260,17 @@ export default function Write({ summary, companion }: WriteProps) {
     setTrash((await writeApi.trash(summary.id)).chapters);
     await load(target.id);
   });
+
+  // Story settings (title, premise, language…) move the story's structure
+  // revision; read the story again so later edits are checked against it.
+  const settingsKey = [summary.title, summary.premise, summary.genre, summary.focus, summary.language].join(" ");
+  const firstSettings = useRef(settingsKey);
+  useEffect(() => {
+    if (settingsKey === firstSettings.current) return;
+    firstSettings.current = settingsKey;
+    void run(() => load(chapter?.id).then(() => undefined));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsKey]);
 
   // A link elsewhere (search) may point at another chapter of this story.
   const wantedChapter = params.get("chapter") ?? "";
@@ -388,7 +412,7 @@ export default function Write({ summary, companion }: WriteProps) {
 
       {chapter && companion ? (
         <aside className="write-companion" aria-label={t("write.companion")}>
-          {companion({ work, chapter, getEditor: () => editorRef.current, currentChapter: () => workRef.current?.chapters.find((item) => item.id === chapter.id) ?? chapter, flush, reload: () => load(chapter.id).then(() => undefined), busy })}
+          {companion({ work, chapter, getEditor: () => editorRef.current, currentChapter: () => workRef.current?.chapters.find((item) => item.id === chapter.id) ?? chapter, currentWork: () => workRef.current ?? work, flush, reload: () => load(chapter.id).then(() => undefined), busy })}
         </aside>
       ) : null}
     </div>

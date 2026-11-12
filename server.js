@@ -2652,7 +2652,17 @@ function sendSseEvent(res, event, payload) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
-async function generateArtifactFields(work, type, instruction = "") {
+// The conversation the draft is asked from, so details discussed but not yet
+// saved as story material reach the draft.
+function conversationForDraft(chat, english) {
+  const turns = chat ? selectChatContext(chat).slice(-24) : [];
+  if (!turns.length) return "";
+  const you = english ? "Author" : "作者";
+  const editor = english ? "Assistant" : "助手";
+  return limitText(turns.map((turn) => `${turn.role === "user" ? you : editor}: ${turn.content}`).join("\n"), 12000);
+}
+
+async function generateArtifactFields(work, type, instruction = "", chat = null) {
   const definition = ARTIFACT_DEFINITIONS[type];
   if (!definition) {
     const error = appError("ARTIFACT_TYPE_UNSUPPORTED");
@@ -2671,12 +2681,14 @@ async function generateArtifactFields(work, type, instruction = "") {
     `Draft the ${ARTIFACT_ENGLISH[type].label} for the novel "${work.title || "Untitled story"}".`,
     `Premise: ${work.premise || "none yet"}`,
     `Material so far:\n${englishStoryMaterial(work.storyBible) || "none yet"}`,
+    conversationForDraft(chat, true) ? `The conversation with the author so far (use what was decided there, even if it is not in the material yet):\n${conversationForDraft(chat, true)}` : "",
     instruction ? `The author also asks: ${instruction}` : "",
     "Be specific and directly usable for a long novel. Do not overwrite core facts the author has already settled. Write every value in English."
   ] : [
     `请为小说《${work.title || "未命名作品"}》优化${definition.label}。`,
     `作品简介：${work.premise || "暂无"}`,
     `当前资料：${compactStoryBible(work.storyBible) || "暂无"}`,
+    conversationForDraft(chat, false) ? `与作者的对话（其中已经确定的内容即使还没写进资料，也要采用）：\n${conversationForDraft(chat, false)}` : "",
     instruction ? `作者补充要求：${instruction}` : "",
     "输出必须具体、可直接用于长篇创作，不要覆盖作者已经确定的核心事实。"
   ]).filter(Boolean).join("\n\n");
@@ -2768,14 +2780,18 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     }
     if (req.method === "POST" && parts.length === 7 && parts[5] === "messages" && parts[6] === "stream") {
       const body = await readBody(req);
-      const content = String(body.content || "").trim().slice(0, 20000);
+      // Retrying the latest turn answers the user message that is already
+      // saved instead of saving the same words a second time.
+      const lastUserMessage = [...chat.messages].reverse().find((message) => message.role === "user");
+      const retryTarget = body.retryOf && lastUserMessage?.id === body.retryOf ? lastUserMessage : null;
+      const content = retryTarget ? retryTarget.content : String(body.content || "").trim().slice(0, 20000);
       if (!content) {
         sendError(res, "MESSAGE_EMPTY");
         return true;
       }
-      const userMessage = createMessage("user", content, { retryOf: body.retryOf });
+      const userMessage = retryTarget || createMessage("user", content, { retryOf: body.retryOf });
       const assistantMessage = createMessage("assistant", "");
-      chat.messages.push(userMessage);
+      if (!retryTarget) chat.messages.push(userMessage);
       if (chat.title === "新对话" || chat.messages.filter((message) => message.role === "user").length === 1) {
         chat.title = autoChatTitle(content);
       }
@@ -2827,7 +2843,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     if (req.method === "POST" && parts.length === 6 && parts[5] === "proposals") {
       const body = await readBody(req);
       const type = normalizeText(body.type);
-      const generated = await generateArtifactFields(work, type, normalizeText(body.instruction));
+      const generated = await generateArtifactFields(work, type, normalizeText(body.instruction), chat);
       const proposal = createArtifactProposal(work, chat.id, type, generated, body.sourceMessageId);
       workspace.proposals.unshift(proposal);
       chat.updatedAt = nowIso();
@@ -4619,6 +4635,7 @@ if (require.main === module) {
 
 module.exports = {
   buildAiPrompt,
+  conversationForDraft,
   buildChatSystemPrompt,
   buildImagePrompt,
   buildStoryBiblePrompt,

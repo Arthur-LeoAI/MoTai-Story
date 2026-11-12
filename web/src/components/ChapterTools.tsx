@@ -5,7 +5,6 @@ import { formatRelativeTime } from "../format";
 import { usePreferences } from "../preferences";
 import type { WriteContext } from "../pages/Write";
 import { request } from "../api";
-import { writeApi } from "../writeApi";
 
 // ---------------------------------------------------------------------------
 // Chapter history: named versions, compare, restore.
@@ -193,12 +192,15 @@ export function ScenesPanel({ context }: { context: WriteContext }) {
     setError("");
     try {
       await context.flush();
-      const { work: fresh } = await writeApi.work(work.id);
-      const current = fresh.chapters.find((item) => item.id === chapter.id);
-      if (!current) return;
+      // The scene list was read with these revisions; if another window changed
+      // the chapter or its plan since, the server refuses (409) instead of
+      // overwriting it, and the panel reloads.
       const saved = await request<{ chapter: { scenes?: Scene[] } }>(`${chapterBase(work.id, chapter.id)}/scenes`, {
         method: "PATCH",
-        body: JSON.stringify({ baseRevision: current.revision, structureRevision: fresh.structureRevision, scenes: next })
+        body: JSON.stringify({ baseRevision: context.currentChapter().revision, structureRevision: context.currentWork().structureRevision, scenes: next })
+      }).catch(async (cause) => {
+        await context.reload();
+        throw cause;
       });
       // Scene edits do not move the chapter's revision, so show what the server kept.
       setScenes(structuredClone(saved.chapter?.scenes ?? next));

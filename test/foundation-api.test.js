@@ -269,3 +269,57 @@ test("imported stories record their owner, story language and Write focus", asyn
   assert.equal(confirmed.body.work.focus, "write");
   assert.equal(confirmed.body.work.genre, "");
 });
+
+async function streamChat(workId, chatId, data) {
+  const response = await fetch(`${base}/api/works/${workId}/chats/${chatId}/messages/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return response.text();
+}
+
+test("retrying a chat turn answers the saved message instead of saving it twice", async () => {
+  const work = (await call("/api/works", "POST", { title: "Retry", language: "en" })).body.work;
+  const chatId = (await call(`/api/works/${work.id}/chats`)).body.chats[0].id;
+  await streamChat(work.id, chatId, { content: "Who is Kael?" });
+  let chat = (await call(`/api/works/${work.id}/chats`)).body.chats.find((item) => item.id === chatId);
+  const userMessage = chat.messages.find((message) => message.role === "user");
+
+  const replay = await streamChat(work.id, chatId, { content: "Who is Kael?", retryOf: userMessage.id });
+  assert.match(replay, new RegExp(`"userMessageId":"${userMessage.id}"`));
+  chat = (await call(`/api/works/${work.id}/chats`)).body.chats.find((item) => item.id === chatId);
+  assert.equal(chat.messages.filter((message) => message.role === "user").length, 1);
+  assert.equal(chat.messages.filter((message) => message.role === "assistant").length, 2);
+
+  // A retryOf that is not the latest user message is a normal new message.
+  await streamChat(work.id, chatId, { content: "Something new", retryOf: "message_unknown" });
+  chat = (await call(`/api/works/${work.id}/chats`)).body.chats.find((item) => item.id === chatId);
+  assert.equal(chat.messages.filter((message) => message.role === "user").length, 2);
+});
+
+test("material drafts are asked with the conversation so far", () => {
+  const { conversationForDraft } = require("../server");
+  const chat = { messages: [
+    { role: "user", content: "Kael is her oldest friend, now a warden.", status: "complete" },
+    { role: "assistant", content: "Then his oath is the obstacle.", status: "complete" }
+  ] };
+  const english = conversationForDraft(chat, true);
+  assert.match(english, /Author: Kael is her oldest friend/);
+  assert.match(english, /Assistant: Then his oath/);
+  assert.match(conversationForDraft(chat, false), /作者: Kael/);
+  assert.equal(conversationForDraft({ messages: [] }, true), "");
+  assert.equal(conversationForDraft(null, true), "");
+});
+
+test("a chapter reorder based on an old chapter list is refused", async () => {
+  const work = (await call("/api/works", "POST", { title: "Order", language: "en" })).body.work;
+  await call(`/api/works/${work.id}/chapters`, "POST", {});
+  const loaded = (await call(`/api/works/${work.id}`)).body.work;
+  const ids = loaded.chapters.map((chapter) => chapter.id);
+  const seen = loaded.structureRevision;
+  assert.equal((await call(`/api/works/${work.id}/plan`, "PATCH", { chapterIds: [...ids].reverse(), baseRevision: seen })).status, 200);
+  const stale = await call(`/api/works/${work.id}/plan`, "PATCH", { chapterIds: ids, baseRevision: seen });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.error.code, "REVISION_CONFLICT");
+});

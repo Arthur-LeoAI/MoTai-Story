@@ -351,3 +351,38 @@ test("scenes are planned, edited, reordered and kept after a reload", async ({ p
   // Planning never changes the chapter text.
   await expect(editor(page)).toHaveText("Mira waits at the ferry.");
 });
+
+test("trashing another chapter keeps the open one, and a stale reorder is refused", async ({ page, request }) => {
+  const workId = await newStory(request);
+  for (let i = 0; i < 2; i += 1) await request.post(`/api/works/${workId}/chapters`, { data: {} });
+  const chapters = (await storedWork(request, workId)).chapters;
+  await page.goto(`/app/works/${workId}/write?chapter=${chapters[1].id}`);
+  await expect(page.getByTestId("manuscript")).toHaveAttribute("data-chapter-id", chapters[1].id);
+
+  page.once("dialog", (dialog) => dialog.accept());
+  // Tools of a chapter that is not open appear on hover or keyboard focus.
+  const third = page.locator(`[data-testid="chapter-item"][data-chapter-id="${chapters[2].id}"]`);
+  await third.hover();
+  await third.getByTestId("chapter-delete").click();
+  await expect(page.getByTestId("chapter-item")).toHaveCount(2);
+  await expect(page.getByTestId("manuscript")).toHaveAttribute("data-chapter-id", chapters[1].id);
+
+  // Another window reorders the chapters; this page still shows the old order.
+  const fresh = await storedWork(request, workId);
+  const otherOrder = [chapters[1].id, chapters[0].id];
+  expect((await request.patch(`/api/works/${workId}/plan`, { data: { chapterIds: otherOrder, baseRevision: fresh.structureRevision } })).ok()).toBeTruthy();
+  expectedFailures.get(page).push(409);
+  await page.locator(`[data-testid="chapter-item"][data-chapter-id="${chapters[1].id}"]`).getByTestId("chapter-up").click();
+  await expect(page.getByTestId("write-notice")).toBeVisible();
+  // The page shows what the other window saved instead of overwriting it.
+  await expect(page.getByTestId("chapter-item").first()).toHaveAttribute("data-chapter-id", chapters[1].id);
+  expect((await storedWork(request, workId)).chapters.map((chapter) => chapter.id)).toEqual(otherOrder);
+
+  // Renaming a chapter moves the structure revision; reordering afterwards still works.
+  await page.getByTestId("chapter-title").fill("Renamed");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+  const firstItem = page.locator(`[data-testid="chapter-item"][data-chapter-id="${chapters[0].id}"]`);
+  await firstItem.hover();
+  await firstItem.getByTestId("chapter-up").click();
+  await expect(page.getByTestId("chapter-item").first()).toHaveAttribute("data-chapter-id", chapters[0].id);
+});

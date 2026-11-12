@@ -22,6 +22,8 @@ interface IdeateProps {
 interface Pending {
   chatId: string;
   userText: string;
+  /** Set once the server has saved the user's message; a retry answers that message again. */
+  userMessageId: string;
   text: string;
   state: "streaming" | "failed";
   error: string;
@@ -156,15 +158,15 @@ export default function Ideate({ work }: IdeateProps) {
     setChats((current) => current?.map((item) => (item.id === chatId ? change(item) : item)) ?? current);
   }, []);
 
-  async function send(text: string) {
+  async function send(text: string, retryOf = "") {
     const content = text.trim();
-    if (!content || !chat || streaming) return;
+    if (!content || !chat || streaming || drafting) return;
     const chatId = chat.id;
     const controller = new AbortController();
     abortRef.current = controller;
     setError("");
     setInput("");
-    setPending({ chatId, userText: content, text: "", state: "streaming", error: "" });
+    setPending({ chatId, userText: retryOf ? "" : content, userMessageId: retryOf, text: "", state: "streaming", error: "" });
     const now = new Date().toISOString();
     let userMessageId = "";
     let received = "";
@@ -176,7 +178,9 @@ export default function Ideate({ work }: IdeateProps) {
             ...current,
             title: meta.chatTitle,
             untitled: false,
-            messages: [...current.messages, { id: meta.userMessageId, role: "user", content, status: "complete", createdAt: now }]
+            messages: current.messages.some((message) => message.id === meta.userMessageId)
+              ? current.messages
+              : [...current.messages, { id: meta.userMessageId, role: "user", content, status: "complete", createdAt: now }]
           }));
           setPending((current) => (current ? { ...current, userText: "" } : current));
         },
@@ -188,7 +192,7 @@ export default function Ideate({ work }: IdeateProps) {
           patchChat(chatId, (current) => ({ ...current, messages: [...current.messages, message] }));
           setPending(null);
         }
-      }, controller.signal);
+      }, controller.signal, retryOf);
     } catch (cause) {
       const failure = cause instanceof StreamError ? cause : null;
       // What had arrived before the reply was cut short is already saved by the server.
@@ -202,7 +206,7 @@ export default function Ideate({ work }: IdeateProps) {
         }
         setPending(null);
       } else {
-        setPending({ chatId, userText: userMessageId ? "" : content, text: "", state: "failed", error: errorText(t, cause) });
+        setPending({ chatId, userText: userMessageId ? "" : content, userMessageId, text: "", state: "failed", error: errorText(t, cause) });
       }
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -222,11 +226,12 @@ export default function Ideate({ work }: IdeateProps) {
   }
 
   function retry() {
-    if (!chat) return;
-    const lastUser = [...chat.messages].reverse().find((message) => message.role === "user");
-    const text = pending?.userText || lastUser?.content || "";
+    if (!chat || !pending) return;
+    // A message the server already saved is answered again, not sent twice.
+    const saved = pending.userMessageId ? chat.messages.find((message) => message.id === pending.userMessageId) : null;
+    const text = saved?.content || pending.userText;
     setPending(null);
-    void send(text);
+    void send(text, saved?.id ?? "");
   }
 
   async function newChat() {
@@ -403,7 +408,7 @@ export default function Ideate({ work }: IdeateProps) {
             {streaming ? (
               <button type="button" className="btn" onClick={() => abortRef.current?.abort()} data-testid="chat-stop">{t("ideate.stop")}</button>
             ) : (
-              <button type="submit" className="btn primary" disabled={!input.trim() || !chat} data-testid="chat-send">{t("ideate.send")}</button>
+              <button type="submit" className="btn primary" disabled={!input.trim() || !chat || drafting !== null} data-testid="chat-send">{t("ideate.send")}</button>
             )}
           </div>
         </form>
@@ -433,7 +438,7 @@ export default function Ideate({ work }: IdeateProps) {
                   <button
                     type="button"
                     className="btn"
-                    disabled={!chat || drafting !== null}
+                    disabled={!chat || drafting !== null || streaming}
                     onClick={() => void draft(type)}
                     data-testid={`draft-${type}`}
                   >
