@@ -4,6 +4,7 @@ import { Link, NavLink, useParams } from "react-router-dom";
 import { api, errorText, type WorkSummary } from "../api";
 import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from "../components/common";
 import Ideate from "./Ideate";
+import Write from "./Write";
 import { isSection, numeral, orderedSections, workPath, type Section } from "../sections";
 
 type Loaded = { state: "loading" } | { state: "ready"; work: WorkSummary } | { state: "missing"; message: string };
@@ -103,7 +104,12 @@ export default function WorkFrame() {
           <PreferenceControls />
         </div>
       </aside>
-      {section === "ideate" ? (
+      {section === "write" ? (
+        <main id="main" className="frame-main frame-main-wide">
+          {loaded.state === "ready" ? <Write key={loaded.work.id} summary={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          <Notice />
+        </main>
+      ) : section === "ideate" ? (
         <main id="main" className="frame-main frame-main-wide">
           {loaded.state === "ready" ? <Ideate key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
           <Notice />

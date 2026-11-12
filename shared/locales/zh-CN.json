@@ -132,6 +132,31 @@
       "continuityNotes": "连续性记录"
     }
   },
+  "write": {
+    "manuscript": "正文",
+    "companion": "写作助手",
+    "chapters": "章节",
+    "addChapter": "新建章节",
+    "noChapters": "还没有章节。",
+    "chapterNumber": "第 {{number}} 章",
+    "chapterTitle": "章节标题",
+    "placeholder": "从这里开始写……",
+    "moveUp": "将「{{title}}」上移",
+    "moveDown": "将「{{title}}」下移",
+    "deleteChapter": "将「{{title}}」移到回收站",
+    "deleteConfirm": "将「{{title}}」移到回收站？之后可以从回收站恢复。",
+    "trash": "回收站",
+    "trashEmpty": "回收站是空的。",
+    "restore": "恢复",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "notSaved": "未保存",
+    "conflict": "这一章已在其他窗口修改。你在这里的文字仍然保留。可以保留当前版本（另一个版本会留在本章历史中），或者载入已保存的版本。",
+    "keepMine": "保留当前版本",
+    "useSaved": "载入已保存的版本",
+    "focus": "专注",
+    "exitFocus": "退出专注"
+  },
   "language": {
     "label": "界面语言",
     "storyLanguageNote": "界面语言不会改变作品的写作语言。",

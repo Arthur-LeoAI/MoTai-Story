@@ -705,3 +705,228 @@
     padding: var(--space-6) var(--space-4);
   }
 }
+
+/* ---------- Write ---------- */
+
+.write {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.write-chapters {
+  flex: 0 1 240px;
+  min-width: 200px;
+  padding: var(--space-6) var(--space-4);
+  border-inline-end: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.write-chapters h2 {
+  margin: 0;
+}
+.chapter-items,
+.trash-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chapter-item {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.chapter-item.on {
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+.chapter-open {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-height);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.chapter-open .num {
+  font-family: var(--font-fell);
+  font-style: italic;
+  color: var(--color-accent);
+  min-width: 1.5em;
+}
+.chapter-tools {
+  display: none;
+}
+.chapter-item:hover .chapter-tools,
+.chapter-item:focus-within .chapter-tools,
+.chapter-item.on .chapter-tools {
+  display: inline-flex;
+}
+.chapter-tool {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0 var(--space-1);
+}
+.trash-toggle {
+  align-self: flex-start;
+  margin-block-start: var(--space-2);
+}
+.trash-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.write-desk {
+  flex: 999 1 480px;
+  min-width: 0;
+  padding: var(--space-6) var(--space-8) var(--space-12);
+  background: var(--color-surface-sunk);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.write-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.save-state {
+  font-style: italic;
+}
+:lang(zh) .save-state {
+  font-style: normal;
+}
+.save-problem p {
+  margin: 0 0 var(--space-2);
+}
+
+.page {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 56px 64px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.page-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding-bottom: var(--space-3);
+}
+.chapter-title {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 44px;
+  text-align: center;
+  padding: 0 0 var(--space-1);
+}
+.chapter-title:hover,
+.chapter-title:focus {
+  border-bottom-color: var(--color-border-strong);
+  outline: none;
+}
+.chapter-title:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+/* The editor: printed-book type that follows the story's language. */
+.manuscript-host .ql-editor {
+  min-height: 50vh;
+  padding: 0;
+  font-family: var(--font-text);
+  font-size: 20px;
+  line-height: 1.65;
+  color: var(--color-text);
+}
+.manuscript-host .ql-editor:lang(zh) {
+  font-family: var(--font-cjk);
+  font-size: 18px;
+  line-height: var(--line-cjk);
+}
+.manuscript-host .ql-editor p + p {
+  text-indent: 1.4em;
+}
+.manuscript-host .ql-editor:lang(zh) p {
+  text-indent: 2em;
+}
+.manuscript-host .ql-editor.ql-blank::before {
+  left: 0;
+  right: 0;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.manuscript-host .ql-editor:lang(zh).ql-blank::before {
+  font-style: normal;
+}
+.manuscript-host .ql-editor blockquote {
+  border-inline-start: 3px double var(--color-border-strong);
+  padding-inline-start: var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.write-companion {
+  flex: 1 0 340px;
+  max-width: 100%;
+  border-inline-start: 1px solid var(--color-border);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Focus mode: only the page. Esc or the button leaves it. */
+:root[data-focus-mode="on"] .frame-side,
+:root[data-focus-mode="on"] .write-chapters,
+:root[data-focus-mode="on"] .write-companion {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .write-chapters {
+    flex-basis: 100%;
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding: var(--space-4);
+  }
+  .write-desk {
+    padding: var(--space-4);
+  }
+  .page {
+    padding: var(--space-8) 20px var(--space-12);
+  }
+  .chapter-title {
+    font-size: 32px;
+  }
+  .write-companion {
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--color-border);
+    padding: var(--space-4);
+  }
+}

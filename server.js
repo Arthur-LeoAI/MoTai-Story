@@ -3347,7 +3347,7 @@ async function handleApi(req, res, url) {
     const timestamp = nowIso();
     const chapter = {
       id: createId("chapter"),
-      title: normalizeText(body.title) || `第${(work.chapters || []).length + 1}章`,
+      title: normalizeText(body.title) || (normalizeStoryLanguage(work.language) === "en" ? `Chapter ${(work.chapters || []).length + 1}` : `第${(work.chapters || []).length + 1}章`),
       content: "",
       richContent: plainTextToRichContent(""),
       contentFormat: "quill-delta-v1",

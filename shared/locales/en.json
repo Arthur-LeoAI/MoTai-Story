@@ -137,6 +137,31 @@
       "continuityNotes": "Continuity notes"
     }
   },
+  "write": {
+    "manuscript": "Manuscript",
+    "companion": "Writing companion",
+    "chapters": "Chapters",
+    "addChapter": "New chapter",
+    "noChapters": "No chapters yet.",
+    "chapterNumber": "Chapter {{number}}",
+    "chapterTitle": "Chapter title",
+    "placeholder": "Begin here…",
+    "moveUp": "Move “{{title}}” up",
+    "moveDown": "Move “{{title}}” down",
+    "deleteChapter": "Move “{{title}}” to the trash",
+    "deleteConfirm": "Move “{{title}}” to the trash? You can restore it from there.",
+    "trash": "Trash",
+    "trashEmpty": "The trash is empty.",
+    "restore": "Restore",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "notSaved": "Not saved",
+    "conflict": "This chapter was changed in another window. Your text here is kept. Keep this version (the other one stays in the chapter's history), or load the saved one.",
+    "keepMine": "Keep this version",
+    "useSaved": "Load the saved version",
+    "focus": "Focus",
+    "exitFocus": "Leave focus"
+  },
   "language": {
     "label": "Interface language",
     "storyLanguageNote": "The interface language does not change the language of your stories.",
