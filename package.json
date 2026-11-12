@@ -1,8 +1,8 @@
 {
-  "name": "motai-novel-studio",
+  "name": "novel-studio",
   "version": "1.1.0",
   "private": true,
-  "description": "Motai local novel writing studio with configurable AI providers and story bible generation.",
+  "description": "Local-first AI novel writing studio. Product name is configured in shared/brand.json.",
   "author": "墨台工作室",
   "main": "desktop/main.cjs",
   "productName": "墨台",
@@ -13,22 +13,41 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env.local server.js",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build:web": "vite build --config web/vite.config.ts",
+    "typecheck:web": "tsc -p web/tsconfig.json",
     "desktop": "electron .",
     "package:win": "electron-builder --win dir --x64",
     "make:win": "electron-builder --win nsis --x64 --publish never",
     "check:syntax": "node scripts/check-syntax.cjs",
     "check:data": "node -e \"JSON.parse(require('fs').readFileSync('data/db.example.json','utf8')); console.log('Example database JSON is valid.')\"",
+    "check:i18n": "node scripts/check-i18n.cjs",
+    "check:tokens": "node scripts/check-tokens.cjs",
     "test": "node --test test/*.test.js",
-    "test:e2e": "playwright test",
-    "check": "npm run check:syntax && npm test && npm run check:data"
+    "test:e2e": "npm run build:web && playwright test",
+    "check": "npm run check:syntax && npm run check:i18n && npm run check:tokens && npm run typecheck:web && npm test && npm run check:data"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/eb-garamond": "^5.3.0",
+    "@fontsource/im-fell-english": "^5.3.0",
+    "@fontsource/im-fell-english-sc": "^5.3.0",
+    "@fontsource/noto-serif-sc": "^5.3.1",
     "@playwright/test": "^1.55.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "electron": "^43.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "i18next": "^27.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-i18next": "^18.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7"
   },
   "build": {
     "appId": "com.motai.novelstudio",
@@ -41,6 +60,7 @@
     "files": [
       "server.js",
       "src/**",
+      "shared/**",
       "public/**",
       "desktop/**",
       "resources/motai.ico",

@@ -134,6 +134,7 @@ function publicProviderStatus(config, extra = {}) {
     ...(typeof extra.model === "string" && extra.model ? { model: extra.model } : {}),
     ...(typeof extra.available === "boolean" ? { available: extra.available } : {}),
     ...(typeof extra.message === "string" && extra.message ? { message: extra.message } : {}),
+    ...(typeof extra.code === "string" && extra.code ? { code: extra.code, params: extra.params || {} } : {}),
     ...(typeof extra.checkedAt === "string" && extra.checkedAt ? { checkedAt: extra.checkedAt } : {})
   };
 }

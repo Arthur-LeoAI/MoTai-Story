@@ -26,7 +26,7 @@ test('GB18030 auto decoding and explicit wrong encoding error', async () => {
   const result = await parseManuscript({ fileName: '稿件.txt', base64 });
   assert.equal(result.chapters[0].content, '中文');
   assert.equal(result.encoding, 'gb18030');
-  await assert.rejects(parseManuscript({ fileName: '稿件.txt', base64, encoding: 'utf-8' }), /编码/);
+  await assert.rejects(parseManuscript({ fileName: '稿件.txt', base64, encoding: 'utf-8' }), { code: "IMPORT_ENCODING_MISMATCH" });
 });
 
 test('Markdown formatting is data and never interprets HTML or links', async () => {
@@ -38,12 +38,12 @@ test('Markdown formatting is data and never interprets HTML or links', async () 
 });
 
 test('reject unsupported, invalid, empty, excessive or binary files', async () => {
-  await assert.rejects(parseManuscript({ fileName: 'old.doc', base64: encoded('text') }), /DOC/);
-  await assert.rejects(parseManuscript({ fileName: 'bad.txt', base64: '!!!' }), /编码/);
-  await assert.rejects(parseManuscript({ fileName: 'empty.txt', base64: '' }), /为空/);
-  await assert.rejects(parseManuscript({ fileName: 'large.txt', base64: encoded('字'.repeat(1_000_001)) }), /100 万/);
-  await assert.rejects(parseManuscript({ fileName: 'binary.txt', base64: encoded('a\0b') }), /文本/);
-  await assert.rejects(parseManuscript({ fileName: 'encrypted.docx', base64: encoded('not a zip') }), /DOCX/);
+  await assert.rejects(parseManuscript({ fileName: 'old.doc', base64: encoded('text') }), { code: "IMPORT_FILE_TYPE_UNSUPPORTED" });
+  await assert.rejects(parseManuscript({ fileName: 'bad.txt', base64: '!!!' }), { code: "IMPORT_FILE_INVALID" });
+  await assert.rejects(parseManuscript({ fileName: 'empty.txt', base64: '' }), { code: "IMPORT_FILE_EMPTY_OR_TOO_LARGE" });
+  await assert.rejects(parseManuscript({ fileName: 'large.txt', base64: encoded('字'.repeat(1_000_001)) }), { code: "IMPORT_TEXT_TOO_LARGE" });
+  await assert.rejects(parseManuscript({ fileName: 'binary.txt', base64: encoded('a\0b') }), { code: "IMPORT_NOT_TEXT" });
+  await assert.rejects(parseManuscript({ fileName: 'encrypted.docx', base64: encoded('not a zip') }), { code: "DOCX_INVALID" });
 });
 
 test('DOCX round trip preserves chapter names, Unicode, paragraphs and inline formatting', async () => {
@@ -66,12 +66,12 @@ test('DOCX CRC corruption, encryption and excessive extracted size are rejected'
   const original = await createDocx({ chapters: [{ title: '一', content: '正文' }] });
   const corrupt = Buffer.from(original);
   corrupt[100] ^= 1;
-  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: corrupt.toString('base64') }), /校验/);
+  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: corrupt.toString('base64') }), { code: "DOCX_CORRUPTED" });
   const directory = original.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
   const encrypted = Buffer.from(original);
   encrypted.writeUInt16LE(0x801, directory + 8);
-  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: encrypted.toString('base64') }), /加密/);
+  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: encrypted.toString('base64') }), { code: "DOCX_ENCRYPTED_OR_TOO_LARGE" });
   const oversized = Buffer.from(original);
   oversized.writeUInt32LE(41 * 1024 * 1024, directory + 24);
-  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: oversized.toString('base64') }), /40MB/);
+  await assert.rejects(parseManuscript({ fileName: 'bad.docx', base64: oversized.toString('base64') }), { code: "DOCX_ENCRYPTED_OR_TOO_LARGE" });
 });

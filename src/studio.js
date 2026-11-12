@@ -1,4 +1,5 @@
 const { createId, normalizeText, nowIso, normalizeStoryBible } = require("./domain");
+const { appError } = require("./errors");
 
 const CHAT_TITLE_LIMIT = 36;
 const CHAT_CONTEXT_CHARACTER_LIMIT = 48000;
@@ -189,8 +190,7 @@ function selectChatContext(chat, maxCharacters = CHAT_CONTEXT_CHARACTER_LIMIT) {
 
 function createArtifactProposal(work, chatId, type, generated, sourceMessageId = "") {
   if (!Object.hasOwn(ARTIFACT_DEFINITIONS, type)) {
-    const error = new Error("不支持的创作资料类型");
-    error.status = 400;
+    const error = appError("ARTIFACT_TYPE_UNSUPPORTED");
     throw error;
   }
   const definition = ARTIFACT_DEFINITIONS[type];
@@ -202,8 +202,7 @@ function createArtifactProposal(work, chatId, type, generated, sourceMessageId =
     after: String(generated?.[key] || "").trim()
   })).filter((section) => section.after);
   if (!sections.length) {
-    const error = new Error("AI 没有返回可用的创作资料，请重试。");
-    error.status = 422;
+    const error = appError("AI_ARTIFACT_EMPTY");
     throw error;
   }
   return normalizeProposal({
@@ -219,8 +218,7 @@ function createArtifactProposal(work, chatId, type, generated, sourceMessageId =
 
 function applyArtifactProposal(work, proposal, sectionKeys) {
   if (proposal.status !== "pending" && proposal.status !== "reverted") {
-    const error = new Error("这份草案已经处理，不能重复写入。");
-    error.status = 409;
+    const error = appError("PROPOSAL_ALREADY_HANDLED");
     throw error;
   }
   const allowed = new Set(proposal.sections.map((section) => section.key));
@@ -228,8 +226,7 @@ function applyArtifactProposal(work, proposal, sectionKeys) {
     ? sectionKeys.filter((key) => allowed.has(key))
     : [...allowed];
   if (!requested.length) {
-    const error = new Error("请至少选择一个要写入的部分。");
-    error.status = 400;
+    const error = appError("PROPOSAL_NOTHING_SELECTED");
     throw error;
   }
   work.storyBible = normalizeStoryBible(work.storyBible);
@@ -248,8 +245,7 @@ function applyArtifactProposal(work, proposal, sectionKeys) {
 
 function revertArtifactProposal(work, proposal) {
   if (proposal.status !== "applied") {
-    const error = new Error("只有已经写入的草案可以撤销。");
-    error.status = 409;
+    const error = appError("PROPOSAL_NOT_APPLIED");
     throw error;
   }
   work.storyBible = normalizeStoryBible(work.storyBible);
@@ -284,13 +280,11 @@ function normalizeDeltaAttributes(value) {
 
 function normalizeRichContent(value) {
   if (!isObject(value) || !Array.isArray(value.ops)) {
-    const error = new Error("富文本内容格式无效。");
-    error.status = 400;
+    const error = appError("RICH_CONTENT_INVALID");
     throw error;
   }
   if (value.ops.length > 50000) {
-    const error = new Error("富文本内容过大。");
-    error.status = 413;
+    const error = appError("RICH_CONTENT_TOO_LARGE");
     throw error;
   }
   const ops = [];

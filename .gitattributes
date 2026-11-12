@@ -8,3 +8,9 @@
 *.html text eol=lf
 *.vbs text eol=crlf
 *.png binary
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.svg text eol=lf
+*.txt text eol=lf
+*.woff2 binary

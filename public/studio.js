@@ -91,6 +91,25 @@ function countCharacters(value) {
   return String(value || "").replace(/\s/g, "").length;
 }
 
+// The server reports errors as { code, message, params }. This legacy UI is
+// Chinese, so it translates codes with the shared zh-CN locale file.
+const serverErrorText = { messages: null };
+fetch("/locales/zh-CN.json")
+  .then((response) => (response.ok ? response.json() : null))
+  .then((data) => { serverErrorText.messages = data?.errors || null; })
+  .catch(() => {});
+
+function describeServerError(error, fallback = "") {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  const template = error.code && serverErrorText.messages?.[error.code];
+  if (template) {
+    const params = error.params || {};
+    return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => (params[key] ?? match));
+  }
+  return error.message || fallback;
+}
+
 async function request(pathname, options = {}) {
   const response = await fetch(pathname, {
     ...options,
@@ -98,8 +117,9 @@ async function request(pathname, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error || `请求失败（${response.status}）`);
+    const error = new Error(describeServerError(payload.error, `请求失败（${response.status}）`));
     error.status = response.status;
+    error.code = payload.error?.code || "";
     throw error;
   }
   return payload;
@@ -132,6 +152,7 @@ function renderAiAvailability() {
   const { status, message } = state.aiAvailability;
   button.classList.remove("checking", "available", "unavailable");
   button.classList.add(status);
+  button.dataset.status = status;
   button.querySelector("strong").textContent = status === "available" ? "AI 可用" : status === "unavailable" ? "AI 不可用" : "AI 检测中";
   button.title = message;
   button.setAttribute("aria-label", `${button.querySelector("strong").textContent}：${message}。点击打开设置`);
@@ -178,7 +199,7 @@ async function checkAiAvailability({ notify = false } = {}) {
     const result = await request("/api/ai/test", { method: "POST", body: "{}" });
     state.aiAvailability = {
       status: result.ok ? "available" : "unavailable",
-      message: result.message || (result.ok ? "AI 接口可用。" : "AI 接口不可用。")
+      message: result.ok ? (result.message || "AI 接口可用。") : describeServerError(result, "AI 接口不可用。")
     };
   } catch (error) {
     state.aiAvailability = { status: "unavailable", message: error.message || "无法检测 AI 接口。" };
@@ -237,6 +258,14 @@ function openDialog(id) {
 function closeDialog(id) {
   const dialog = document.getElementById(id);
   if (dialog?.open) dialog.close();
+}
+
+// Hiding a panel that still holds keyboard focus breaks assistive technology,
+// so focus returns to the button that opens it first.
+function hideEditorAiPanel() {
+  const panel = $("#editorAiPanel");
+  if (panel.contains(document.activeElement)) $("#toggleEditorAiButton")?.focus();
+  panel.setAttribute("aria-hidden", "true");
 }
 
 function setSaveState(status, label) {
@@ -335,7 +364,7 @@ function updateView(view) {
 function renderChats() {
   const list = $("#chatList");
   list.innerHTML = state.chats.map((chat) => `
-    <div class="chat-row ${chat.id === state.activeChatId ? "active" : ""}">
+    <div data-testid="chat-row" class="chat-row ${chat.id === state.activeChatId ? "active" : ""}">
       <button class="chat-row-main" type="button" data-select-chat="${escapeHtml(chat.id)}">
         <strong>${escapeHtml(chat.title || "新对话")}</strong>
         <small>${formatDate(chat.updatedAt)}</small>
@@ -350,7 +379,7 @@ function renderConversation() {
   const chat = activeChat();
   if (!state.work) {
     conversation.innerHTML = `
-      <div class="ai-empty">
+      <div class="ai-empty" data-testid="chat-empty">
         <div class="empty-mark">墨</div>
         <h2>从一个故事念头开始</h2>
         <p>创建作品后，你可以像聊天一样确定灵感、人物和大纲，再把确认后的内容写入创作资料。</p>
@@ -364,22 +393,22 @@ function renderConversation() {
   syncChatSubmitState();
   if (!chat?.messages?.length) {
     conversation.innerHTML = `
-      <div class="ai-empty">
+      <div class="ai-empty" data-testid="chat-empty">
         <div class="empty-mark">墨</div>
         <h2>一起把这个故事想清楚</h2>
         <p>${state.work.premise ? escapeHtml(state.work.premise) : "不必先准备完整设定。告诉我你脑海里最清楚的那个画面、人物或冲突。"}</p>
         <div class="starter-prompts">
           <button type="button" data-chat-prompt="帮我从一句灵感开始梳理这个故事">从灵感开始</button>
           <button type="button" data-chat-prompt="帮我找到主角真正想要什么，以及最大的阻力">确定核心冲突</button>
-          <button type="button" data-generate-artifact="outline">整理故事大纲</button>
+          <button type="button" data-generate-artifact="outline" data-testid="generate-artifact-outline">整理故事大纲</button>
         </div>
       </div>`;
     return;
   }
   const messages = chat.messages.map((message) => `
-    <article class="message ${message.role} ${message.status === "interrupted" ? "interrupted" : ""}" data-message-id="${escapeHtml(message.id)}">
+    <article class="message ${message.role} ${message.status === "interrupted" ? "interrupted" : ""}" data-testid="chat-message" data-role="${message.role}" data-message-id="${escapeHtml(message.id)}">
       <div class="message-head"><span class="message-avatar">${message.role === "assistant" ? "墨" : "你"}</span><span>${message.role === "assistant" ? "墨台 AI" : "作者"}</span></div>
-      <div class="message-body">${escapeHtml(message.content)}</div>
+      <div class="message-body" data-testid="chat-message-body">${escapeHtml(message.content)}</div>
       ${message.status === "interrupted" ? `<div class="message-status">生成已中断 <button type="button" data-retry-message="${escapeHtml(message.id)}">重试</button></div>` : ""}
     </article>
   `).join("");
@@ -399,7 +428,7 @@ function renderInlineProposal(proposal) {
       <div class="proposal-inline-top">
         <div><strong>已整理：${escapeHtml(artifact?.title || "创作资料")}草案</strong><small>${proposal.sections.length} 个部分 · ${statusLabels[proposal.status] || proposal.status}</small></div>
         <div class="proposal-inline-actions">
-          <button type="button" data-open-proposal="${escapeHtml(proposal.id)}">查看</button>
+          <button type="button" data-open-proposal="${escapeHtml(proposal.id)}" data-testid="open-proposal">查看</button>
           ${proposal.status === "pending" ? `<button type="button" data-apply-proposal="${escapeHtml(proposal.id)}">确认写入</button>` : ""}
           ${proposal.status === "applied" ? `<button type="button" data-revert-proposal="${escapeHtml(proposal.id)}">撤销</button>` : ""}
         </div>
@@ -424,7 +453,7 @@ function renderArtifactCards() {
     <div class="artifact-card" data-open-library="${type}" role="button" tabindex="0">
       <div class="artifact-card-top"><strong>${artifact.title}</strong><span class="artifact-card-status ${artifactHasContent(type) ? "ready" : ""}">${artifactHasContent(type) ? "已有内容" : "未整理"}</span></div>
       <p>${escapeHtml(artifactSummary(type))}</p>
-      <button class="artifact-generate" type="button" data-generate-artifact="${type}"><span>让 AI ${artifactHasContent(type) ? "优化" : "整理"}</span><span>→</span></button>
+      <button class="artifact-generate" type="button" data-generate-artifact="${type}" data-testid="generate-artifact-${type}"><span>让 AI ${artifactHasContent(type) ? "优化" : "整理"}</span><span>→</span></button>
     </div>
   `).join("");
 }
@@ -663,11 +692,11 @@ async function generateEditorAiDraft() {
     const applyLabel = applyRange.length ? "替换选中内容" : "插入正文";
     const blockedHint = canAccept ? "" : '<p class="ai-edit-blocked">检测到未解决的硬冲突。请修改上方指令后重新生成，当前结果不能写入正文。</p>';
     $("#editorAiBody").innerHTML = `
-      <div class="ai-edit-result">${escapeHtml(payload.text)}</div>
+      <div class="ai-edit-result" data-testid="ai-edit-result">${escapeHtml(payload.text)}</div>
       ${(generation.hunks || []).map(h => `<label class="beta-row"><input type="checkbox" name="accepted-hunk" value="${escapeHtml(h.id)}" checked> 接受此段<div class="hunk-before">${escapeHtml(h.before)}</div><div class="hunk-after">${escapeHtml(h.after)}</div></label>`).join("")}
       ${payload.warning ? `<p class="ai-edit-warning">${escapeHtml(payload.warning)}</p>` : ""}
       ${blockedHint}
-      <div class="ai-edit-actions"><button class="quiet-button" type="button" data-reject-ai-edit>清除预览</button>${canAccept ? "" : '<button class="quiet-button" type="button" data-regenerate-ai-edit>按问题重新生成</button>'}<button class="primary-button" type="button" data-accept-ai-edit ${canAccept ? "" : "disabled"}>${canAccept ? applyLabel : "存在硬冲突，不能写入"}</button></div>`;
+      <div class="ai-edit-actions"><button class="quiet-button" type="button" data-reject-ai-edit data-testid="ai-edit-reject">清除预览</button>${canAccept ? "" : '<button class="quiet-button" type="button" data-regenerate-ai-edit data-testid="ai-edit-regenerate">按问题重新生成</button>'}<button class="primary-button" type="button" data-accept-ai-edit data-testid="ai-edit-accept" ${canAccept ? "" : "disabled"}>${canAccept ? applyLabel : "存在硬冲突，不能写入"}</button></div>`;
   } catch (error) {
     if (isCurrent()) handleAiFailure(error, { editor: true });
   } finally {
@@ -692,6 +721,8 @@ function renderEditorAiDiagnostics(generation, canAccept) {
     `自动重写：${Number(generation.rewriteCount || 0)} 次`,
     attempts.length ? `生成尝试：${attempts.length}` : ""
   ].filter(Boolean).map((item) => `<span>${item}</span>`).join("");
+  meta.dataset.model = generation.model || "";
+  meta.dataset.rewriteCount = String(Number(generation.rewriteCount || 0));
   meta.classList.remove("hidden");
 
   const contextDetails = $("#editorAiContextDetails");
@@ -704,6 +735,7 @@ function renderEditorAiDiagnostics(generation, canAccept) {
   const severityLabels = { hard: "硬冲突", soft: "软提醒" };
   const statusLabels = { open: "未解决", resolved: "已修复", dismissed: "已忽略" };
   report.classList.remove("hidden", "warning", "has-hard-conflict");
+  report.dataset.state = conflicts.length ? "conflicts" : "passed";
   if (!conflicts.length) {
     report.innerHTML = "<strong>一致性检查通过</strong><span>没有发现人物、事件、时间线或重复内容冲突。</span>";
     return;
@@ -806,14 +838,15 @@ function renderLibrary() {
   `).join("");
   $("#libraryIndex").textContent = artifact.index;
   $("#libraryTitle").textContent = artifact.title;
+  $("#libraryTitle").dataset.artifact = state.activeArtifact;
   $("#libraryIntro").textContent = artifact.intro;
   const bible = state.work?.storyBible || {};
   const fields = Object.entries(artifact.fields).map(([field, label]) => state.libraryEditing
-    ? `<div class="library-field"><label for="library-${field}">${label}</label><textarea id="library-${field}" data-library-field="${field}" placeholder="还没有内容…">${escapeHtml(bible[field] || "")}</textarea></div>`
+    ? `<div class="library-field"><label for="library-${field}">${label}</label><textarea id="library-${field}" data-library-field="${field}" data-testid="library-field-${field}" placeholder="还没有内容…">${escapeHtml(bible[field] || "")}</textarea></div>`
     : `<section class="library-section"><h3>${escapeHtml(label)}</h3><p data-library-display="${field}">${bible[field] ? escapeHtml(bible[field]).replace(/\n/g, "<br>") : "还没有内容。"}</p></section>`
   ).join("");
   const history = state.proposals.filter((proposal) => proposal.type === state.activeArtifact && proposal.status !== "discarded").slice(0, 5);
-  const historyHtml = history.length ? `<section class="library-field"><label>草案记录</label>${history.map((proposal) => `<button class="quiet-button" type="button" data-open-proposal="${escapeHtml(proposal.id)}">${formatDate(proposal.createdAt)} · ${proposal.status === "pending" ? "待确认" : proposal.status === "applied" ? "已写入" : "已撤销"}</button>`).join(" ")}</section>` : "";
+  const historyHtml = history.length ? `<section class="library-field"><label>草案记录</label>${history.map((proposal) => `<button class="quiet-button" type="button" data-open-proposal="${escapeHtml(proposal.id)}" data-testid="open-proposal">${formatDate(proposal.createdAt)} · ${proposal.status === "pending" ? "待确认" : proposal.status === "applied" ? "已写入" : "已撤销"}</button>`).join(" ")}</section>` : "";
   const pendingCanon = (state.work?.canonProposals || []).filter((proposal) => proposal.status === "pending");
   const canonHtml = pendingCanon.length ? `<section class="library-field"><label>待确认的事实提案</label>${pendingCanon.map((proposal) => `<button class="quiet-button" type="button" data-open-canon-proposal="${escapeHtml(proposal.id)}">${formatDate(proposal.createdAt)} · 查看并确认事实</button>`).join(" ")}</section>` : "";
   $("#libraryFields").innerHTML = fields + canonHtml + historyHtml;
@@ -902,7 +935,7 @@ async function sendChat(content, retryOf = "") {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      const error = new Error(payload.error || "AI 请求失败");
+      const error = new Error(describeServerError(payload.error, "AI 请求失败"));
       error.status = response.status;
       throw error;
     }
@@ -935,7 +968,7 @@ async function sendChat(content, retryOf = "") {
             if (!assistantMessage.content) assistantMessage.content = "生成已停止。";
             continue;
           }
-          const error = new Error(parsed.payload.message || "AI 请求失败");
+          const error = new Error(describeServerError(parsed.payload, "AI 请求失败"));
           error.status = parsed.payload.status || 502;
           const message = handleAiFailure(error);
           if (!assistantMessage.content) assistantMessage.content = message;
@@ -1001,8 +1034,8 @@ function openProposal(proposalId) {
   $("#proposalDialogTitle").textContent = `${ARTIFACTS[proposal.type]?.title || "创作资料"}草案`;
   $("#proposalForm header p").textContent = descriptions[proposal.status] || "这份草案现在仅供查看。";
   $("#proposalSections").innerHTML = proposal.sections.map((section) => `
-    <label class="proposal-section${editable ? "" : " readonly"}">
-      <input type="checkbox" name="proposal-section" value="${escapeHtml(section.key)}" ${editable || appliedKeys.has(section.key) ? "checked" : ""} ${editable ? "" : 'data-readonly="true" tabindex="-1"'}>
+    <label data-testid="proposal-section" class="proposal-section${editable ? "" : " readonly"}">
+      <input type="checkbox" name="proposal-section" data-testid="proposal-section-checkbox" value="${escapeHtml(section.key)}" ${editable || appliedKeys.has(section.key) ? "checked" : ""} ${editable ? "" : 'data-readonly="true" tabindex="-1"'}>
       <span><strong>${escapeHtml(section.label)}</strong><p>${escapeHtml(section.after)}</p></span>
     </label>`).join("");
   $("#discardProposalButton").classList.toggle("hidden", proposal.status !== "pending");
@@ -1078,7 +1111,7 @@ function openCanonProposal(proposal) {
   };
   $("#canonProposalSections").innerHTML = additions.map(({ fact }) => `
     <label class="proposal-section">
-      <input type="checkbox" name="canon-proposal-fact" value="${escapeHtml(fact.id)}" checked>
+      <input type="checkbox" name="canon-proposal-fact" data-testid="canon-fact-checkbox" value="${escapeHtml(fact.id)}" checked>
       <span><strong>${escapeHtml(fact.predicate || "新增事实")}</strong><p>${escapeHtml(fact.value || fact.objectId || "")}</p>${fact.subjectId ? `<small>对象：${escapeHtml(fact.subjectId)}</small>` : ""}</span>
       <span class="canon-proposal-type">${escapeHtml(categoryLabels[fact.category] || "事实")}</span>
     </label>`).join("");
@@ -1166,7 +1199,7 @@ function normalizeProviderStatuses(config) {
       label: current.label || provider.label,
       hasApiKey: Boolean(current.hasApiKey ?? (isActive && config.hasApiKey)),
       status: current.status || (current.available === true ? "available" : current.available === false ? "unavailable" : "unknown"),
-      message: current.message || "",
+      message: current.code ? describeServerError(current) : current.message || "",
       model: current.model || (isActive ? config.model : ""),
       checkedAt: current.checkedAt || ""
     }];
@@ -1183,7 +1216,7 @@ function renderProviderStatuses(activeProvider) {
       ? (status.message || (status.status === "unknown" ? "运行环境已配置，等待检测" : status.status === "available" ? "接口可用" : "接口不可用"))
       : "运行环境未配置";
     const model = status.model || (status.hasApiKey ? "自动选择模型" : "未配置");
-    return `<article class="ai-provider-status ${stateClass} ${status.provider === activeProvider ? "active" : ""}" data-ai-provider-status="${escapeHtml(status.provider)}">
+    return `<article class="ai-provider-status ${stateClass} ${status.provider === activeProvider ? "active" : ""}" data-testid="ai-provider-status" data-ai-provider-status="${escapeHtml(status.provider)}">
       <span class="provider-status-dot" aria-hidden="true"></span>
       <div><strong>${escapeHtml(status.label)}</strong><small>${escapeHtml(description)}</small></div>
       <span class="provider-model">${status.provider === activeProvider ? "当前 · " : ""}${escapeHtml(model)}</span>
@@ -1397,7 +1430,7 @@ function bindEvents() {
     activeScreen?.classList.toggle("panel-open");
     if (activeScreen?.classList.contains("editor-screen") && activeScreen.classList.contains("panel-open")) {
       activeScreen.classList.remove("ai-panel-open");
-      $("#editorAiPanel").setAttribute("aria-hidden", "true");
+      hideEditorAiPanel();
     }
   });
   $("#addChapterButton").addEventListener("click", addChapter);
@@ -1411,7 +1444,7 @@ function bindEvents() {
   });
   $('[data-close-editor-ai]').addEventListener("click", () => {
     $(".editor-screen").classList.remove("ai-panel-open");
-    $("#editorAiPanel").setAttribute("aria-hidden", "true");
+    hideEditorAiPanel();
   });
   $("#editorAiForm").addEventListener("submit", async (event) => {
     event.preventDefault();

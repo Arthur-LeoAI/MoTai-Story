@@ -276,7 +276,7 @@ test("无效审校报告拒绝生成，不保存可接受结果或改写正文",
         method: "POST", body: JSON.stringify({ workId: work.id, chapterId: chapter.id, mode: "continue" })
       });
       assert.equal(result.response.status, 502, report);
-      assert.match(JSON.stringify(result.payload), /审校.*不能写入/);
+      assert.equal(result.payload.error.code, "AI_REVIEW_INVALID");
       assert.equal(result.payload.generation, undefined);
     }
   } finally {

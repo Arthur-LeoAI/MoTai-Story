@@ -46,7 +46,7 @@ test("health endpoint and static homepage are available", async () => {
   const health = await request("/api");
   assert.equal(health.response.status, 200);
   assert.equal(health.payload.ok, true);
-  assert.equal(health.payload.name, "墨台写作平台");
+  assert.equal(health.payload.name, require("../shared/brand.json").name.default);
   assert.equal(health.payload.version, version);
 
   const homepage = await fetch(`${baseUrl}/`);

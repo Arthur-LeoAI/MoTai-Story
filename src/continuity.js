@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 
 const { upgradeWorkspace } = require("./workspace");
+const { appError } = require("./errors");
 const DATABASE_SCHEMA_VERSION = 5;
 const CONTINUITY_VERSION = 1;
 
@@ -338,23 +339,21 @@ function canAcceptGeneration(value) {
   return Boolean(selected && selected.status === "completed" && selected.output.trim());
 }
 
-function domainError(message, status = 400) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
+function domainError(code, params) {
+  return appError(code, params);
 }
 
 function applyCanonProposal(canonValue, proposalValue, options = {}) {
   const canon = normalizeCanon(canonValue);
   const proposal = normalizeCanonProposal(proposalValue);
-  if (proposal.status !== "pending") throw domainError("这份事实提案已经处理，不能重复应用。", 409);
-  if (!proposal.id || !proposal.changes.length) throw domainError("事实提案不完整。", 400);
+  if (proposal.status !== "pending") throw domainError("CANON_PROPOSAL_ALREADY_HANDLED");
+  if (!proposal.id || !proposal.changes.length) throw domainError("CANON_PROPOSAL_INCOMPLETE");
 
   const facts = canon.facts.map((fact) => ({ ...fact }));
   const byId = new Map(facts.filter((fact) => fact.id).map((fact) => [fact.id, fact]));
   for (const change of proposal.changes) {
     if (change.operation === "add") {
-      if (!change.fact?.id || byId.has(change.fact.id)) throw domainError("新增事实缺少唯一 ID，或 ID 已存在。", 409);
+      if (!change.fact?.id || byId.has(change.fact.id)) throw domainError("CANON_FACT_ID_CONFLICT");
       const added = { ...change.fact, status: "active" };
       facts.push(added);
       byId.set(added.id, added);
@@ -362,14 +361,14 @@ function applyCanonProposal(canonValue, proposalValue, options = {}) {
     }
 
     const target = byId.get(change.targetFactId);
-    if (!target || target.status !== "active") throw domainError("要变更的事实不存在或已失效。", 409);
+    if (!target || target.status !== "active") throw domainError("CANON_FACT_NOT_ACTIVE");
     if (change.operation === "resolve") {
       target.status = "resolved";
       target.updatedAt = dateValue(options.decidedAt) || proposal.decidedAt || target.updatedAt;
       continue;
     }
 
-    if (!change.fact?.id || byId.has(change.fact.id)) throw domainError("替代事实缺少唯一 ID，或 ID 已存在。", 409);
+    if (!change.fact?.id || byId.has(change.fact.id)) throw domainError("CANON_FACT_ID_CONFLICT");
     target.status = "superseded";
     target.supersededByFactId = change.fact.id;
     target.updatedAt = dateValue(options.decidedAt) || proposal.decidedAt || target.updatedAt;
@@ -395,7 +394,7 @@ function upgradeDatabase(value, options = {}) {
   const original = JSON.stringify(source);
   const incomingVersion = nullableInteger(source.schemaVersion) ?? 0;
   if (incomingVersion > DATABASE_SCHEMA_VERSION) {
-    throw domainError(`数据库版本 ${incomingVersion} 高于当前支持的版本 ${DATABASE_SCHEMA_VERSION}。`, 400);
+    throw domainError("DATABASE_VERSION_UNSUPPORTED", { incoming: incomingVersion, supported: DATABASE_SCHEMA_VERSION });
   }
   const makeId = typeof options.idFactory === "function"
     ? options.idFactory

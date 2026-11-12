@@ -3,13 +3,14 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { createId, nowIso } = require("./domain");
+const { appError } = require("./errors");
 const { normalizeRichContent, plainTextToRichContent, richContentToMarkdown } = require("./studio");
 const clone = (x) => structuredClone(x);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-function fail(message, status = 400) { throw Object.assign(new Error(message), { status }); }
+function fail(code, params) { throw appError(code, params); }
 function ensureVersion(actual, expected) {
-  if (!Number.isInteger(expected)) fail("缺少基础版本，请刷新后再试。", 428);
-  if (actual !== expected) fail("内容已在其他窗口更新。你的编辑仍然保留，请比较后重新提交。", 409);
+  if (!Number.isInteger(expected)) fail("BASE_REVISION_REQUIRED");
+  if (actual !== expected) fail("REVISION_CONFLICT");
 }
 function deltaLength(delta) { return (delta?.ops || []).reduce((n, op) => n + (typeof op.insert === "string" ? op.insert.length : 1), 0); }
 function normalizeScene(value = {}, length = 1) {
@@ -66,7 +67,7 @@ function sliceDelta(delta, start, end) {
   for (const op of delta.ops || []) {
     const length = typeof op.insert === "string" ? op.insert.length : 1;
     if (offset < end && offset + length > start) {
-      if (typeof op.insert !== "string") fail("请选择不包含图片的文字范围。");
+      if (typeof op.insert !== "string") fail("RANGE_CONTAINS_IMAGE");
       ops.push({ ...op, insert: op.insert.slice(Math.max(0, start - offset), Math.min(length, end - offset)) });
     }
     offset += length;
@@ -84,7 +85,7 @@ function slicePreservingEmbeds(delta, start, end) {
 }
 function replaceRange(delta, range, text) {
   const size = deltaLength(delta);
-  if (!Number.isInteger(range.index) || !Number.isInteger(range.length) || range.index < 0 || range.length < 0 || range.index + range.length > size - 1) fail("文字范围已失效。");
+  if (!Number.isInteger(range.index) || !Number.isInteger(range.length) || range.index < 0 || range.length < 0 || range.index + range.length > size - 1) fail("RANGE_INVALID");
   sliceDelta(delta, range.index, range.index + range.length);
   return normalizeRichContent({ ops: [...slicePreservingEmbeds(delta, 0, range.index), ...(text ? [{ insert: text }] : []), ...slicePreservingEmbeds(delta, range.index + range.length, size)] });
 }
@@ -113,7 +114,7 @@ function makeHunks(chapter, range, output) {
   return oldParts.map((text, index) => { const h = { id: `h${index}`, index: offset, length: text.length, before: text, after: newParts[index] }; offset += text.length; return h; }).filter(h => h.before !== h.after);
 }
 function mergeHunks(chapter, hunks, ids) {
-  if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length || ids.some(id => !hunks.some(h => h.id === id))) fail("请选择有效的修改段。");
+  if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length || ids.some(id => !hunks.some(h => h.id === id))) fail("HUNKS_INVALID");
   let delta = chapter.richContent;
   const chosen = hunks.filter(h => ids.includes(h.id));
   for (const h of [...chosen].reverse()) delta = replaceRange(delta, h, h.after);
@@ -134,17 +135,17 @@ function createWorkspaceService(store, directory) {
     (chapter.revisions ||= []).push(meta); return meta;
   }
   async function readSnapshot(work, chapter, id) {
-    if (!chapter.revisions?.some(r => r.id === id)) fail("版本不存在。", 404);
+    if (!chapter.revisions?.some(r => r.id === id)) fail("REVISION_NOT_FOUND");
     const result = JSON.parse(await fs.readFile(path.join(historyDir, `${id}.json`), "utf8"));
-    if (result.workId !== work.id || result.chapter.id !== chapter.id) fail("版本不属于当前章节。", 409);
+    if (result.workId !== work.id || result.chapter.id !== chapter.id) fail("REVISION_MISMATCH");
     return result.chapter;
   }
   async function mutate(workId, chapterId, baseRevision, fn) {
     return store.transact(async db => {
       upgradeWorkspace(db);
-      const work = db.works.find(w => w.id === workId); if (!work) fail("作品不存在。", 404);
+      const work = db.works.find(w => w.id === workId); if (!work) fail("WORK_NOT_FOUND");
       const chapter = chapterId ? work.chapters.find(c => c.id === chapterId) : null;
-      if (chapterId && !chapter) fail("章节不存在。", 404);
+      if (chapterId && !chapter) fail("CHAPTER_NOT_FOUND");
       ensureVersion(chapter ? chapter.revision : work.structureRevision, baseRevision);
       const result = await fn(work, chapter, db);
       work.updatedAt = nowIso();

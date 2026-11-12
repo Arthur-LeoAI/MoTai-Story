@@ -2,7 +2,13 @@
 const { AsyncLocalStorage } = require("node:async_hooks");
 const { createId, nowIso } = require("./domain");
 const { fail } = require("./workspace");
+const { appError, toErrorResponse } = require("./errors");
 const taskContext = new AsyncLocalStorage();
+// Tasks keep the error code so any client can translate it later.
+function taskError(error) {
+  const { status, body } = toErrorResponse(error);
+  return { message: body.error.message, errorCode: body.error.code, errorParams: body.error.params, errorStatus: status };
+}
 const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
 function createTaskService(store, execute) {
   let running = false, initialized;
@@ -10,7 +16,7 @@ function createTaskService(store, execute) {
   async function init() {
     if (!initialized) initialized = store.transact(db => {
       db.tasks ||= []; db.usage ||= [];
-      for (const task of db.tasks) if (!terminal.has(task.status)) { task.status = "interrupted"; task.message = "应用已重启，请重新执行。"; }
+      for (const task of db.tasks) if (!terminal.has(task.status)) { Object.assign(task, { status: "interrupted" }, taskError(appError("TASK_INTERRUPTED_BY_RESTART"))); }
     });
     return initialized;
   }
@@ -34,18 +40,18 @@ function createTaskService(store, execute) {
           const result = await taskContext.run({ taskId: task.id, workId: task.workId, stage: "generation", signal: controller.signal, update: values => update(task.id, values) }, () => execute(task.input));
           await update(task.id, { status: "completed", result });
         } catch (error) {
-          await update(task.id, { status: controller.signal.aborted ? "cancelled" : "failed", message: error.message, errorStatus: error.status || 500 });
+          await update(task.id, { status: controller.signal.aborted ? "cancelled" : "failed", ...taskError(error) });
         } finally { controllers.delete(task.id); }
       }
     } finally { running = false; }
   }
   async function create(input) {
     await init();
-    if (!input.requestId || typeof input.requestId !== "string" || input.requestId.length > 120) fail("缺少请求标识。");
+    if (!input.requestId || typeof input.requestId !== "string" || input.requestId.length > 120) fail("REQUEST_ID_REQUIRED");
     const task = await store.transact(db => {
       const prior = db.tasks.find(t => t.requestId === input.requestId);
       if (prior) {
-        if (JSON.stringify(prior.input) !== JSON.stringify(input)) fail("请求标识已用于其他操作。", 409);
+        if (JSON.stringify(prior.input) !== JSON.stringify(input)) fail("REQUEST_ID_REUSED");
         return prior;
       }
       const task = { id: createId("task"), requestId: input.requestId, workId: input.workId, chapterId: input.chapterId, status: "queued", input, createdAt: nowIso(), updatedAt: nowIso(), draft: "" };
@@ -55,7 +61,7 @@ function createTaskService(store, execute) {
   }
   async function cancel(id) {
     await init();
-    const task = await update(id, { status: "cancelled", message: "已取消；已生成的草稿仍保留。" });
+    const task = await update(id, { status: "cancelled", ...taskError(appError("TASK_CANCELLED")) });
     controllers.get(id)?.abort(); return task;
   }
   async function get(id) { await init(); return (await store.read()).tasks.find(t => t.id === id); }
@@ -63,9 +69,9 @@ function createTaskService(store, execute) {
   async function wait(id) {
     while (true) {
       const task = await get(id);
-      if (!task) fail("任务不存在。", 404);
+      if (!task) fail("TASK_NOT_FOUND");
       if (terminal.has(task.status)) {
-        if (task.status !== "completed") fail(task.message || "任务未完成。", task.errorStatus || 409);
+        if (task.status !== "completed") throw appError(task.errorCode || "TASK_NOT_COMPLETED", task.errorParams, { status: task.errorStatus || 409 });
         return task.result;
       }
       await new Promise(resolve => setTimeout(resolve, 150));

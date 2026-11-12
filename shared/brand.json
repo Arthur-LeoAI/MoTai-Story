@@ -1,0 +1,8 @@
+{
+  "$comment": "Single source of the product name. Both names are provisional and may change before launch. Internal identifiers (package name, storage keys, data folders) use `codename`, which never changes with the brand.",
+  "codename": "novel-studio",
+  "name": {
+    "default": "Sumitale",
+    "zh-CN": "墨台"
+  }
+}

@@ -27,3 +27,4 @@ release/
 playwright-report/
 test-results/
 .pnpm-store/
+web/dist/
