@@ -1,7 +1,7 @@
 "use strict";
 const { createId, nowIso, normalizeStoryLanguage, STORY_FOCUSES } = require("./domain");
 const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = require("./studio");
-const { upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
+const { upgradeWork, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
 const { chapterDerivedFactIds } = require("./canon-model");
 function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
@@ -33,8 +33,8 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
       if (req.method === "GET") return result(res, p[2] ? { task: await tasks.get(p[2]) } : { tasks: await tasks.list(url.searchParams.get("workId")) });
     }
     if (p[1] === "usage" && req.method === "GET") {
-      const db = await readDb(); const entries = db.usage.filter(u => !url.searchParams.get("workId") || u.workId === url.searchParams.get("workId"));
-      return result(res, { entries, dailyTokenLimit: db.settings.dailyTokenLimit, totalTokens: entries.reduce((n, u) => n + (u.totalTokens || 0), 0), unknownCalls: entries.filter(u => u.totalTokens === undefined).length });
+      await ensureMigrated(); const usage = await store.readRecords("usage"); const entries = usage.filter(u => !url.searchParams.get("workId") || u.workId === url.searchParams.get("workId"));
+      return result(res, { entries, dailyTokenLimit: (await store.readDocument("settings", "dailyTokenLimit")) ?? 200000, totalTokens: entries.reduce((n, u) => n + (u.totalTokens || 0), 0), unknownCalls: entries.filter(u => u.totalTokens === undefined).length });
     }
     if (p[1] === "imports" && req.method === "POST") {
       const body = await readBody(req, 30 * 1024 * 1024); await ensureMigrated();
@@ -42,13 +42,12 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
       if (p.length === 2) {
         const parsed = await parseManuscript(body);
         const preview = { ...parsed, id: createId("import"), createdAt: nowIso() };
-        await store.transact(db => { db.imports.push(preview); });
+        await store.transactRecords("imports", imports => { imports.push(preview); });
         return result(res, { preview });
       }
       if (p[3] === "confirm") {
-        const saved = await store.transact(async db => {
-          const preview = db.imports.find(i => i.id === p[2]); if (!preview) fail("IMPORT_PREVIEW_NOT_FOUND");
-          if (preview.workId) return { work: db.works.find(w => w.id === preview.workId) };
+        const preview = (await store.readRecords("imports")).find(i => i.id === p[2]); if (!preview) fail("IMPORT_PREVIEW_NOT_FOUND");
+        if (preview.workId) return result(res, { work: await store.getWork(preview.workId) }, 201);
           const chapters = body.chapters || preview.chapters.map((chapter, sourceIndex) => ({ ...chapter, sourceIndex }));
           if (!Array.isArray(chapters) || !chapters.length || chapters.length > 10000) fail("IMPORT_CHAPTERS_INVALID");
           if (chapters.reduce((n, c) => n + String(c.content || "").length, 0) > 1000000) fail("IMPORT_TEXT_TOO_LARGE");
@@ -64,10 +63,19 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
             const delta = original?.richContent && c.content === original.content ? normalizeRichContent(original.richContent) : plainTextToRichContent(String(c.content || ""));
             return { id: createId("chapter"), title: String(c.title || (english ? "Untitled chapter" : "未命名章节")).slice(0, 100), richContent: delta, content: richContentToMarkdown(delta), createdAt: timestamp, updatedAt: timestamp, status: "draft" };
           }) };
-          db.works.push(work); upgradeWorkspace(db);
-          for (const chapter of work.chapters) await service.snapshot(work, chapter, "import");
-          preview.workId = work.id; return { work };
-        }); return result(res, saved, 201);
+          // The preview is claimed first, so confirming twice cannot create two stories.
+          const claim = () => store.transactRecords("imports", imports => { const current = imports.find(i => i.id === p[2]); if (!current) fail("IMPORT_PREVIEW_NOT_FOUND"); current.workId ||= work.id; return current.workId; });
+          const claimedBy = await claim();
+          if (claimedBy !== work.id) return result(res, { work: await store.getWork(claimedBy) }, 201);
+          try {
+            upgradeWork(work);
+            for (const chapter of work.chapters) await service.snapshot(work, chapter, "import");
+            const [stored] = await store.saveWorks({ upserts: [{ work, expectedVersion: null }] });
+            return result(res, { work: stored }, 201);
+          } catch (error) {
+            await store.transactRecords("imports", imports => { const current = imports.find(i => i.id === p[2]); if (current?.workId === work.id) current.workId = ""; });
+            throw error;
+          }
       }
     }
     if (p[1] !== "works" || !p[2]) return false;

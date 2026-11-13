@@ -1643,14 +1643,14 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
   if (ctx?.signal) signal = signal ? AbortSignal.any([signal, ctx.signal]) : ctx.signal;
   const usageId = createId("usage"), started = Date.now();
   const reserved = JSON.stringify(requestBody).length + Number(requestBody.max_tokens || requestBody.max_output_tokens || 0);
-  await dataStore.transact(db => {
-    db.usage ||= []; db.settings ||= { dailyTokenLimit: 200000 };
+  const dailyTokenLimit = (await dataStore.readDocument("settings", "dailyTokenLimit")) ?? 200000;
+  await dataStore.transactRecords("usage", usage => {
     const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
-    const used = db.usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
-    if (used + reserved > db.settings.dailyTokenLimit) fail("AI_DAILY_LIMIT_REACHED");
-    db.usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
+    const used = usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
+    if (used + reserved > dailyTokenLimit) fail("AI_DAILY_LIMIT_REACHED");
+    usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
   });
-  const finishUsage = async values => dataStore.transact(db => { const u = db.usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
+  const finishUsage = async values => dataStore.transactRecords("usage", usage => { const u = usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
   let response;
   try {
     response = await fetch(url, {

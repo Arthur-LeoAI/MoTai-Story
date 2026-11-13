@@ -33,21 +33,19 @@ function validatePatch(patch) {
 function createPreferenceRepository(store, { now = () => new Date().toISOString() } = {}) {
   async function get(userId) {
     if (!userId) throw appError("AUTH_REQUIRED");
-    const db = await store.read();
-    return normalizePreferences(db.userPreferences?.[userId]);
+    return normalizePreferences((await store.readDocument("userPreferences", userId)) || {});
   }
 
   async function update(userId, patch) {
     if (!userId) throw appError("AUTH_REQUIRED");
     const changes = validatePatch(patch);
-    return store.transact((db) => {
-      db.userPreferences ||= {};
+    const stored = await store.transactDocument("userPreferences", userId, (current) => {
       const { welcomed, ...rest } = changes;
-      const previous = normalizePreferences(db.userPreferences[userId]);
+      const previous = normalizePreferences(current || {});
       const next = { ...previous, ...rest, welcomedAt: welcomed ? previous.welcomedAt || now() : previous.welcomedAt, ownerId: userId, updatedAt: now() };
-      db.userPreferences[userId] = next;
-      return normalizePreferences(next);
+      return next;
     });
+    return normalizePreferences(stored);
   }
 
   return { get, update };

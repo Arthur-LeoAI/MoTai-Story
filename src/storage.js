@@ -28,6 +28,9 @@ async function renameWithRetry(from, to, attempts = 8) {
   }
 }
 
+const RECORD_COLLECTIONS = Object.freeze(["tasks", "usage", "imports", "receipts"]);
+const DOCUMENT_COLLECTIONS = Object.freeze(["settings", "userPreferences"]);
+
 function createJsonStore(filePath) {
   const resolvedFile = path.resolve(filePath);
   let writeTail = Promise.resolve();
@@ -126,6 +129,51 @@ function createJsonStore(filePath) {
     });
   }
 
+  // Data that is not part of a story. Records are lists of objects with an
+  // `id` (tasks, usage entries, import previews); documents are single values
+  // found by a key (a user's preferences, a setting). A database backend
+  // keeps each of these in its own table.
+  function recordsName(name) {
+    if (!RECORD_COLLECTIONS.includes(name)) throw new TypeError(`Unknown record collection: ${name}`);
+    return name;
+  }
+  function documentsName(name) {
+    if (!DOCUMENT_COLLECTIONS.includes(name)) throw new TypeError(`Unknown document collection: ${name}`);
+    return name;
+  }
+
+  async function readRecords(name) {
+    const database = await read();
+    return Array.isArray(database[recordsName(name)]) ? database[name] : [];
+  }
+
+  // Atomic change of one collection. `mutator(records)` changes the list in
+  // place; whatever it returns is the result.
+  function transactRecords(name, mutator) {
+    recordsName(name);
+    return transact((database) => {
+      if (!Array.isArray(database[name])) database[name] = [];
+      return mutator(database[name]);
+    });
+  }
+
+  async function readDocument(name, key) {
+    const database = await read();
+    return database[documentsName(name)]?.[key] ?? null;
+  }
+
+  // Atomic change of one document. `mutator(current)` gets the stored value
+  // (null when there is none) and returns the value to store.
+  function transactDocument(name, key, mutator) {
+    documentsName(name);
+    return transact(async (database) => {
+      if (!database[name] || typeof database[name] !== "object") database[name] = {};
+      const next = await mutator(database[name][key] ?? null);
+      database[name][key] = next;
+      return next;
+    });
+  }
+
   // Saves whole stories that were read earlier and changed in memory. Each
   // entry names the rowVersion it was read at (null for a new story); if any
   // of them has moved since, nothing is saved.
@@ -158,11 +206,17 @@ function createJsonStore(filePath) {
     listWorks,
     getWork,
     transactWork,
-    saveWorks
+    saveWorks,
+    readRecords,
+    transactRecords,
+    readDocument,
+    transactDocument
   };
 }
 
 module.exports = {
+  DOCUMENT_COLLECTIONS,
+  RECORD_COLLECTIONS,
   createJsonStore,
   normalizeDatabase
 };

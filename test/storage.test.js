@@ -109,3 +109,35 @@ test("saveWorks: every stored change moves a story's rowVersion, and a stale sav
   assert.deepEqual((await store.read()).works.map((work) => work.id), ["b"]);
   await fsp.rm(directory, { recursive: true, force: true });
 });
+
+test("records and documents outside stories are read and changed by collection", async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "motai-store-records-"));
+  const store = createJsonStore(path.join(directory, "db.json"));
+
+  assert.deepEqual(await store.readRecords("tasks"), []);
+  assert.equal(await store.readDocument("userPreferences", "u1"), null);
+
+  const added = await store.transactRecords("tasks", (tasks) => { tasks.push({ id: "t1", status: "queued" }); return tasks.length; });
+  assert.equal(added, 1);
+  await store.transactRecords("tasks", (tasks) => { tasks[0].status = "completed"; });
+  assert.deepEqual(await store.readRecords("tasks"), [{ id: "t1", status: "completed" }]);
+  assert.deepEqual(await store.readRecords("usage"), []);
+  await assert.rejects(store.transactRecords("tasks", (tasks) => { tasks.length = 0; throw new Error("stop"); }), /stop/);
+  assert.equal((await store.readRecords("tasks")).length, 1);
+
+  const saved = await store.transactDocument("userPreferences", "u1", (current) => ({ ...(current || {}), theme: "candle" }));
+  assert.deepEqual(saved, { theme: "candle" });
+  await store.transactDocument("userPreferences", "u2", () => ({ theme: "paper" }));
+  await store.transactDocument("settings", "dailyTokenLimit", () => 5);
+  assert.deepEqual(await store.readDocument("userPreferences", "u1"), { theme: "candle" });
+  assert.equal(await store.readDocument("settings", "dailyTokenLimit"), 5);
+  // The file keeps the layout older code and backups expect.
+  const file = await store.read();
+  assert.deepEqual(file.userPreferences, { u1: { theme: "candle" }, u2: { theme: "paper" } });
+  assert.deepEqual(file.settings, { dailyTokenLimit: 5 });
+
+  assert.throws(() => store.transactRecords("works", () => {}), TypeError);
+  await assert.rejects(store.readRecords("secrets"), TypeError);
+  await assert.rejects(store.readDocument("tasks", "x"), TypeError);
+  await fsp.rm(directory, { recursive: true, force: true });
+});
