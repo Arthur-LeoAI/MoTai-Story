@@ -3,6 +3,7 @@ const { createId, nowIso, normalizeStoryLanguage, STORY_FOCUSES } = require("./d
 const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = require("./studio");
 const { upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
+const { chapterDerivedFactIds } = require("./canon-model");
 function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
   const result = (res, value, status = 200) => { sendJson(res, status, value); return true; };
   return async function handle(req, res, url) {
@@ -56,7 +57,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
           // the writer chose, and open in Write (they already have text).
           const language = normalizeStoryLanguage(body.language);
           const english = language === "en";
-          const work = { id: createId("work"), ownerId: req.user?.id || "local", language, focus: STORY_FOCUSES.includes(body.focus) ? body.focus : "write", title: String(body.title || preview.title || (english ? "Imported story" : "导入作品")).slice(0, 100), genre: english ? "" : "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
+          const work = { id: createId("work"), ownerId: req.user?.id || "local", language, focus: STORY_FOCUSES.includes(body.focus) ? body.focus : "write", title: String(body.title || preview.title || (english ? "Imported story" : "导入作品")).slice(0, 100), genre: english ? "" : "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], relations: [], events: [], threads: [], setups: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
             // Only reuse the server-parsed Delta. Titles are editable and not unique;
             // neither a title lookup nor a client-supplied Delta establishes provenance.
             const original = Number.isInteger(c.sourceIndex) ? preview.chapters[c.sourceIndex] : null;
@@ -93,6 +94,9 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
           if (body.chapterIds.length !== w.chapters.length || new Set(body.chapterIds).size !== w.chapters.length || body.chapterIds.some(id => !w.chapters.some(c => c.id === id))) fail("CHAPTER_ORDER_INVALID");
           w.chapters = body.chapterIds.map(id => w.chapters.find(c => c.id === id));
           for (const c of w.chapters) invalidateDependencies(w, { chapterId: c.id, reason: "章节顺序变化" });
+          // Events and setups become known in the chapter that tells them, so
+          // a new chapter order changes what their derived facts say.
+          invalidateDependencies(w, { factIds: chapterDerivedFactIds(w.canon, w.chapters.map(c => c.id)), reason: "章节顺序变化" });
         }
       }));
     }
@@ -192,7 +196,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
     if (p.length === 5 && req.method === "DELETE") {
       const body = await readBody(req);
       return result(res, await service.mutate(work.id, chapter.id, body.baseRevision, async (w, c) => {
-        await service.snapshot(w, c, "delete"); invalidateDependencies(w, { chapterId: c.id, reason: "章节删除" });
+        await service.snapshot(w, c, "delete"); invalidateDependencies(w, { chapterId: c.id, factIds: chapterDerivedFactIds(w.canon, [c.id]), reason: "章节删除" });
         c.deletedAt = nowIso(); w.deletedChapters.push(c); w.chapters = w.chapters.filter(x => x.id !== c.id);
       }));
     }

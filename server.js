@@ -45,6 +45,7 @@ const {
   applyCanonProposal,
   canAcceptGeneration,
   hashChapterContent,
+  normalizeCanon,
   normalizeCanonProposal,
   normalizeChapterMemory,
   normalizeConflict,
@@ -72,6 +73,9 @@ const {
 const { appError, toErrorResponse } = require("./src/errors");
 const { authenticate } = require("./src/auth");
 const { createPreferenceRepository } = require("./src/preferences");
+const { continuityFacts, describeCanon } = require("./src/canon-model");
+const { createCanonRepository } = require("./src/canon-store");
+const { createCanonApi } = require("./src/canon-api");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -113,6 +117,7 @@ const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
 const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
 const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
+const canonApi = createCanonApi({ repository: createCanonRepository(dataStore), readDb, readBody, sendJson });
 let migrationTask;
 const databaseBaselines = new WeakMap();
 let automaticBackupTask = null;
@@ -2347,7 +2352,7 @@ async function reviewChapterTask(input) {
   const task = taskContext.getStore(); if (task) { task.stage = "review"; await task.update({ status: "checking" }); }
   const context = selectContinuityContext(work, chapter.id);
   const scene = chapter.scenes?.[0];
-  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
   const analysis = await analyzeGeneratedText(work, { ...chapter, content: "" }, chapter.content, context);
   task?.signal.throwIfAborted();
   return workspaceService.mutate(work.id, chapter.id, input.baseRevision, (w, c) => {
@@ -2386,7 +2391,7 @@ async function createConstrainedGeneration(body) {
 
   const mode = normalizeText(body.mode) || "continue";
   const context = selectContinuityContext(work, chapter.id, { maxFacts: 240, recentChapterCount: 4 });
-  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
   if (Array.isArray(body.excludeFactIds)) context.canonFacts = context.canonFacts.filter(f => !body.excludeFactIds.includes(f.id) || f.strength === "hard");
   context.canonFactIds = context.canonFacts.map(f => f.id);
   const baseContentHash = hashChapterContent(chapter);
@@ -2505,7 +2510,7 @@ function buildChatSystemPrompt(work) {
       `Premise: ${work.premise || "none yet"}`,
       "",
       "Story material so far:",
-      englishStoryMaterial(work.storyBible) || "Nothing yet. Start by helping the author say the idea clearly."
+      [describeCanon(work), englishStoryMaterial(work.storyBible)].filter(Boolean).join("\n") || "Nothing yet. Start by helping the author say the idea clearly."
     ].join("\n");
   }
   const storyBible = compactStoryBible(work.storyBible);
@@ -2520,7 +2525,7 @@ function buildChatSystemPrompt(work) {
     `创作简介：${work.premise || "暂无"}`,
     "",
     "当前创作资料：",
-    storyBible || "暂时为空。请先帮助作者把灵感说清楚。"
+    [describeCanon(work), storyBible].filter(Boolean).join("\n") || "暂时为空。请先帮助作者把灵感说清楚。"
   ].join("\n");
 }
 
@@ -2995,7 +3000,7 @@ function createWorkRecord(body, ownerId) {
     coverLogline: normalizeText(body.coverLogline),
     cover: DEFAULT_COVER_PATH,
     coverHistory: [],
-    canon: { version: 1, status: "empty", entities: [], facts: [] },
+    canon: normalizeCanon(),
     generationRecords: [],
     canonProposals: [],
     notes: "",
@@ -3043,6 +3048,7 @@ function createSampleWork(language, ownerId) {
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (await handleAccountApi(req, res, parts)) return;
+  if (await canonApi(req, res, url)) return;
   if (await betaApi(req, res, url)) return;
 
   if (parts.length === 1 && parts[0] === "api") {

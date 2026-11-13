@@ -10,6 +10,11 @@ For the session that starts phase 2. Read this first, then the files listed belo
 - The new interface (`web/`, served at `/app/`) is the front door at `/`. The legacy workspace (`public/`) stays at `/classic/` until the features only it has are rebuilt; the list and their planned homes are in `docs/PHASE1_PLAN.md`, section "Features still only in the legacy workspace".
 - Working agreement: small commits on the branch; ask the user before pushing and before opening or merging a PR. Commits pushed to the personal repo must use the GitHub noreply address (already set as the worktree's repo-local `user.email`); GitHub rejects the private one.
 
+## Progress
+
+- 2026-11-13: data model v6 is in (`docs/DATA_MODEL_V6.md`): structured objects in canon, derived facts, routes, revisions and invalidation. No interface yet.
+- 2026-11-13: decided to replace `data/db.json` with Supabase (plan section 9, row 6). Next after v6: make the storage interface per-story, then connect.
+
 ## What phase 2 is
 
 `docs/SUMITALE_PLAN.md`, section 8: "Shape: data model v6 and migration, character cards, relationship graph, capture from conversation. Write: tell it plainly → prose, scene brief, extract characters and events from an imported manuscript."

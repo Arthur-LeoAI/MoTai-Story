@@ -2,10 +2,13 @@ const crypto = require("node:crypto");
 
 const { upgradeWorkspace } = require("./workspace");
 const { appError } = require("./errors");
-const DATABASE_SCHEMA_VERSION = 5;
+const { CANON_COLLECTIONS, normalizeCanonObjects, normalizeEntity, repairCanonReferences } = require("./canon-model");
+// 6: canon holds entity cards, relations, events, threads and setups
+// (src/canon-model.js). Older data upgrades by gaining empty defaults; the
+// free-text story material in `work.storyBible` is kept as it is.
+const DATABASE_SCHEMA_VERSION = 6;
 const CONTINUITY_VERSION = 1;
 
-const ENTITY_TYPES = new Set(["character", "location", "event", "faction", "item", "rule", "foreshadowing"]);
 const FACT_CATEGORIES = new Set([
   "identity",
   "life_status",
@@ -67,17 +70,7 @@ function idList(value, limit = 500) {
 }
 
 function normalizeCanonEntity(value) {
-  const source = isObject(value) ? value : {};
-  return {
-    id: id(source.id),
-    type: enumValue(source.type, ENTITY_TYPES, "character"),
-    name: text(source.name, 160),
-    aliases: Array.isArray(source.aliases)
-      ? [...new Set(source.aliases.map((item) => text(item, 160)).filter(Boolean))].slice(0, 30)
-      : [],
-    createdAt: dateValue(source.createdAt),
-    updatedAt: dateValue(source.updatedAt)
-  };
+  return normalizeEntity(value);
 }
 
 function normalizeCanonFact(value) {
@@ -104,16 +97,14 @@ function normalizeCanonFact(value) {
 
 function normalizeCanon(value) {
   const source = isObject(value) ? value : {};
-  const entities = Array.isArray(source.entities)
-    ? source.entities.map(normalizeCanonEntity).filter((item) => item.name)
-    : [];
+  const objects = normalizeCanonObjects(source);
   const facts = Array.isArray(source.facts)
     ? source.facts.map(normalizeCanonFact).filter((item) => item.predicate || item.value || item.objectId)
     : [];
   return {
     version: CONTINUITY_VERSION,
     status: enumValue(source.status, CANON_STATUSES, facts.length ? "draft" : "empty"),
-    entities,
+    ...objects,
     facts
   };
 }
@@ -421,12 +412,16 @@ function upgradeDatabase(value, options = {}) {
       canonProposals: normalized.canonProposals
     };
     work.id = stableId(work.id, "work");
-    const entityIds = new Set();
-    work.canon.entities = work.canon.entities.map((entity) => {
-      const entityId = stableId(entity.id, "entity");
-      entityIds.add(entityId);
-      return { ...entity, id: entityId, createdAt: entity.createdAt || currentTime, updatedAt: entity.updatedAt || currentTime };
-    });
+    for (const collection of CANON_COLLECTIONS) {
+      const prefix = collection === "entities" ? "entity" : collection.slice(0, -1);
+      work.canon[collection] = work.canon[collection].map((item) => ({
+        ...item,
+        id: stableId(item.id, prefix),
+        createdAt: item.createdAt || currentTime,
+        updatedAt: item.updatedAt || currentTime
+      }));
+    }
+    repairCanonReferences(work.canon);
     work.canon.facts = work.canon.facts.map((fact) => ({
       ...fact,
       id: stableId(fact.id, "fact"),
