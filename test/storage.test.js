@@ -55,3 +55,25 @@ test("JSON store preserves schema version and transactions do not lose concurren
   assert.equal(database.schemaVersion, 2);
   assert.deepEqual(database.works.map((work) => work.id), ["work-a", "work-b"]);
 });
+
+test("story-by-story access: list by owner, get one, and change one atomically", async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "motai-store-works-"));
+  const store = createJsonStore(path.join(directory, "db.json"));
+  await store.write({ schemaVersion: 2, works: [{ id: "mine", ownerId: "u1", title: "A" }, { id: "legacy", title: "B" }, { id: "theirs", ownerId: "u2", title: "C" }] });
+
+  assert.deepEqual((await store.listWorks("u1")).map((work) => work.id), ["mine"]);
+  assert.deepEqual((await store.listWorks("local")).map((work) => work.id), ["legacy"]);
+  assert.equal((await store.getWork("theirs")).title, "C");
+  assert.equal(await store.getWork("missing"), null);
+
+  const result = await store.transactWork("mine", (work) => { work.title = "A2"; return work.title; });
+  assert.equal(result, "A2");
+  assert.equal((await store.getWork("mine")).title, "A2");
+  assert.equal((await store.getWork("theirs")).title, "C");
+
+  await assert.rejects(store.transactWork("missing", () => {}), { code: "WORK_NOT_FOUND" });
+  await assert.rejects(store.transactWork("mine", (work) => { work.title = "lost"; throw new Error("stop"); }), /stop/);
+  assert.equal((await store.getWork("mine")).title, "A2");
+  assert.throws(() => store.transactWork("mine"), TypeError);
+  await fsp.rm(directory, { recursive: true, force: true });
+});

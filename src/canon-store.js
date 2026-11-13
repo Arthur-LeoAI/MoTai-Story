@@ -142,18 +142,12 @@ function createCanonRepository(store, { now = nowIso, makeId = createId } = {}) 
     return name;
   }
 
-  function findWork(db, workId, user) {
-    const work = (db.works || []).find((candidate) => candidate.id === workId);
-    if (!work) throw appError("WORK_NOT_FOUND");
-    assertOwner(user, work);
-    return work;
-  }
-
   async function mutate(workId, user, fn) {
     if (!user) throw appError("AUTH_REQUIRED");
     let work;
-    const result = await store.transact((db) => {
-      work = findWork(db, workId, user);
+    const result = await store.transactWork(workId, (stored) => {
+      work = stored;
+      assertOwner(user, work);
       work.chapters ||= [];
       work.canon = normalizeCanon(work.canon);
       const value = fn(work);
@@ -166,7 +160,10 @@ function createCanonRepository(store, { now = nowIso, makeId = createId } = {}) 
 
   async function read(workId, user) {
     if (!user) throw appError("AUTH_REQUIRED");
-    return publicCanon(findWork(await store.read(), workId, user));
+    const work = await store.getWork(workId);
+    if (!work) throw appError("WORK_NOT_FOUND");
+    assertOwner(user, work);
+    return publicCanon(work);
   }
 
   async function create(workId, user, collectionName, body) {

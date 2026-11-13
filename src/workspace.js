@@ -28,25 +28,33 @@ function normalizeScene(value = {}, length = 1) {
     needsRelocation: Boolean(value.needsRelocation)
   };
 }
+// Defaults of one story. Storage works story by story (see src/storage.js), so
+// everything a story needs is set here, not on the database as a whole.
+function upgradeWork(work, version = 5) {
+  work.structureRevision ||= 1; work.canonRevision ||= 1;
+  work.volumes ||= []; work.deletedChapters ||= []; work.writingPreferences ||= {};
+  for (const chapter of [...(work.chapters || []), ...work.deletedChapters]) {
+    chapter.revision ||= 1; chapter.revisions ||= []; chapter.volumeId ||= "";
+    chapter.richContent ||= plainTextToRichContent(chapter.content || "");
+    if (version >= 4) chapter.scenes ||= [normalizeScene({ title: chapter.title || "默认场景", end: deltaLength(chapter.richContent) - 1 }, deltaLength(chapter.richContent))];
+  }
+  return work;
+}
 function upgradeWorkspace(db, version = 5) {
   db.tasks ||= []; db.usage ||= []; db.imports ||= []; db.receipts ||= [];
   db.settings ||= { dailyTokenLimit: 200000 };
-  for (const work of db.works) {
-    work.structureRevision ||= 1; work.canonRevision ||= 1;
-    work.volumes ||= []; work.deletedChapters ||= []; work.writingPreferences ||= {};
-    for (const chapter of [...(work.chapters || []), ...work.deletedChapters]) {
-      chapter.revision ||= 1; chapter.revisions ||= []; chapter.volumeId ||= "";
-      chapter.richContent ||= plainTextToRichContent(chapter.content || "");
-      if (version >= 4) chapter.scenes ||= [normalizeScene({ title: chapter.title || "默认场景", end: deltaLength(chapter.richContent) - 1 }, deltaLength(chapter.richContent))];
-    }
-  }
+  for (const work of db.works) upgradeWork(work, version);
   return db;
 }
 function bumpVersions(previous, next) {
   upgradeWorkspace(next);
   for (const work of next.works) {
     const old = previous.works.find(w => w.id === work.id);
-    if (!old) continue;
+    if (old) bumpWorkVersions(old, work);
+  }
+}
+// Moves the revisions of one story by comparing it with its stored version.
+function bumpWorkVersions(old, work) {
     const structure = w => ({ title: w.title, premise: w.premise, genre: w.genre, notes: w.notes, volumes: w.volumes, prefs: w.writingPreferences, target: w.targetCharacters, chapters: w.chapters.map(c => ({ id: c.id, title: c.title, volumeId: c.volumeId, scenes: c.scenes })) });
     work.structureRevision = (old.structureRevision || 1) + (same(structure(old), structure(work)) ? 0 : 1);
     work.canonRevision = (old.canonRevision || 1) + (same([old.canon, old.storyBible], [work.canon, work.storyBible]) ? 0 : 1);
@@ -59,7 +67,6 @@ function bumpVersions(previous, next) {
         if (chapter.chapterMemory) chapter.chapterMemory.status = "stale";
       }
     }
-  }
 }
 // Slice Delta operations without flattening formatting or embedded objects.
 function sliceDelta(delta, start, end) {
@@ -141,13 +148,12 @@ function createWorkspaceService(store, directory) {
     return result.chapter;
   }
   async function mutate(workId, chapterId, baseRevision, fn) {
-    return store.transact(async db => {
-      upgradeWorkspace(db);
-      const work = db.works.find(w => w.id === workId); if (!work) fail("WORK_NOT_FOUND");
+    return store.transactWork(workId, async work => {
+      upgradeWork(work);
       const chapter = chapterId ? work.chapters.find(c => c.id === chapterId) : null;
       if (chapterId && !chapter) fail("CHAPTER_NOT_FOUND");
       ensureVersion(chapter ? chapter.revision : work.structureRevision, baseRevision);
-      const result = await fn(work, chapter, db);
+      const result = await fn(work, chapter);
       work.updatedAt = nowIso();
       if (chapter) chapter.updatedAt = nowIso();
       return result || { work, chapter };
@@ -155,4 +161,4 @@ function createWorkspaceService(store, directory) {
   }
   return { snapshot, readSnapshot, mutate, historyDir };
 }
-module.exports = { upgradeWorkspace, bumpVersions, createWorkspaceService, normalizeScene, ensureVersion, transformScenes, deltaLength, makeHunks, mergeHunks, replaceRange, fail };
+module.exports = { upgradeWork, upgradeWorkspace, bumpVersions, bumpWorkVersions, createWorkspaceService, normalizeScene, ensureVersion, transformScenes, deltaLength, makeHunks, mergeHunks, replaceRange, fail };

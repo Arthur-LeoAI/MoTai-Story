@@ -97,11 +97,43 @@ function createJsonStore(filePath) {
     return operation;
   }
 
+  // Story-by-story access. New code uses these instead of `read` / `transact`,
+  // which hand over the whole database: a database backend can implement
+  // these three as single-row operations.
+
+  // The stories that belong to one user. Stories saved before ownership
+  // existed belong to the local user.
+  async function listWorks(ownerId) {
+    const database = await read();
+    return database.works.filter((work) => (work.ownerId || "local") === ownerId);
+  }
+
+  async function getWork(workId) {
+    const database = await read();
+    return database.works.find((work) => work.id === workId) || null;
+  }
+
+  // Atomic read-modify-write of one story. `mutator(work)` changes the story
+  // in place; whatever it returns is the result. Throwing changes nothing.
+  function transactWork(workId, mutator) {
+    if (typeof mutator !== "function") {
+      throw new TypeError("transactWork requires a mutator function");
+    }
+    return transact((database) => {
+      const work = database.works.find((candidate) => candidate.id === workId);
+      if (!work) throw appError("WORK_NOT_FOUND");
+      return mutator(work);
+    });
+  }
+
   return {
     filePath: resolvedFile,
     read,
     write,
-    transact
+    transact,
+    listWorks,
+    getWork,
+    transactWork
   };
 }
 
