@@ -126,6 +126,30 @@ function createJsonStore(filePath) {
     });
   }
 
+  // Saves whole stories that were read earlier and changed in memory. Each
+  // entry names the rowVersion it was read at (null for a new story); if any
+  // of them has moved since, nothing is saved.
+  function saveWorks({ upserts = [], removals = [] } = {}) {
+    return transact((database) => {
+      const storedVersion = (workId) => database.works.find((work) => work.id === workId)?.rowVersion ?? null;
+      for (const { work, expectedVersion } of upserts) {
+        if (storedVersion(work.id) !== (expectedVersion ?? null)) throw appError("WORK_UPDATED_ELSEWHERE");
+      }
+      for (const { id, expectedVersion } of removals) {
+        if (storedVersion(id) !== (expectedVersion ?? null)) throw appError("WORK_UPDATED_ELSEWHERE");
+      }
+      database.works = database.works.filter((work) => !removals.some((removal) => removal.id === work.id));
+      for (const { work } of upserts) {
+        const index = database.works.findIndex((candidate) => candidate.id === work.id);
+        if (index < 0) database.works.unshift(work);
+        else database.works[index] = work;
+      }
+      // The same objects, which carry their new revisions once the
+      // transaction has ended.
+      return upserts.map(({ work }) => work);
+    });
+  }
+
   return {
     filePath: resolvedFile,
     read,
@@ -133,7 +157,8 @@ function createJsonStore(filePath) {
     transact,
     listWorks,
     getWork,
-    transactWork
+    transactWork,
+    saveWorks
   };
 }
 

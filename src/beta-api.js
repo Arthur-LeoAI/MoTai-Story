@@ -4,16 +4,16 @@ const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = 
 const { upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
 const { chapterDerivedFactIds } = require("./canon-model");
-function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
+function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
   const result = (res, value, status = 200) => { sendJson(res, status, value); return true; };
   return async function handle(req, res, url) {
     const p = url.pathname.split("/").filter(Boolean);
     if (p[0] !== "api") return false;
     if (p[1] === "tasks") {
-      await readDb();
+      await ensureMigrated();
       if (req.method === "POST" && p.length === 2) {
-        const body = await readBody(req); const db = await store.read();
-        const work = db.works.find(w => w.id === body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
+        const body = await readBody(req);
+        const work = await store.getWork(body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
         if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, body.baseRevision);
         return result(res, { task: await tasks.create(body) }, 202);
       }
@@ -37,7 +37,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       return result(res, { entries, dailyTokenLimit: db.settings.dailyTokenLimit, totalTokens: entries.reduce((n, u) => n + (u.totalTokens || 0), 0), unknownCalls: entries.filter(u => u.totalTokens === undefined).length });
     }
     if (p[1] === "imports" && req.method === "POST") {
-      const body = await readBody(req, 30 * 1024 * 1024); await readDb();
+      const body = await readBody(req, 30 * 1024 * 1024); await ensureMigrated();
       const { parseManuscript } = require("./manuscript-import");
       if (p.length === 2) {
         const parsed = await parseManuscript(body);
@@ -71,7 +71,7 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       }
     }
     if (p[1] !== "works" || !p[2]) return false;
-    const db = await readDb(), work = db.works.find(w => w.id === p[2]);
+    const work = await readWork(p[2]);
     if (!work) return false;
     if (p[3] === "export" && req.method === "GET" && url.searchParams.get("format") === "docx") {
       const { createDocx } = require("./manuscript-import"); const buffer = await createDocx(work);

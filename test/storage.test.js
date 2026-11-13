@@ -77,3 +77,35 @@ test("story-by-story access: list by owner, get one, and change one atomically",
   assert.throws(() => store.transactWork("mine"), TypeError);
   await fsp.rm(directory, { recursive: true, force: true });
 });
+
+test("saveWorks: every stored change moves a story's rowVersion, and a stale save is refused whole", async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "motai-store-save-"));
+  const store = createJsonStore(path.join(directory, "db.json"));
+  await store.write({ schemaVersion: 6, works: [] });
+
+  const [created] = await store.saveWorks({ upserts: [{ work: { id: "a", title: "A", chapters: [] }, expectedVersion: null }] });
+  assert.equal(created.rowVersion, 1);
+  await assert.rejects(store.saveWorks({ upserts: [{ work: { id: "a", title: "again", chapters: [] }, expectedVersion: null }] }), { code: "WORK_UPDATED_ELSEWHERE" });
+
+  // Two readers of version 1; the first save wins.
+  const first = await store.getWork("a"), second = await store.getWork("a");
+  const [saved] = await store.saveWorks({ upserts: [{ work: { ...first, title: "A1" }, expectedVersion: first.rowVersion }] });
+  assert.equal(saved.rowVersion, 2);
+  await store.saveWorks({ upserts: [{ work: { id: "b", title: "B", chapters: [] }, expectedVersion: null }] });
+  await assert.rejects(store.saveWorks({
+    upserts: [{ work: { id: "c", title: "C", chapters: [] }, expectedVersion: null }, { work: { ...second, title: "A2" }, expectedVersion: second.rowVersion }]
+  }), { code: "WORK_UPDATED_ELSEWHERE" });
+  assert.equal(await store.getWork("c"), null, "nothing of a refused save is stored");
+  assert.equal((await store.getWork("a")).title, "A1");
+
+  // A change made through a transaction moves the version too; an unchanged one does not.
+  await store.transactWork("a", () => {});
+  assert.equal((await store.getWork("a")).rowVersion, 2);
+  await store.transactWork("a", (work) => { work.notes = "x"; });
+  assert.equal((await store.getWork("a")).rowVersion, 3);
+
+  await assert.rejects(store.saveWorks({ removals: [{ id: "a", expectedVersion: 2 }] }), { code: "WORK_UPDATED_ELSEWHERE" });
+  await store.saveWorks({ removals: [{ id: "a", expectedVersion: 3 }] });
+  assert.deepEqual((await store.read()).works.map((work) => work.id), ["b"]);
+  await fsp.rm(directory, { recursive: true, force: true });
+});

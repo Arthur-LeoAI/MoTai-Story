@@ -39,6 +39,11 @@ No global pnpm on the dev machine: use `npx -y pnpm@10 install`.
 
 - `src/auth.js` → `authenticate(req)` is the single entry point; every `/api` request passes through it and handlers read `req.user`. In development it is always the user `local`.
 - New data records its owner (`ownerId`) and is read and written only through the storage layer (`src/storage.js`; see `src/preferences.js` for the pattern). No new code reads or writes JSON files directly.
+- Stories are read and written one at a time, so that a database can replace `data/db.json` (decided 2026-11-13: Supabase, i.e. hosted PostgreSQL; plan section 9):
+  - `store.getWork(id)`, `store.listWorks(ownerId)`, `store.transactWork(id, fn)` for a change made inside one transaction, and `store.saveWorks({ upserts, removals })` for stories read earlier and changed in memory.
+  - Every story has a `rowVersion` that storage moves on each stored change. `saveWorks` names the version that was read; if it has moved, nothing is saved (`WORK_UPDATED_ELSEWHERE`).
+  - In `server.js`: `readWorkDb(workId)` and `readOwnerDb(ownerId)` read a unit of stories, `writeDb(unit)` saves the ones that changed, `transactStoredWork(workId, fn)` changes one in a transaction. `readDb()` (everything) is only for backup and restore.
+  - Still on whole-database transactions, to be moved when the database is connected: tasks, usage, import previews, receipts, settings, user preferences (`store.transact`).
 
 ## Design tokens and fonts
 

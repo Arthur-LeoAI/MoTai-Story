@@ -116,8 +116,8 @@ const dataStore = createJsonStore(DATA_FILE);
 const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
 const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
-const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
-const canonApi = createCanonApi({ repository: createCanonRepository(dataStore), readDb, readBody, sendJson });
+const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readWork: async (workId) => findWork(await readWorkDb(workId), workId), ensureMigrated, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
+const canonApi = createCanonApi({ repository: createCanonRepository(dataStore), readDb: ensureMigrated, readBody, sendJson });
 let migrationTask;
 const databaseBaselines = new WeakMap();
 let automaticBackupTask = null;
@@ -195,7 +195,8 @@ const MIME_TYPES = {
   ".txt": "text/plain; charset=utf-8"
 };
 
-async function readDb() {
+// Upgrades stored data once per run, keeping a copy of the old file first.
+async function ensureMigrated() {
   if (!migrationTask) migrationTask = (async () => {
     const existing = await dataStore.read();
     if (existing.schemaVersion < DATABASE_SCHEMA_VERSION && existing.works.length) {
@@ -209,6 +210,58 @@ async function readDb() {
     });
   })();
   await migrationTask;
+}
+
+// A unit of stories read for one request: writeDb saves the ones that changed,
+// each against the version it was read at.
+async function storyUnit(works) {
+  // Each story is completed on its own; nothing in it depends on other stories.
+  const complete = async (work) => {
+    const upgraded = upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION, works: [work] });
+    return (await migrateCoverStorage(upgraded.db)).db.works[0];
+  };
+  const completed = [];
+  for (const work of works) {
+    let next = await complete(work);
+    if (JSON.stringify(next) !== JSON.stringify(work)) {
+      // A story saved in an older or incomplete shape is completed in storage
+      // first, inside a transaction, so that reading it never leaves a request
+      // holding changes that a parallel request would collide with.
+      await dataStore.transactWork(work.id, async (current) => { Object.assign(current, await complete(current)); });
+      const stored = await dataStore.getWork(work.id);
+      next = stored ? await complete(stored) : null;
+    }
+    if (next) completed.push(next);
+  }
+  const db = { schemaVersion: DATABASE_SCHEMA_VERSION, works: completed };
+  databaseBaselines.set(db, structuredClone(db));
+  return db;
+}
+
+// One story (or none, when it does not exist or a new one is being created).
+async function readWorkDb(workId) {
+  await ensureMigrated();
+  const work = workId ? await dataStore.getWork(workId) : null;
+  return storyUnit(work ? [work] : []);
+}
+
+// The stories of one user.
+async function readOwnerDb(ownerId) {
+  await ensureMigrated();
+  return storyUnit(await dataStore.listWorks(ownerId));
+}
+
+// One story changed inside a storage transaction.
+function transactStoredWork(workId, mutator) {
+  return dataStore.transactWork(workId, (stored) => {
+    Object.assign(stored, upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION, works: [stored] }).db.works[0]);
+    return mutator(stored);
+  });
+}
+
+// The whole database. Only for backup and restore, which act on everything.
+async function readDb() {
+  await ensureMigrated();
   const raw = await dataStore.read();
   const upgraded = upgradeDatabase(raw);
   const covers = await migrateCoverStorage(upgraded.db);
@@ -226,21 +279,22 @@ async function writeDb(db, { automaticBackup = true } = {}) {
   const baseline = databaseBaselines.get(db);
   let saved;
   if (baseline) {
-    saved = await dataStore.transact(stored => {
-      const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
-      const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
-      for (const w of [...changes, ...removed]) {
-        if (JSON.stringify(stored.works.find(x => x.id === w.id)) !== JSON.stringify(baseline.works.find(x => x.id === w.id))) fail("WORK_UPDATED_ELSEWHERE");
-      }
-      stored.works = stored.works.filter(w => !removed.some(x => x.id === w.id));
-      for (const w of changes) { const at = stored.works.findIndex(x => x.id === w.id); if (at < 0) stored.works.unshift(w); else stored.works[at] = w; }
-      return stored;
+    const readVersion = id => baseline.works.find(x => x.id === id)?.rowVersion ?? null;
+    const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
+    const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
+    const stored = await dataStore.saveWorks({
+      upserts: changes.map(work => ({ work, expectedVersion: readVersion(work.id) })),
+      removals: removed.map(work => ({ id: work.id, expectedVersion: readVersion(work.id) }))
     });
-  } else saved = await dataStore.write(migrated);
-  db.storeRevision = saved.storeRevision;
+    // What storage holds now for this unit: saved stories as saved, the rest as read.
+    saved = { works: migrated.works.map(w => stored.find(x => x.id === w.id) || baseline.works.find(x => x.id === w.id)).filter(Boolean) };
+  } else {
+    saved = await dataStore.write(migrated);
+    db.storeRevision = saved.storeRevision;
+  }
   for (const work of db.works) {
     const persisted = saved.works.find(w => w.id === work.id);
-    if (persisted) { work.structureRevision = persisted.structureRevision; work.canonRevision = persisted.canonRevision; work.volumes = persisted.volumes; work.deletedChapters = persisted.deletedChapters; work.writingPreferences = persisted.writingPreferences;
+    if (persisted) { work.rowVersion = persisted.rowVersion; work.structureRevision = persisted.structureRevision; work.canonRevision = persisted.canonRevision; work.volumes = persisted.volumes; work.deletedChapters = persisted.deletedChapters; work.writingPreferences = persisted.writingPreferences;
       for (const chapter of work.chapters || []) { const c = persisted.chapters.find(x => x.id === chapter.id); if (c) Object.assign(chapter, { revision: c.revision, revisions: c.revisions, scenes: c.scenes }); }
     }
   }
@@ -2347,7 +2401,7 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
 }
 
 async function reviewChapterTask(input) {
-  const db = await readDb(), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
+  const db = await readWorkDb(input.workId), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
   if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, input.baseRevision);
   const task = taskContext.getStore(); if (task) { task.stage = "review"; await task.update({ status: "checking" }); }
   const context = selectContinuityContext(work, chapter.id);
@@ -2374,7 +2428,7 @@ function selectedGenerationOutput(record) {
 async function createConstrainedGeneration(body) {
   const workId = normalizeText(body.workId || body.work?.id);
   const chapterId = normalizeText(body.chapterId || body.chapter?.id);
-  const db = await readDb();
+  const db = await readWorkDb(workId);
   const work = findWork(db, workId);
   const chapter = work && findChapter(work, chapterId);
   if (!work || !chapter) {
@@ -2466,11 +2520,8 @@ async function createConstrainedGeneration(body) {
     });
   }
 
-  await dataStore.transact((stored) => {
+  await transactStoredWork(work.id, (currentWork) => {
     task?.signal.throwIfAborted();
-    const upgraded = upgradeDatabase(stored).db;
-    Object.assign(stored, upgraded);
-    const currentWork = findWork(stored, work.id);
     const currentChapter = currentWork && findChapter(currentWork, chapter.id);
     if (!currentChapter || hashChapterContent(currentChapter) !== baseContentHash) {
       const error = appError("CHAPTER_CHANGED_DURING_GENERATION");
@@ -2943,12 +2994,13 @@ async function handleAiApi(req, res, parts) {
     const continuityModes = new Set(["continue", "polish", "expand", "shorten", "custom"]);
     let result;
     if (continuityModes.has(mode)) {
-      await readDb();
+      await ensureMigrated();
       const task = await taskService.create({ ...body, requestId: body.requestId || createId("request") });
       result = await taskService.wait(task.id);
     } else {
-      const db = await readDb();
-      const work = findWork(db, normalizeText(body.workId || body.work?.id));
+      const requestedWorkId = normalizeText(body.workId || body.work?.id);
+      const db = await readWorkDb(requestedWorkId);
+      const work = findWork(db, requestedWorkId);
       const chapter = work && findChapter(work, normalizeText(body.chapterId || body.chapter?.id));
       if (!work || !chapter) return sendError(res, "WORK_OR_CHAPTER_NOT_FOUND");
       result = await callOpenAiWriter({ ...body, work, chapter });
@@ -3098,7 +3150,7 @@ async function handleApi(req, res, url) {
     const name = normalizeText(body.name).slice(0, 80) || (action === "generate" ? "AI 生成壁纸" : "自定义壁纸");
     const theme = UI_WALLPAPER_THEMES.has(body.theme) ? body.theme : "";
     const wallpaperWork = action === "generate" && normalizeText(body.workId)
-      ? findWork(await readDb(), normalizeText(body.workId))
+      ? findWork(await readWorkDb(normalizeText(body.workId)), normalizeText(body.workId))
       : null;
     const image = action === "upload"
       ? await saveWallpaperBuffer(parseUploadedWallpaper(body.image))
@@ -3146,7 +3198,9 @@ async function handleApi(req, res, url) {
     return sendError(res, "ROUTE_NOT_FOUND");
   }
 
-  const db = await readDb();
+  // The list reads the requester's stories; every other route reads one story
+  // (or none, when it creates one).
+  const db = req.method === "GET" && parts.length === 2 ? await readOwnerDb(req.user.id) : await readWorkDb(parts[2]);
 
   if (req.method === "GET" && parts.length === 2) {
     const works = db.works
@@ -3366,10 +3420,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     const proposalId = parts[4];
     const action = parts[5];
-    const result = await dataStore.transact((stored) => {
-      const upgraded = upgradeDatabase(stored).db;
-      Object.assign(stored, upgraded);
-      const storedWork = findWork(stored, work.id);
+    const result = await transactStoredWork(work.id, (storedWork) => {
       const proposal = storedWork?.canonProposals.find((item) => item.id === proposalId);
       if (!proposal) {
         const error = appError("CANON_PROPOSAL_NOT_FOUND");
@@ -3446,10 +3497,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && parts.length === 8 && parts[5] === "generations" && parts[7] === "accept") {
     const body = await readBody(req, 2 * 1024 * 1024, "RICH_CONTENT_TOO_LARGE");
     const generationId = parts[6];
-    const result = await dataStore.transact((stored) => {
-      const upgraded = upgradeDatabase(stored).db;
-      Object.assign(stored, upgraded);
-      const storedWork = findWork(stored, work.id);
+    const result = await transactStoredWork(work.id, (storedWork) => {
       const storedChapter = storedWork && findChapter(storedWork, chapter.id);
       const record = storedWork?.generationRecords.find((item) => item.id === generationId);
       if (!storedChapter || !record || record.chapterId !== storedChapter.id) {
@@ -4543,7 +4591,7 @@ async function handleAccountApi(req, res, parts) {
 
   if (parts[1] === "session" && parts.length === 2) {
     if (req.method !== "GET") return sendError(res, "METHOD_NOT_ALLOWED"), true;
-    await readDb();
+    await ensureMigrated();
     const preferences = await preferenceRepository.get(user.id);
     sendJson(res, 200, {
       user: { id: user.id, kind: user.kind, displayName: user.displayName },
@@ -4554,7 +4602,7 @@ async function handleAccountApi(req, res, parts) {
   }
 
   if (parts[1] === "me" && parts[2] === "preferences" && parts.length === 3) {
-    await readDb();
+    await ensureMigrated();
     if (req.method === "GET") {
       sendJson(res, 200, { preferences: await preferenceRepository.get(user.id) });
       return true;

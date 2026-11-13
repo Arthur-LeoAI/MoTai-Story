@@ -31,7 +31,7 @@ function normalizeScene(value = {}, length = 1) {
 // Defaults of one story. Storage works story by story (see src/storage.js), so
 // everything a story needs is set here, not on the database as a whole.
 function upgradeWork(work, version = 5) {
-  work.structureRevision ||= 1; work.canonRevision ||= 1;
+  work.structureRevision ||= 1; work.canonRevision ||= 1; work.rowVersion ||= 1;
   work.volumes ||= []; work.deletedChapters ||= []; work.writingPreferences ||= {};
   for (const chapter of [...(work.chapters || []), ...work.deletedChapters]) {
     chapter.revision ||= 1; chapter.revisions ||= []; chapter.volumeId ||= "";
@@ -67,6 +67,10 @@ function bumpWorkVersions(old, work) {
         if (chapter.chapterMemory) chapter.chapterMemory.status = "stale";
       }
     }
+    // The story's version in storage: moves on every stored change, whatever
+    // it is. Writers of whole stories name the version they read (saveWorks).
+    const unversioned = w => ({ ...w, rowVersion: undefined });
+    work.rowVersion = (old.rowVersion || 1) + (same(unversioned(old), unversioned(work)) ? 0 : 1);
 }
 // Slice Delta operations without flattening formatting or embedded objects.
 function sliceDelta(delta, start, end) {
