@@ -17,6 +17,23 @@ For the session that starts phase 2. Read this first, then the files listed belo
 - 2026-11-13: Cast page, card view (plan 5.5): characters as cards with the three main questions (want, obstacle, change) and more under "More"; create, edit, delete; a change made in another window is not overwritten (load the saved version). Earlier character notes from story material are shown read-only. Not yet: the relationship graph, AI completion of a card from one sentence, finding characters in the manuscript, portraits and colours.
 - 2026-11-13: storage reads and writes per story and per collection; PostgreSQL backend added and tested on an in-process PostgreSQL (`docs/FOUNDATION.md`, "Database"). Not yet run against the real Supabase project.
 
+## Phase 2 steps (order agreed with the user, 2026-11-13)
+
+Done when: a Shape writer and a Write writer can each do one worthwhile thing within ten minutes (plan section 8).
+
+| Step | Contents | Status |
+|---|---|---|
+| 1 | Data model v6; storage per story and per collection; PostgreSQL backend | Done (Supabase connection check pending, run by the user on another computer) |
+| 2 | Cast as in the mockup (`project/Cast.dc.html` in the design artifact): Portraits / Relations views, the selected character's card beside the map; relationship graph: draw from one portrait to another, choose the kind, one sentence of tension; edit and delete relations | Character cards done; the rest in progress |
+| 3 | Write: tell it plainly → prose (plan 5.9 A), reusing the generation, diff and checks pipeline | To do |
+| 4 | AI drafts of characters: "describe someone in a sentence" → card draft; `+ Add "Mira" to Cast` capture in Ideate; one shared "card draft, the writer confirms" mechanism | To do |
+| 5 | Scene brief before writing a chapter (plan 5.9 B) | To do |
+| 6 | Extract characters and events from an imported manuscript; needs English prompts for extraction first | To do |
+
+Alongside: the user runs the Supabase connection check (`scripts/check-database.cjs`); an intermittent failure in the legacy-workspace E2E specs (`e2e/studio.spec.js`) is still to be explained. Not in phase 2: the story-progress slider on the relationship graph and "Suggest missing links" (phase 5 and later), cards for places, factions, things and rules (World, phase 4).
+
+Model: these steps do not touch the data model or the continuity logic, so they do not need Fable (the user's rule).
+
 ## What phase 2 is
 
 `docs/SUMITALE_PLAN.md`, section 8: "Shape: data model v6 and migration, character cards, relationship graph, capture from conversation. Write: tell it plainly → prose, scene brief, extract characters and events from an imported manuscript."
