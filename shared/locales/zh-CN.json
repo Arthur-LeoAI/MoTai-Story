@@ -62,6 +62,63 @@
     "comingTitle": "「{{section}}」正在重做",
     "comingBody": "这个页面会在重新设计的后续步骤中上线。在那之前，所有功能仍可在当前的工作台里使用。"
   },
+  "cast": {
+    "part": "第二部",
+    "subtitle": "你故事里的人。每人先写一句话就够了。",
+    "listLabel": "人物",
+    "empty": "还没有人物。从你脑海里最清楚的那个人开始。",
+    "noSummary": "还没有描述",
+    "new": "新人物",
+    "newHint": "用一句话说说 TA 是谁",
+    "newTitle": "新人物",
+    "editTitle": "人物",
+    "name": "名字",
+    "summary": "一句话：TA 是谁",
+    "summaryHint": "一个从师门出逃的制图师",
+    "more": "更多",
+    "aliases": "别名",
+    "aliasesHint": "其他称呼，用逗号或顿号分开",
+    "notes": "你的备注",
+    "notesHint": "其他想记下的。只有你能看到，写作助手不会使用。",
+    "fields": {
+      "want": {
+        "label": "TA 想要什么？",
+        "short": "想要",
+        "hint": "在 TA 自己眼里，TA 在追求什么"
+      },
+      "obstacle": {
+        "label": "什么在拦着 TA？TA 害怕什么？",
+        "short": "阻碍",
+        "hint": "一个人、一个弱点、一种恐惧，或世界的某条规则"
+      },
+      "change": {
+        "label": "故事结束时，TA 会变成什么样？",
+        "short": "变化",
+        "hint": "现在还不知道也没关系"
+      },
+      "appearance": {
+        "label": "外貌",
+        "hint": "陌生人第一眼会注意到什么"
+      },
+      "voice": {
+        "label": "说话方式",
+        "hint": "句子长短、用词习惯等，写对白时会用到"
+      },
+      "secret": {
+        "label": "秘密",
+        "hint": "TA 隐瞒了什么，瞒着谁"
+      },
+      "background": {
+        "label": "背景",
+        "hint": "在故事里仍然起作用的过去"
+      }
+    },
+    "loadSaved": "载入已保存的版本",
+    "delete": "删除人物",
+    "deleteConfirm": "删除“{{name}}”？与 TA 相关的关系也会一并删除，且无法撤销。",
+    "earlierNotes": "之前关于人物的资料",
+    "earlierNotesHint": "来自“灵感”页或旧版工作台，原样保留。准备好后可以把它们整理成人物卡。"
+  },
   "ideate": {
     "part": "第一部分",
     "subtitle": "我们聊一聊。我来提问，你用自己的话回答。",

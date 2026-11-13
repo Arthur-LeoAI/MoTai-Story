@@ -15,7 +15,7 @@ Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuil
 | 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Done |
 | 5 | English and Chinese sample stories; first-run flow; new interface as the front door, legacy workspace moved to `/classic/`; rename remaining brand identifiers with "read old, write new" | Done |
 
-Cast, World, Timeline and Plot stay as placeholders through phase 1. They are built in phases 2–4; their current legacy equivalent is the story-material page.
+Cast, World, Timeline and Plot stay as placeholders through phase 1. (Phase 2 has since added the Cast card view; see `docs/PHASE2_HANDOFF.md`.) They are built in phases 2–4; their current legacy equivalent is the story-material page.
 
 ## Step 1: what exists now
 

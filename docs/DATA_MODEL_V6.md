@@ -65,7 +65,7 @@ Known limit, unchanged from v5: `selectTemporalFacts` treats any fact without a 
 
 ## Not done in this step
 
-- No interface yet: Cast, the relationship graph and capture from conversation are the next steps of phase 2.
+- Interface: the Cast page shows and edits character cards (`web/src/pages/Cast.tsx`). The relationship graph, capture from conversation and the cards of the other types (places, factions, things, rules) are still to come.
 - Ideate drafts still write text into `storyBible`; they do not create cards.
 - The sample stories carry no cards yet.
 - Search does not cover the new fields.

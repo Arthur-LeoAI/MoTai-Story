@@ -1372,3 +1372,151 @@ button.story-chip:hover {
 .welcome-skip {
   align-self: flex-end;
 }
+
+/* Cast: character cards (plan 5.5) */
+.frame-main-page {
+  align-items: stretch;
+  padding: var(--space-12) var(--space-8);
+}
+.cast {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.cast-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.cast-empty {
+  font-style: italic;
+  margin: 0;
+}
+:lang(zh) .cast-empty {
+  font-style: normal;
+}
+.cast-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: var(--space-4);
+}
+.cast-grid > li {
+  display: flex;
+}
+.cast-card {
+  flex: 1;
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  font: inherit;
+  color: var(--color-text);
+  text-align: start;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color var(--duration-hover) var(--ease-standard), box-shadow var(--duration-hover) var(--ease-standard);
+}
+.cast-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-1);
+}
+.cast-new {
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+.cast-medallion {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-round);
+  border: 1px solid var(--color-entity-character);
+  color: var(--color-entity-character);
+  background: var(--color-surface-raised);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+.cast-medallion-new {
+  border-style: dashed;
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+.cast-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cast-name {
+  font-size: var(--text-xl);
+}
+.cast-summary {
+  font-style: italic;
+}
+:lang(zh) .cast-summary,
+.cast-summary:lang(zh) {
+  font-style: normal;
+}
+.cast-line {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--space-2);
+}
+.cast-dialog .scene-text {
+  min-height: 0;
+}
+.cast-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-start: var(--space-2);
+}
+.cast-more,
+.cast-earlier {
+  border-top: 1px solid var(--color-border);
+  padding-block-start: var(--space-3);
+}
+.cast-more summary,
+.cast-earlier summary {
+  cursor: pointer;
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+}
+.cast-more-body {
+  display: flex;
+  flex-direction: column;
+}
+.cast-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.cast-delete {
+  margin-inline-start: auto;
+  color: var(--color-danger);
+}
+.cast-earlier-field {
+  margin-block-start: var(--space-3);
+}
+.cast-earlier-text {
+  white-space: pre-wrap;
+  margin: var(--space-1) 0 0;
+}
+@media (max-width: 599px) {
+  .frame-main-page {
+    padding: var(--space-8) var(--space-4);
+  }
+}

@@ -65,6 +65,63 @@
     "comingTitle": "{{section}} is being rebuilt",
     "comingBody": "This page arrives in a later step of the redesign. Until then, everything still works in the current workspace."
   },
+  "cast": {
+    "part": "Part II",
+    "subtitle": "The people in your story. A sentence each is enough to begin.",
+    "listLabel": "Characters",
+    "empty": "No characters yet. Start with whoever you already see most clearly.",
+    "noSummary": "No description yet",
+    "new": "New character",
+    "newHint": "Who are they, in a sentence?",
+    "newTitle": "A new character",
+    "editTitle": "Character",
+    "name": "Name",
+    "summary": "Who they are, in a sentence",
+    "summaryHint": "A mapmaker on the run from the people who trained her",
+    "more": "More about them",
+    "aliases": "Also called",
+    "aliasesHint": "Other names, separated by commas",
+    "notes": "Your notes",
+    "notesHint": "Anything else. Only you see this; the assistant does not use it.",
+    "fields": {
+      "want": {
+        "label": "What do they want?",
+        "short": "Wants",
+        "hint": "What they are after, in their own eyes"
+      },
+      "obstacle": {
+        "label": "What stands in their way, or what do they fear?",
+        "short": "In the way",
+        "hint": "A person, a flaw, a fear, a rule of the world"
+      },
+      "change": {
+        "label": "How are they different by the end?",
+        "short": "Becomes",
+        "hint": "It is fine not to know yet"
+      },
+      "appearance": {
+        "label": "How they look",
+        "hint": "What a stranger would notice first"
+      },
+      "voice": {
+        "label": "How they speak",
+        "hint": "Short sentences? Old-fashioned words? Used when writing their lines."
+      },
+      "secret": {
+        "label": "A secret",
+        "hint": "What they hide, and from whom"
+      },
+      "background": {
+        "label": "Where they come from",
+        "hint": "The past that still matters in the story"
+      }
+    },
+    "loadSaved": "Load the saved version",
+    "delete": "Delete character",
+    "deleteConfirm": "Delete {{name}}? Their relationships are deleted too. This cannot be undone.",
+    "earlierNotes": "Earlier notes about characters",
+    "earlierNotesHint": "Written in Ideate or the previous workspace. Kept as they are; turn them into cards when you are ready."
+  },
   "ideate": {
     "part": "Part I",
     "subtitle": "Talk it through. I ask; you answer in your own words.",

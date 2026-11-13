@@ -4,6 +4,7 @@ import { Link, NavLink, useParams } from "react-router-dom";
 import { api, errorText, type WorkSummary } from "../api";
 import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from "../components/common";
 import Ideate from "./Ideate";
+import Cast from "./Cast";
 import Write from "./Write";
 import Companion from "../components/Companion";
 import { StorySearch, StorySettingsDialog } from "../components/StoryTools";
@@ -133,6 +134,11 @@ export default function WorkFrame() {
       ) : section === "ideate" ? (
         <main id="main" className="frame-main frame-main-wide">
           {loaded.state === "ready" ? <Ideate key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          <Notice />
+        </main>
+      ) : section === "cast" ? (
+        <main id="main" className="frame-main frame-main-page">
+          {loaded.state === "ready" ? <Cast key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
           <Notice />
         </main>
       ) : (
