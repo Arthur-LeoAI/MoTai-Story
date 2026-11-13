@@ -366,6 +366,23 @@
     "placeholder": "Search this story (Ctrl+K)",
     "none": "Nothing found."
   },
+  "welcome": {
+    "title": "Welcome",
+    "intro": "Three things before you begin. You can change all of them later in Settings.",
+    "language": "Which language should the interface use?",
+    "ai": "Is the AI ready?",
+    "aiState": {
+      "unknown": "Checking…",
+      "ready": "Yes. A writing model is set up on this server.",
+      "test": "This server runs with the built-in test AI. Its answers are fixed samples; ask the person who runs the server to connect a real model.",
+      "missing": "Not yet. Writing works without it; ask the person who runs the server to set up an AI provider."
+    },
+    "begin": "How would you like to start?",
+    "sample": "Open a sample story",
+    "sampleHint": "A short story to look around in. It is your copy to change.",
+    "own": "Start my own",
+    "skip": "Skip"
+  },
   "language": {
     "label": "Interface language",
     "storyLanguageNote": "The interface language does not change the language of your stories.",

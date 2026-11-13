@@ -55,6 +55,9 @@ test("interface language switches and is remembered", async ({ page }) => {
 });
 
 test("paper and candle themes switch and are remembered", async ({ page }) => {
+  // Colours fade over 200 ms; with reduced motion they change at once, so a
+  // reading never lands mid-fade.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/app/");
   const html = page.locator("html");
   await expect(html).toHaveAttribute("data-theme", "paper");

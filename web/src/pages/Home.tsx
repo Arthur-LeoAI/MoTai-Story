@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { api, errorText, type StoryFocus, type StoryLanguage, type WorkSummary } from "../api";
 import ImportDialog from "../components/ImportDialog";
+import Welcome, { openSample } from "../components/Welcome";
 import { Notice, Ornament, PreferenceControls, RuleHeading, Wordmark, useDocumentTitle } from "../components/common";
 import { formatCount, formatRelativeTime } from "../format";
 import { UI_LOCALES } from "../i18n";
@@ -61,9 +62,10 @@ function WorkCard({ work }: { work: WorkSummary }) {
 
 export default function Home() {
   const { t } = useTranslation();
-  const { locale } = usePreferences();
+  const { locale, welcomedAt } = usePreferences();
   const navigate = useNavigate();
   useDocumentTitle();
+  const premiseRef = useRef<HTMLInputElement | null>(null);
 
   const [premise, setPremise] = useState("");
   const [focus, setFocus] = useState<StoryFocus>("shape");
@@ -89,6 +91,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function openSampleStory() {
+    try {
+      const workId = await openSample(locale);
+      navigate(workPath(workId, "write"));
+    } catch (cause) {
+      setError(errorText(t, cause));
+    }
+  }
+
   async function begin(event: FormEvent) {
     event.preventDefault();
     if (creating) return;
@@ -112,6 +123,9 @@ export default function Home() {
       </header>
 
       <main id="main" className="shell-main">
+        {welcomedAt === null && works !== null && works.length === 0 ? (
+          <Welcome onStartOwn={() => premiseRef.current?.focus()} />
+        ) : null}
         <form className="home-new" onSubmit={begin} data-testid="new-story-form">
           <section className="hero" data-testid="hero">
             <div className="caps">{t("home.eyebrow")}</div>
@@ -120,6 +134,7 @@ export default function Home() {
             <p className="hero-tagline">{t("home.tagline")}</p>
             <label htmlFor="premise" className="caps premise-label">{t("home.premiseLabel")}</label>
             <input
+              ref={premiseRef}
               id="premise"
               className="field premise-field"
               type="text"
@@ -172,6 +187,10 @@ export default function Home() {
                 <button type="button" className="card import-card" onClick={() => setImporting(true)} data-testid="import-open">
                   <span className="display import-card-title">{t("import.title")}</span>
                   <span className="muted">{t("import.formats")}</span>
+                </button>
+                <button type="button" className="card import-card" onClick={() => void openSampleStory()} data-testid="sample-open">
+                  <span className="display import-card-title">{t("welcome.sample")}</span>
+                  <span className="muted">{t("welcome.sampleHint")}</span>
                 </button>
               </div>
             </>

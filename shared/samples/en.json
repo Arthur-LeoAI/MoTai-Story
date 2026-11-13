@@ -1,0 +1,28 @@
+{
+  "$comment": "Original sample story for first-time users. Written for this project; free to change.",
+  "title": "The Cartographer's Sister",
+  "genre": "Fantasy",
+  "premise": "A mapmaker receives an unsigned map drawn in her lost sister's hand.",
+  "focus": "write",
+  "storyBible": {
+    "logline": "Three years after her sister vanished, a mapmaker in a city of guarded borders receives a map in her sister's hand that leads somewhere no map is allowed to go.",
+    "theme": "What we owe the people who are no longer looked for.",
+    "tone": "Quiet, close to Mira, with dread kept under the surface.",
+    "characters": "Mira Tallow: a junior mapmaker in the Bureau of the March. Careful, stubborn, the only one still looking for her sister.\nLysa Tallow: Mira's older sister, a gifted surveyor who disappeared three years ago while charting the old border.\nKael Varro: Mira's oldest friend, now a warden sworn to the Governor.\nGovernor Voss: decides what the official maps may show.",
+    "relationships": "Mira and Kael grew up together; his oath to the Governor now stands between them.\nVoss once employed Lysa and wants every map of the old border destroyed.",
+    "worldview": "The March is a frontier province where maps are law: a road that is not on an official map does not, legally, exist.",
+    "rules": "A map drawn for oneself always misleads its maker, so mapmakers must rely on maps drawn by others.\nOnly the Bureau may issue maps of the border.",
+    "keyEvents": "Three years ago: Lysa vanishes on the old border.\nChapter 1: Mira receives the unsigned map.\nChapter 2: Mira reaches the ferry at Low Ford; Kael arrives with a warrant.",
+    "foreshadowing": "A small mark on the map's corner, the sign Lysa used as a child, is planted in Chapter 1."
+  },
+  "chapters": [
+    {
+      "title": "The Unsigned Map",
+      "content": "The parcel came on a Tuesday, which was the day the Bureau sent its worst errands to the junior desks. Mira Tallow signed for it without looking at the sender, because there was no sender.\n\nInside lay a single sheet, folded in eighths the way surveyors fold field copies, so the creases would not fall across a road. She knew before she had opened it fully. Some people recognise a voice in a crowded room. Mira recognised a pen.\n\nThe coastline was drawn in quick, unbroken strokes. The contour lines leaned slightly left, as if the hand that made them had been in a hurry to get somewhere else. In the corner, small enough to be mistaken for a blot, was a mark like a closed eye.\n\nLysa had drawn that eye on every map she ever made, from the age of nine. Lysa had been gone for three years.\n\nMira turned the sheet over. Nothing. She held it to the window, and the light came through a place where no town was marked, only a road: thin, deliberate, running north past the old border, where the Bureau's maps showed nothing at all.\n\nShe folded it in eighths again and put it inside her coat, against her ribs, where it could not be lost and could not be seen.\n"
+    },
+    {
+      "title": "The Ferry",
+      "content": "The ferry had no bell. Travellers stood on the bank and waited to be seen, and Mira had been waiting since before the light. Her satchel held three maps she had not drawn and one she could not read.\n\nShe did not hear him come down the path. She knew him by the way the ferryman looked past her shoulder and then, carefully, at nothing.\n\n\"You should have gone farther,\" Kael said.\n\nHe had the warrant in his hand, folded once, the seal unbroken. He had not opened it. He did not need to.\n\n\"Read it to me, then,\" she said.\n\nHe looked at the paper for a long moment, and then at the river.\n"
+    }
+  ]
+}

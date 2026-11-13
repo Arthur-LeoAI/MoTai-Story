@@ -9,6 +9,9 @@ interface PreferencesValue {
   theme: Theme;
   setLocale: (locale: UiLocale) => void;
   toggleTheme: () => void;
+  /** undefined while loading; null until the first-run welcome is done. */
+  welcomedAt: string | null | undefined;
+  markWelcomed: () => void;
   /** A translated message when preferences could not be loaded or saved. */
   notice: string;
 }
@@ -19,6 +22,7 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
   const { t, i18n } = useTranslation();
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [notice, setNotice] = useState("");
+  const [welcomedAt, setWelcomedAt] = useState<string | null | undefined>(undefined);
   const locale: UiLocale = isUiLocale(i18n.resolvedLanguage) ? i18n.resolvedLanguage : "en";
 
   useEffect(() => {
@@ -32,7 +36,9 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
     let active = true;
     api.session()
       .then(({ preferences }) => {
-        if (!active || !preferences.updatedAt) return;
+        if (!active) return;
+        setWelcomedAt(preferences.welcomedAt ?? null);
+        if (!preferences.updatedAt) return;
         if (isUiLocale(preferences.uiLocale) && preferences.uiLocale !== i18n.resolvedLanguage) {
           rememberLocale(preferences.uiLocale);
           void i18n.changeLanguage(preferences.uiLocale);
@@ -47,7 +53,7 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const save = useCallback((patch: { uiLocale?: UiLocale; theme?: Theme }) => {
+  const save = useCallback((patch: { uiLocale?: UiLocale; theme?: Theme; welcomed?: true }) => {
     api.updatePreferences(patch).then(() => setNotice("")).catch((error) => setNotice(errorText(t, error)));
   }, [t]);
 
@@ -55,6 +61,11 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
     locale,
     theme,
     notice,
+    welcomedAt,
+    markWelcomed: () => {
+      setWelcomedAt(new Date().toISOString());
+      save({ welcomed: true });
+    },
     setLocale: (next) => {
       rememberLocale(next);
       void i18n.changeLanguage(next);
@@ -65,7 +76,7 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
       setTheme(next);
       save({ theme: next });
     }
-  }), [locale, theme, notice, i18n, save]);
+  }), [locale, theme, notice, welcomedAt, i18n, save]);
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

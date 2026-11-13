@@ -323,3 +323,48 @@ test("a chapter reorder based on an old chapter list is refused", async () => {
   assert.equal(stale.status, 409);
   assert.equal(stale.body.error.code, "REVISION_CONFLICT");
 });
+
+test("sample stories are copied into the library in either language", async () => {
+  const english = await call("/api/works/samples", "POST", { language: "en" });
+  assert.equal(english.status, 201);
+  assert.equal(english.body.work.language, "en");
+  assert.equal(english.body.work.ownerId, "local");
+  assert.equal(english.body.work.sample, true);
+  assert.equal(english.body.work.chapters.length, 2);
+  assert.match(english.body.work.chapters[0].content, /unsigned|Lysa/);
+  assert.ok(english.body.work.storyBible.characters);
+  const chinese = await call("/api/works/samples", "POST", { language: "zh-CN" });
+  assert.equal(chinese.body.work.language, "zh-CN");
+  assert.notEqual(chinese.body.work.id, english.body.work.id);
+  // Each call is a fresh copy, so the writer can change it freely.
+  const again = await call("/api/works/samples", "POST", { language: "en" });
+  assert.notEqual(again.body.work.id, english.body.work.id);
+  for (const file of ["en", "zh-CN"]) {
+    const text = JSON.stringify(require(`../shared/samples/${file}.json`));
+    for (const name of Object.values(brand.name)) assert.ok(!text.includes(name), "samples do not name the product");
+  }
+});
+
+test("the first-run welcome is remembered per user", async () => {
+  const store = createJsonStore(path.join(dir, "welcome.json"));
+  const prefs = createPreferenceRepository(store, { now: () => "2026-11-12T00:00:00.000Z" });
+  assert.equal((await prefs.get("alice")).welcomedAt, null);
+  await prefs.update("alice", { welcomed: true });
+  assert.equal((await prefs.get("alice")).welcomedAt, "2026-11-12T00:00:00.000Z");
+  await prefs.update("alice", { theme: "candle" });
+  assert.equal((await prefs.get("alice")).welcomedAt, "2026-11-12T00:00:00.000Z", "other changes keep it");
+  assert.equal((await prefs.get("bob")).welcomedAt, null);
+  await assert.rejects(prefs.update("alice", { welcomed: "yes" }), { code: "BAD_REQUEST" });
+});
+
+test("the new interface is the front door and the previous workspace is at /classic/", async () => {
+  for (const pathname of ["/", "/index.html"]) {
+    const response = await fetch(`${base}${pathname}`, { redirect: "manual" });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), "/app/");
+  }
+  const classic = await fetch(`${base}/classic/`);
+  assert.equal(classic.status, 200);
+  assert.match(await classic.text(), /studio\.js/);
+  assert.equal((await fetch(`${base}/classic`, { redirect: "manual" })).status, 308);
+});

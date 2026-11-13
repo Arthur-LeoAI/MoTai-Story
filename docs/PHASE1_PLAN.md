@@ -3,7 +3,9 @@
 Plan reference: `docs/SUMITALE_PLAN.md`, sections 5.1–5.4, 5.9 and 8 (phase 1).
 Done when: every feature of the legacy workspace works in the new interface, and the legacy frontend is retired.
 
-Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuilt yet say so and link to the legacy workspace at `/`, which keeps working until step 5.
+**Decision 2026-11-12:** the legacy workspace is not deleted yet. The new interface is the front door at `/`; the legacy workspace stays reachable at `/classic/` until the features it still has alone (see step 5) are rebuilt in phases 2–4. It is deleted then.
+
+Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuilt yet say so and link to the legacy workspace, which keeps working (at `/classic/` since step 5).
 
 | Step | Contents | Status |
 |---|---|---|
@@ -11,7 +13,7 @@ Phase 1 is delivered in steps. Each step leaves the app usable: pages not rebuil
 | 2 | Ideate: chat, chat history, streaming, story-material drafts | Done |
 | 3 | Write: editor, chapters, AI panel (continue/expand/shorten/polish), diff preview, checks, canon proposals, history, scenes, focus mode | Done |
 | 4 | Settings (AI model, usage, backup), import a manuscript, search, story settings (title, focus, language) | Done |
-| 5 | English and Chinese sample stories; first-run flow; retire `public/`; rename remaining brand identifiers with "read old, write new" | Not started |
+| 5 | English and Chinese sample stories; first-run flow; new interface as the front door, legacy workspace moved to `/classic/`; rename remaining brand identifiers with "read old, write new" | Done |
 
 Cast, World, Timeline and Plot stay as placeholders through phase 1. They are built in phases 2–4; their current legacy equivalent is the story-material page.
 
@@ -24,6 +26,30 @@ Cast, World, Timeline and Plot stay as placeholders through phase 1. They are bu
 - Library cards show length in the story's own unit: words for English stories, characters for Chinese ones.
 - Default names created by the server ("Untitled story", "Chapter 1") follow the story language.
 - The works list returns only the current user's stories.
+
+## Step 5: what exists now
+
+- **Front door**: `/` (and `/index.html`) opens the new interface at `/app/`. The legacy workspace is at `/classic/`; placeholder pages link there.
+- **First-run welcome** on Home, shown once to a user with an empty library: choose the interface language, see whether AI is ready (configured, test AI, or not set up), then open the sample story or start your own. "Skip" also counts as seen. Stored per user as `welcomedAt` in preferences.
+- **Sample stories**: an original English one (*The Cartographer's Sister*) and an original Chinese one (《雾港来信》), each with two short chapters and story material, in `shared/samples/`. `POST /api/works/samples` copies one into the library; it is the writer's copy to change. Also offered from the library ("Open a sample story").
+- **Renames, read old / write new**:
+  - Backups are written as format `novel-studio-backup`; `motai-backup` files still restore. The download is named `<brand>-backup-<time>.json`; automatic and pre-restore copies are `novel-studio-auto-…` / `novel-studio-before-restore-….backup.json`, and old `墨台-自动-….motai-backup.json` files still count toward retention.
+  - Environment switches `NOVEL_STUDIO_TEST_AI`, `NOVEL_STUDIO_DESKTOP`, `NOVEL_STUDIO_E2E_PORT`; the `MOTAI_*` names still work.
+  - The cover prompt no longer names the product.
+
+## Features still only in the legacy workspace (`/classic/`)
+
+These are why the legacy workspace is kept. Each has a planned home:
+
+| Feature | Planned home |
+|---|---|
+| Editing story material by hand (outline, characters, world, timeline text) | Cast, World, Timeline, Plot pages (phases 2–4) |
+| Viewing and editing canon facts ("正式设定") | Cast / World / Timeline (phases 2–4) |
+| Writing preferences | Write settings (phase 5) |
+| Volumes | Plot (phase 3) |
+| Cover generation, cover history, chapter illustrations | Not scheduled yet |
+
+Not renamed, because they belong to the frozen desktop build or to the legacy workspace: desktop data folder, `打开墨台.vbs`, `resources/motai.ico`, `package.json` `productName` / `build`, the legacy workspace's `motai.*` browser keys and its Chinese title.
 
 ## Step 4: what exists now
 

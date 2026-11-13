@@ -80,6 +80,8 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 // New frontend (web/), built by Vite into web/dist and served under /app/.
 const WEB_DIST_DIR = path.join(ROOT, "web", "dist");
 const WEB_URL_PREFIX = "/app";
+// The previous workspace (public/), kept as a fallback.
+const CLASSIC_URL_PREFIX = "/classic";
 const LOCALES_DIR = path.join(ROOT, "shared", "locales");
 const DATA_FILE = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
@@ -96,7 +98,13 @@ const COVER_MAX_BYTES = 25 * 1024 * 1024;
 const WALLPAPER_MAX_BYTES = 25 * 1024 * 1024;
 const BACKUP_MAX_BYTES = 50 * 1024 * 1024;
 const BACKUP_MAX_COVER_BYTES = 40 * 1024 * 1024;
-const BACKUP_FORMAT = "motai-backup";
+// Backups are written with the brand-neutral codename; files made before the
+// rename ("motai-backup", "墨台-…") are still read.
+const BACKUP_FORMAT = `${require("./shared/brand.json").codename}-backup`;
+const LEGACY_BACKUP_FORMATS = new Set(["motai-backup"]);
+const SAFETY_BACKUP_REASONS = { "自动": "auto", "恢复前": "before-restore" };
+const SAFETY_BACKUP_PATTERN = new RegExp(`^${require("./shared/brand.json").codename}-auto-\\d{14}\\.backup\\.json$`);
+const LEGACY_SAFETY_BACKUP_PATTERN = /^墨台-自动-\d{14}\.motai-backup\.json$/u;
 const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
@@ -1178,7 +1186,7 @@ function normalizeBackupPayload(value) {
     throw error;
   }
 
-  if (value.format !== BACKUP_FORMAT || Number(value.version) !== BACKUP_VERSION) {
+  if ((value.format !== BACKUP_FORMAT && !LEGACY_BACKUP_FORMATS.has(value.format)) || Number(value.version) !== BACKUP_VERSION) {
     const error = appError("BACKUP_UNSUPPORTED");
     throw error;
   }
@@ -1222,7 +1230,7 @@ async function createSafetyBackup(reason) {
   const payload = await buildBackupPayload();
   const backupDir = path.join(DATA_DIR, "backups");
   await fsp.mkdir(backupDir, { recursive: true });
-  const filePath = path.join(backupDir, `墨台-${reason}-${backupTimestamp()}.motai-backup.json`);
+  const filePath = path.join(backupDir, `${brand.codename}-${SAFETY_BACKUP_REASONS[reason] || "manual"}-${backupTimestamp()}.backup.json`);
   await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   return filePath;
 }
@@ -1240,7 +1248,7 @@ async function listAutomaticBackups() {
   }
 
   const backups = await Promise.all(entries
-    .filter((entry) => entry.isFile() && /^墨台-自动-\d{14}\.motai-backup\.json$/u.test(entry.name))
+    .filter((entry) => entry.isFile() && (SAFETY_BACKUP_PATTERN.test(entry.name) || LEGACY_SAFETY_BACKUP_PATTERN.test(entry.name)))
     .map(async (entry) => {
       const filePath = path.join(backupDir, entry.name);
       const stats = await fsp.stat(filePath);
@@ -1531,8 +1539,12 @@ function getApiRoot(baseUrl) {
     .replace(/\/images\/generations$/, "");
 }
 
+function isDesktopRuntime() {
+  return process.env.NOVEL_STUDIO_DESKTOP === "1" || process.env.MOTAI_DESKTOP === "1";
+}
+
 function isTestAiEnabled() {
-  return process.env.MOTAI_TEST_AI === "1";
+  return process.env.NOVEL_STUDIO_TEST_AI === "1" || process.env.MOTAI_TEST_AI === "1";
 }
 
 function aiUnavailableError() {
@@ -1781,7 +1793,7 @@ function buildImagePrompt(work, prompt) {
     storyBible.conflict && `主线冲突：${limitText(storyBible.conflict, 260)}`,
     storyBible.chapterPlan && `章节规划参考：${limitText(storyBible.chapterPlan, 360)}`,
     "",
-    "画面要求：主体明确，背景有世界观信息；顶部和底部要有可读文字的干净留白。墨台会在生成后叠加准确的书名和作者名，所以画面中不要生成任何可读文字、水印或假标题。风格贴合封面方向，避免空泛蓝色渐变、三角形、圆形等模板装饰。"
+    "画面要求：主体明确，背景有世界观信息；顶部和底部要有可读文字的干净留白。应用会在生成后叠加准确的书名和作者名，所以画面中不要生成任何可读文字、水印或假标题。风格贴合封面方向，避免空泛蓝色渐变、三角形、圆形等模板装饰。"
   ].filter(Boolean).join("\n");
 }
 
@@ -2944,7 +2956,7 @@ async function handleAiApi(req, res, parts) {
 
 async function handleSystemApi(req, res, parts) {
   if (req.method === "POST" && parts.length === 3 && parts[2] === "shutdown") {
-    if (process.env.MOTAI_DESKTOP === "1") {
+    if (isDesktopRuntime()) {
       return sendJson(res, 200, { ok: true, desktop: true });
     }
 
@@ -2957,6 +2969,77 @@ async function handleSystemApi(req, res, parts) {
   return sendError(res, "ROUTE_NOT_FOUND");
 }
 
+// A new story record with one empty chapter and one conversation.
+function createWorkRecord(body, ownerId) {
+  const timestamp = nowIso();
+  // Default names are story content, so they follow the story's language.
+  const language = normalizeStoryLanguage(body.language);
+  const english = language === "en";
+  const title = normalizeText(body.title) || (english ? "Untitled story" : "未命名作品");
+  const chapterTitle = normalizeText(body.chapterTitle) || (english ? "Chapter 1" : "第一章");
+  const work = {
+    id: createId("work"),
+    ownerId,
+    language,
+    ...(STORY_FOCUSES.includes(body.focus) ? { focus: body.focus } : {}),
+    title,
+    author: normalizeText(body.author).slice(0, 40) || (english ? "" : "未署名"),
+    premise: normalizeText(body.premise),
+    genre: normalizeText(body.genre) || (english ? "" : "原创"),
+    status: normalizeText(body.status) || "draft",
+    tags: Array.isArray(body.tags) ? body.tags.map(normalizeText).filter(Boolean).slice(0, 8) : [],
+    targetCharacters: Number(body.targetCharacters) || 80000,
+    boldness: clampNumber(body.boldness, 0, 100, 50),
+    storyBible: normalizeStoryBible(body.storyBible),
+    coverStyle: normalizeCoverStyle(body.coverStyle),
+    coverLogline: normalizeText(body.coverLogline),
+    cover: DEFAULT_COVER_PATH,
+    coverHistory: [],
+    canon: { version: 1, status: "empty", entities: [], facts: [] },
+    generationRecords: [],
+    canonProposals: [],
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    chapters: [
+      {
+        id: createId("chapter"),
+        title: chapterTitle,
+        content: "",
+        richContent: plainTextToRichContent(""),
+        contentFormat: "quill-delta-v1",
+        notes: "",
+        status: "draft",
+        planning: normalizeChapterPlanning(body.chapterPlanning),
+        chapterMemory: normalizeChapterMemory(),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+    ],
+    aiWorkspace: normalizeAiWorkspace({ chats: [createChatRecord()] })
+  };
+  return work;
+}
+
+// Original sample stories shipped with the app (shared/samples/<language>.json).
+function createSampleWork(language, ownerId) {
+  const sample = require(`./shared/samples/${language}.json`);
+  const work = createWorkRecord({ ...sample, language, chapterTitle: sample.chapters[0]?.title }, ownerId);
+  const template = work.chapters[0];
+  work.sample = true;
+  work.chapters = sample.chapters.map((chapter, index) => {
+    const richContent = plainTextToRichContent(chapter.content);
+    return {
+      ...template,
+      id: index === 0 ? template.id : createId("chapter"),
+      title: chapter.title,
+      richContent,
+      content: richContentToMarkdown(richContent)
+    };
+  });
+  return work;
+}
+
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (await handleAccountApi(req, res, parts)) return;
@@ -2967,7 +3050,7 @@ async function handleApi(req, res, url) {
       ok: true,
       name: brand.name.default,
       version: PACKAGE_VERSION,
-      desktop: process.env.MOTAI_DESKTOP === "1"
+      desktop: isDesktopRuntime()
     });
   }
 
@@ -3032,7 +3115,7 @@ async function handleApi(req, res, url) {
       return sendDownload(res, {
         mime: "application/json; charset=utf-8",
         buffer: Buffer.from(`${JSON.stringify(payload, null, 2)}\n`, "utf8"),
-        fileName: `墨台备份-${backupTimestamp()}.motai-backup.json`
+        fileName: `${brand.name.default}-backup-${backupTimestamp()}.json`
       });
     }
 
@@ -3067,56 +3150,18 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { works });
   }
 
+  if (req.method === "POST" && parts.length === 3 && parts[2] === "samples") {
+    // A copy of the built-in sample story in the requested language.
+    const body = await readBody(req, 16 * 1024);
+    const work = createSampleWork(normalizeStoryLanguage(body.language), req.user.id);
+    db.works.unshift(work);
+    await writeDb(db);
+    return sendJson(res, 201, { work });
+  }
+
   if (req.method === "POST" && parts.length === 2) {
     const body = await readBody(req);
-    const timestamp = nowIso();
-    // Default names are story content, so they follow the story's language.
-    const language = normalizeStoryLanguage(body.language);
-    const english = language === "en";
-    const title = normalizeText(body.title) || (english ? "Untitled story" : "未命名作品");
-    const chapterTitle = normalizeText(body.chapterTitle) || (english ? "Chapter 1" : "第一章");
-    const work = {
-      id: createId("work"),
-      ownerId: req.user.id,
-      language,
-      ...(STORY_FOCUSES.includes(body.focus) ? { focus: body.focus } : {}),
-      title,
-      author: normalizeText(body.author).slice(0, 40) || (english ? "" : "未署名"),
-      premise: normalizeText(body.premise),
-      genre: normalizeText(body.genre) || (english ? "" : "原创"),
-      status: normalizeText(body.status) || "draft",
-      tags: Array.isArray(body.tags) ? body.tags.map(normalizeText).filter(Boolean).slice(0, 8) : [],
-      targetCharacters: Number(body.targetCharacters) || 80000,
-      boldness: clampNumber(body.boldness, 0, 100, 50),
-      storyBible: normalizeStoryBible(body.storyBible),
-      coverStyle: normalizeCoverStyle(body.coverStyle),
-      coverLogline: normalizeText(body.coverLogline),
-      cover: DEFAULT_COVER_PATH,
-      coverHistory: [],
-      canon: { version: 1, status: "empty", entities: [], facts: [] },
-      generationRecords: [],
-      canonProposals: [],
-      notes: "",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      chapters: [
-        {
-          id: createId("chapter"),
-          title: chapterTitle,
-          content: "",
-          richContent: plainTextToRichContent(""),
-          contentFormat: "quill-delta-v1",
-          notes: "",
-          status: "draft",
-          planning: normalizeChapterPlanning(body.chapterPlanning),
-          chapterMemory: normalizeChapterMemory(),
-          createdAt: timestamp,
-          updatedAt: timestamp
-        }
-      ],
-      aiWorkspace: normalizeAiWorkspace({ chats: [createChatRecord()] })
-    };
-
+    const work = createWorkRecord(body, req.user.id);
     db.works.unshift(work);
     await writeDb(db);
     return sendJson(res, 201, { work });
@@ -4581,9 +4626,21 @@ function createAppServer() {
         return;
       }
 
-      if (url.pathname === WEB_URL_PREFIX) {
-        res.writeHead(308, { Location: `${WEB_URL_PREFIX}/` });
+      // The new interface is the front door. The previous workspace stays
+      // available at /classic/ until its remaining features are rebuilt.
+      if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === WEB_URL_PREFIX) {
+        res.writeHead(302, { Location: `${WEB_URL_PREFIX}/`, "Cache-Control": "no-store" });
         return res.end();
+      }
+
+      if (url.pathname === CLASSIC_URL_PREFIX) {
+        res.writeHead(308, { Location: `${CLASSIC_URL_PREFIX}/` });
+        return res.end();
+      }
+
+      if (url.pathname === `${CLASSIC_URL_PREFIX}/`) {
+        await serveFile(res, path.join(PUBLIC_DIR, "index.html"));
+        return;
       }
 
       if (url.pathname.startsWith(`${WEB_URL_PREFIX}/`)) {

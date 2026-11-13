@@ -21,7 +21,7 @@ function SectionPlaceholder({ section }: { section: Section }) {
       <h1 className="display section-title">{t("section.comingTitle", { section: name })}</h1>
       <Ornament width={140} />
       <p className="muted">{t("section.comingBody")}</p>
-      <a className="btn" href="/" data-testid="legacy-link">{t("app.legacyLink")}</a>
+      <a className="btn" href="/classic/" data-testid="legacy-link">{t("app.legacyLink")}</a>
     </section>
   );
 }

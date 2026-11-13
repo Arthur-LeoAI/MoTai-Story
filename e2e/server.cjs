@@ -2,11 +2,11 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-async function start(port = Number(process.env.MOTAI_E2E_PORT || "5281")) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "motai-e2e-"));
+async function start(port = Number(process.env.NOVEL_STUDIO_E2E_PORT || process.env.MOTAI_E2E_PORT || "5281")) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-studio-e2e-"));
   process.env.DATA_FILE = path.join(root, "db.json");
   process.env.ENV_FILE = path.join(root, ".env.local");
-  process.env.MOTAI_TEST_AI = "1";
+  process.env.NOVEL_STUDIO_TEST_AI = "1";
   process.env.PORT = String(port);
 
   const { createAppServer } = require("../server");
@@ -36,7 +36,7 @@ async function start(port = Number(process.env.MOTAI_E2E_PORT || "5281")) {
 module.exports = { start };
 
 if (require.main === module) {
-  start(Number(process.env.PORT || process.env.MOTAI_E2E_PORT || "5281")).then((close) => {
+  start(Number(process.env.PORT || process.env.NOVEL_STUDIO_E2E_PORT || process.env.MOTAI_E2E_PORT || "5281")).then((close) => {
     process.once("SIGINT", () => close().finally(() => process.exit(0)));
     process.once("SIGTERM", () => close().finally(() => process.exit(0)));
   }).catch((error) => {

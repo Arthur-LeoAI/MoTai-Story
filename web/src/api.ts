@@ -43,6 +43,8 @@ export function errorText(t: TFunction, error: unknown): string {
 export interface Preferences {
   uiLocale: UiLocale;
   theme: Theme;
+  /** When the first-run welcome was finished or skipped; null before. */
+  welcomedAt: string | null;
   updatedAt: string | null;
 }
 
@@ -78,7 +80,7 @@ export interface NewWork {
 
 export const api = {
   session: () => request<Session>("/api/session"),
-  updatePreferences: (patch: Partial<Pick<Preferences, "uiLocale" | "theme">>) =>
+  updatePreferences: (patch: Partial<Pick<Preferences, "uiLocale" | "theme">> & { welcomed?: true }) =>
     request<{ preferences: Preferences }>("/api/me/preferences", { method: "PATCH", body: JSON.stringify(patch) }),
   listWorks: () => request<{ works: WorkSummary[] }>("/api/works"),
   createWork: (work: NewWork) => request<{ work: { id: string } }>("/api/works", { method: "POST", body: JSON.stringify(work) })

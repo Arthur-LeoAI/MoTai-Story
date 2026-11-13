@@ -1,5 +1,5 @@
 const { defineConfig } = require("@playwright/test");
-const port = Number(process.env.MOTAI_E2E_PORT || 5281);
+const port = Number(process.env.NOVEL_STUDIO_E2E_PORT || process.env.MOTAI_E2E_PORT || 5281);
 const baseURL = `http://127.0.0.1:${port}`;
 
 module.exports = defineConfig({

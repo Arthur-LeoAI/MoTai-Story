@@ -12,6 +12,8 @@ function normalizePreferences(value = {}) {
   return {
     uiLocale: UI_LOCALES.includes(value.uiLocale) ? value.uiLocale : DEFAULT_PREFERENCES.uiLocale,
     theme: THEMES.includes(value.theme) ? value.theme : DEFAULT_PREFERENCES.theme,
+    // When the user finished or skipped the first-run welcome; null until then.
+    welcomedAt: typeof value.welcomedAt === "string" ? value.welcomedAt : null,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null
   };
 }
@@ -22,6 +24,7 @@ function validatePatch(patch) {
   for (const [key, value] of Object.entries(patch)) {
     if (key === "uiLocale" && UI_LOCALES.includes(value)) next.uiLocale = value;
     else if (key === "theme" && THEMES.includes(value)) next.theme = value;
+    else if (key === "welcomed" && value === true) next.welcomed = true;
     else throw appError("BAD_REQUEST");
   }
   return next;
@@ -39,7 +42,9 @@ function createPreferenceRepository(store, { now = () => new Date().toISOString(
     const changes = validatePatch(patch);
     return store.transact((db) => {
       db.userPreferences ||= {};
-      const next = { ...normalizePreferences(db.userPreferences[userId]), ...changes, ownerId: userId, updatedAt: now() };
+      const { welcomed, ...rest } = changes;
+      const previous = normalizePreferences(db.userPreferences[userId]);
+      const next = { ...previous, ...rest, welcomedAt: welcomed ? previous.welcomedAt || now() : previous.welcomedAt, ownerId: userId, updatedAt: now() };
       db.userPreferences[userId] = next;
       return normalizePreferences(next);
     });

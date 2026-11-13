@@ -1,4 +1,4 @@
-// Legacy workspace (public/, served at /). Selectors use data-testid and state
+// Legacy workspace (public/, served at /classic/). Selectors use data-testid and state
 // attributes only — never interface copy or colours — so the UI text and theme
 // can change without breaking these tests. Text typed or mocked by the test
 // itself (test data) may still be asserted.
@@ -36,7 +36,7 @@ test("workspace: AI chat, story-material draft and rich-text writing", async ({ 
   // temporary database, so remove whatever they created first.
   const { works } = await (await request.get("/api/works")).json();
   for (const work of works) expect((await request.delete(`/api/works/${work.id}`)).ok()).toBeTruthy();
-  await page.goto("/");
+  await page.goto("/classic/");
   await expect(id(page, "ai-availability-button")).toHaveAttribute("data-status", "available");
   await expect(id(page, "nav-ai")).toHaveAttribute("aria-current", "page");
   await expect(id(page, "send-chat-button")).toBeDisabled();
@@ -235,7 +235,7 @@ test("tablet width keeps icon navigation and a usable manuscript canvas", async 
   await page.setViewportSize({ width: 900, height: 1024 });
   const created = await request.post("/api/works", { data: { title: "平板测试作品" } });
   expect(created.ok()).toBeTruthy();
-  await page.goto("/");
+  await page.goto("/classic/");
   await expect(id(page, "brand-word")).toBeVisible();
   await id(page, "nav-editor").click();
   await expect(id(page, "writing-paper")).toBeVisible();
@@ -243,7 +243,7 @@ test("tablet width keeps icon navigation and a usable manuscript canvas", async 
 });
 
 test("import preview, named history restore and scenes persist after reload", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/classic/");
   await id(page, "project-switcher").click();
   await id(page, "beta-import").click();
   await id(page, "import-file").setInputFiles({ name: "导入验收.txt", mimeType: "text/plain", buffer: Buffer.from("第一章 灯塔\n林舟检查了灯塔的铜钟。\n第二章 渡口\n渡船在清晨靠岸。", "utf8") });
@@ -282,9 +282,11 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 800
   test(`writing panels and focus mode at ${viewport.width}px`, async ({ page, request }) => {
     await page.setViewportSize(viewport);
     await request.post("/api/works", { data: { title: "纸白工作台验收" } });
-    await page.goto("/");
+    await page.goto("/classic/");
     await id(page, "nav-editor").click();
     const editor = id(page, "rich-editor").locator(".ql-editor");
+    // The chapter loads after the page; typing earlier would be replaced by it.
+    await expect(id(page, "chapter-title-input")).toBeEnabled();
     await editor.fill("林舟沿着河岸走向旧灯塔。");
     await id(page, "focus-writing-button").click();
     await expect(id(page, "primary-rail")).toBeHidden();
