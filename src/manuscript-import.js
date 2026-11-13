@@ -12,14 +12,20 @@ function heading(line) {
   if (/^#{1,3}\s+\S/.test(value)) return value.replace(/^#{1,3}\s+/, '');
   if (/^第[零〇一二三四五六七八九十百千万两\d]+[章节回卷部集]/u.test(value) && value.length <= 100) return value;
   if (/^(序章|楔子|尾声|后记|前言)(?:\s|[：:]|$)/u.test(value) && value.length <= 100) return value;
+  // English headings: "Chapter 1", "CHAPTER IV", "Chapter One: The Ferry", "Part Two", "Prologue".
+  if (/^(chapter|part|book)\s+([0-9]+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/i.test(value) && value.length <= 100) return value;
+  if (/^(prologue|epilogue|interlude|afterword|foreword)\b/i.test(value) && value.length <= 100) return value;
   return '';
 }
 
-function splitChapters(text) {
+// The name given to text before the first heading follows the story language.
+const firstChapterTitle = (language) => (language === 'en' ? 'Chapter 1' : '第一章');
+
+function splitChapters(text, language) {
   text = String(text).replace(/\r\n?/g, '\n');
   if (text.length > MAX_TEXT) throw invalid("IMPORT_TEXT_TOO_LARGE");
   const chapters = [];
-  let title = '第一章';
+  let title = firstChapterTitle(language);
   let lines = [];
   let hasHeading = false;
   const flush = () => { const content = lines.join('\n'); chapters.push({ title, content, richContent: plainDelta(content) }); };
@@ -105,13 +111,13 @@ function decodeXml(text) {
     return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : '\ufffd';
   });
 }
-function docxChapters(files) {
+function docxChapters(files, language) {
   const raw = files.get('word/document.xml');
   if (!raw || !files.has('[Content_Types].xml')) throw invalid("DOCX_NO_BODY");
   const xml = raw.toString('utf8');
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw invalid("DOCX_EXTERNAL_ENTITY");
   const chapters = [];
-  let chapter = { title: '第一章', content: '', richContent: { ops: [] } };
+  let chapter = { title: firstChapterTitle(language), content: '', richContent: { ops: [] } };
   let explicit = false;
   let chars = 0;
   for (const paragraph of xml.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g)) {
@@ -145,7 +151,7 @@ function docxChapters(files) {
   return chapters;
 }
 
-async function parseManuscript({ fileName = '', base64 = '', encoding = 'auto' } = {}) {
+async function parseManuscript({ fileName = '', base64 = '', encoding = 'auto', language = 'zh-CN' } = {}) {
   const extension = path.extname(String(fileName)).toLowerCase();
   if (!['.txt', '.md', '.markdown', '.docx'].includes(extension)) throw invalid("IMPORT_FILE_TYPE_UNSUPPORTED");
   if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw invalid("IMPORT_FILE_INVALID");
@@ -154,7 +160,7 @@ async function parseManuscript({ fileName = '', base64 = '', encoding = 'auto' }
   const title = path.basename(String(fileName), extension).slice(0, 200) || '导入作品';
   if (extension === '.docx') {
     const files = readZip(buffer);
-    return { title, chapters: docxChapters(files), encoding: 'utf-8', warnings: ['DOCX 仅导入正文段落及加粗、斜体、下划线；图片、页眉页脚、批注和复杂样式不导入。'] };
+    return { title, chapters: docxChapters(files, language), encoding: 'utf-8', warnings: ['DOCX 仅导入正文段落及加粗、斜体、下划线；图片、页眉页脚、批注和复杂样式不导入。'], warningCodes: ['DOCX_TEXT_ONLY'] };
   }
   if (!['auto', 'utf-8', 'utf8', 'gb18030'].includes(encoding)) throw invalid("IMPORT_ENCODING_UNSUPPORTED");
   let actualEncoding = encoding === 'auto' || encoding === 'utf8' ? 'utf-8' : encoding;
@@ -166,9 +172,9 @@ async function parseManuscript({ fileName = '', base64 = '', encoding = 'auto' }
     try { text = new TextDecoder(actualEncoding, { fatal: true }).decode(buffer); } catch { throw invalid("IMPORT_ENCODING_UNKNOWN"); }
   }
   if (text.includes('\u0000')) throw invalid("IMPORT_NOT_TEXT");
-  const chapters = splitChapters(text);
+  const chapters = splitChapters(text, language);
   if (extension !== '.txt') for (const chapter of chapters) chapter.richContent = markdownDelta(chapter.content);
-  return { title, chapters, encoding: actualEncoding, warnings: actualEncoding === 'gb18030' ? ['已按 GB18030 解码，请在预览中确认文字。'] : [] };
+  return { title, chapters, encoding: actualEncoding, warnings: actualEncoding === 'gb18030' ? ['已按 GB18030 解码，请在预览中确认文字。'] : [], warningCodes: actualEncoding === 'gb18030' ? ['DECODED_GB18030'] : [] };
 }
 
 function zipStore(entries) {

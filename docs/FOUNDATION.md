@@ -6,7 +6,7 @@ Plan reference: `docs/SUMITALE_PLAN.md`, sections 2, 6, 7 and 8 (phase 0).
 
 | Command | What it does |
 |---|---|
-| `npm start` | Runs `server.js`. Legacy workspace at `/`, new frontend at `/app/` (after a build). |
+| `npm start` | Runs `server.js`. `/` opens the new interface (`/app/`, after a build); the legacy workspace is at `/classic/`. |
 | `npm run build:web` | Builds `web/` into `web/dist` (git-ignored). |
 | `npm run dev:web` | Vite dev server on port 5290; proxies `/api` to the app on 5177. |
 | `npm run check` | Syntax, translations, token contrast, TypeScript, unit tests, example data. |
@@ -19,7 +19,7 @@ No global pnpm on the dev machine: use `npx -y pnpm@10 install`.
 - Defined once in `shared/brand.json`: `name.default` ("Sumitale"), `name["zh-CN"]` ("墨台"). Both are provisional.
 - Internal identifiers use `codename` ("novel-studio"): npm package name, browser storage keys (`novel-studio:*`).
 - The frontend reads it through `web/src/brand.ts`; translations reference it as `$t(brand.name)`.
-- Not renamed yet (they touch stored data or the frozen desktop build): backup format `motai-backup`, env var `MOTAI_TEST_AI`, legacy `localStorage` keys `motai.*`, desktop data folder, `打开墨台.vbs`, `resources/motai.ico`, `package.json` `productName`/`build`. Plan 2.1: rename them with "read old, write new" when the legacy frontend is retired.
+- Renamed with "read old, write new" (phase 1, step 5): backup format and file names, `NOVEL_STUDIO_*` environment switches (old `MOTAI_*` names still work). Still old, because they belong to the frozen desktop build or the legacy workspace: desktop data folder, `打开墨台.vbs`, `resources/motai.ico`, `package.json` `productName`/`build`, legacy `localStorage` keys `motai.*`.
 
 ## Languages
 
@@ -50,4 +50,6 @@ No global pnpm on the dev machine: use `npx -y pnpm@10 install`.
 ## Tests
 
 - E2E selectors use `data-testid` and state attributes (`data-state`, `data-status`, `data-artifact`, `data-rewrite-count`) instead of copy or colours.
-- `e2e/studio.spec.js`: legacy workspace. `e2e/foundation.spec.js`: new shell.
+- `e2e/studio.spec.js`: legacy workspace (`/classic/`). The other specs cover the new interface: `foundation`, `ideate`, `write`, `settings`, `welcome`.
+- Spec files run one at a time (`workers: 1`): they share one temporary database.
+- Tests that read colours turn on reduced motion, so a reading never lands in the middle of a 200 ms colour fade.

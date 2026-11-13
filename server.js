@@ -15,6 +15,7 @@ const {
   normalizeChapterPlanning,
   normalizeCoverStyle,
   normalizeStoryBible,
+  STORY_FOCUSES,
   normalizeStoryLanguage,
   normalizeText,
   nowIso,
@@ -53,6 +54,8 @@ const {
 } = require("./src/continuity");
 const {
   ARTIFACT_DEFINITIONS,
+  ARTIFACT_ENGLISH,
+  publicChat,
   applyArtifactProposal,
   autoChatTitle,
   createArtifactProposal,
@@ -77,6 +80,8 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 // New frontend (web/), built by Vite into web/dist and served under /app/.
 const WEB_DIST_DIR = path.join(ROOT, "web", "dist");
 const WEB_URL_PREFIX = "/app";
+// The previous workspace (public/), kept as a fallback.
+const CLASSIC_URL_PREFIX = "/classic";
 const LOCALES_DIR = path.join(ROOT, "shared", "locales");
 const DATA_FILE = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
@@ -93,7 +98,13 @@ const COVER_MAX_BYTES = 25 * 1024 * 1024;
 const WALLPAPER_MAX_BYTES = 25 * 1024 * 1024;
 const BACKUP_MAX_BYTES = 50 * 1024 * 1024;
 const BACKUP_MAX_COVER_BYTES = 40 * 1024 * 1024;
-const BACKUP_FORMAT = "motai-backup";
+// Backups are written with the brand-neutral codename; files made before the
+// rename ("motai-backup", "墨台-…") are still read.
+const BACKUP_FORMAT = `${require("./shared/brand.json").codename}-backup`;
+const LEGACY_BACKUP_FORMATS = new Set(["motai-backup"]);
+const SAFETY_BACKUP_REASONS = { "自动": "auto", "恢复前": "before-restore" };
+const SAFETY_BACKUP_PATTERN = new RegExp(`^${require("./shared/brand.json").codename}-auto-\\d{14}\\.backup\\.json$`);
+const LEGACY_SAFETY_BACKUP_PATTERN = /^墨台-自动-\d{14}\.motai-backup\.json$/u;
 const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
@@ -1175,7 +1186,7 @@ function normalizeBackupPayload(value) {
     throw error;
   }
 
-  if (value.format !== BACKUP_FORMAT || Number(value.version) !== BACKUP_VERSION) {
+  if ((value.format !== BACKUP_FORMAT && !LEGACY_BACKUP_FORMATS.has(value.format)) || Number(value.version) !== BACKUP_VERSION) {
     const error = appError("BACKUP_UNSUPPORTED");
     throw error;
   }
@@ -1219,7 +1230,7 @@ async function createSafetyBackup(reason) {
   const payload = await buildBackupPayload();
   const backupDir = path.join(DATA_DIR, "backups");
   await fsp.mkdir(backupDir, { recursive: true });
-  const filePath = path.join(backupDir, `墨台-${reason}-${backupTimestamp()}.motai-backup.json`);
+  const filePath = path.join(backupDir, `${brand.codename}-${SAFETY_BACKUP_REASONS[reason] || "manual"}-${backupTimestamp()}.backup.json`);
   await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   return filePath;
 }
@@ -1237,7 +1248,7 @@ async function listAutomaticBackups() {
   }
 
   const backups = await Promise.all(entries
-    .filter((entry) => entry.isFile() && /^墨台-自动-\d{14}\.motai-backup\.json$/u.test(entry.name))
+    .filter((entry) => entry.isFile() && (SAFETY_BACKUP_PATTERN.test(entry.name) || LEGACY_SAFETY_BACKUP_PATTERN.test(entry.name)))
     .map(async (entry) => {
       const filePath = path.join(backupDir, entry.name);
       const stats = await fsp.stat(filePath);
@@ -1528,8 +1539,12 @@ function getApiRoot(baseUrl) {
     .replace(/\/images\/generations$/, "");
 }
 
+function isDesktopRuntime() {
+  return process.env.NOVEL_STUDIO_DESKTOP === "1" || process.env.MOTAI_DESKTOP === "1";
+}
+
 function isTestAiEnabled() {
-  return process.env.MOTAI_TEST_AI === "1";
+  return process.env.NOVEL_STUDIO_TEST_AI === "1" || process.env.MOTAI_TEST_AI === "1";
 }
 
 function aiUnavailableError() {
@@ -1778,7 +1793,7 @@ function buildImagePrompt(work, prompt) {
     storyBible.conflict && `主线冲突：${limitText(storyBible.conflict, 260)}`,
     storyBible.chapterPlan && `章节规划参考：${limitText(storyBible.chapterPlan, 360)}`,
     "",
-    "画面要求：主体明确，背景有世界观信息；顶部和底部要有可读文字的干净留白。墨台会在生成后叠加准确的书名和作者名，所以画面中不要生成任何可读文字、水印或假标题。风格贴合封面方向，避免空泛蓝色渐变、三角形、圆形等模板装饰。"
+    "画面要求：主体明确，背景有世界观信息；顶部和底部要有可读文字的干净留白。应用会在生成后叠加准确的书名和作者名，所以画面中不要生成任何可读文字、水印或假标题。风格贴合封面方向，避免空泛蓝色渐变、三角形、圆形等模板装饰。"
   ].filter(Boolean).join("\n");
 }
 
@@ -2126,7 +2141,10 @@ async function callOpenAiWriter(body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   const prompt = buildAiPrompt(body);
-  const systemText = "你是专业的中文小说写作助手，擅长续写、润色、扩写、章节大纲和剧情构思。你尊重作者原有设定，避免替作者擅自改变核心剧情。";
+  const english = normalizeStoryLanguage(body.work?.language) === "en";
+  const systemText = english
+    ? "You are a skilled fiction-writing assistant: continuing, polishing, expanding and condensing prose, outlining chapters and plotting. You respect the author's established material and never change the core story on your own. The story is written in English: write every word of your output in English, even though some instructions below are in Chinese."
+    : "你是专业的中文小说写作助手，擅长续写、润色、扩写、章节大纲和剧情构思。你尊重作者原有设定，避免替作者擅自改变核心剧情。";
 
   try {
     let payload;
@@ -2461,10 +2479,38 @@ async function createConstrainedGeneration(body) {
   return { generation: record, text: selectedGenerationOutput(record), canAccept: canAcceptGeneration(record), fallback: false };
 }
 
+// Story material as "Name: text" lines with English field names.
+function englishStoryMaterial(storyBible) {
+  const bible = normalizeStoryBible(storyBible);
+  return Object.values(ARTIFACT_ENGLISH)
+    .flatMap((group) => Object.entries(group.fields))
+    .filter(([key]) => bible[key])
+    .map(([key, name]) => `- ${name}: ${limitText(bible[key], 900)}`)
+    .join("\n");
+}
+
+// The assistant answers in the language the story is written in, whatever the
+// interface language is.
 function buildChatSystemPrompt(work) {
+  if (normalizeStoryLanguage(work.language) === "en") {
+    return [
+      "You are a creative partner for a novelist. Your first job is to help the author, through natural conversation, get clear on the idea, the conflict, what the characters want, and an outline they can act on.",
+      "Be direct, concrete and useful. When something is missing, ask only the single most important question; never send a long questionnaire. Use plain words, not craft jargon.",
+      "Never claim to have changed the story's material; that happens only when the author approves a draft in the interface. Do not show your reasoning.",
+      "Always reply in English.",
+      "",
+      "The story:",
+      `Title: ${work.title || "Untitled story"}`,
+      `Genre: ${work.genre || "not decided"}`,
+      `Premise: ${work.premise || "none yet"}`,
+      "",
+      "Story material so far:",
+      englishStoryMaterial(work.storyBible) || "Nothing yet. Start by helping the author say the idea clearly."
+    ].join("\n");
+  }
   const storyBible = compactStoryBible(work.storyBible);
   return [
-    "你是墨台里的中文小说创作伙伴。你的首要任务是通过自然对话帮助作者澄清灵感、冲突、人物动机和可执行的大纲。",
+    "你是一位中文小说创作伙伴。你的首要任务是通过自然对话帮助作者澄清灵感、冲突、人物动机和可执行的大纲。",
     "回答要直接、具体、有创作推动力。信息不足时一次只追问最关键的问题，不要一次抛出长问卷。",
     "不要声称已经修改作品资料；资料写入由界面中的草案确认流程完成。不要展示内部推理过程。",
     "",
@@ -2618,7 +2664,17 @@ function sendSseEvent(res, event, payload) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
-async function generateArtifactFields(work, type, instruction = "") {
+// The conversation the draft is asked from, so details discussed but not yet
+// saved as story material reach the draft.
+function conversationForDraft(chat, english) {
+  const turns = chat ? selectChatContext(chat).slice(-24) : [];
+  if (!turns.length) return "";
+  const you = english ? "Author" : "作者";
+  const editor = english ? "Assistant" : "助手";
+  return limitText(turns.map((turn) => `${turn.role === "user" ? you : editor}: ${turn.content}`).join("\n"), 12000);
+}
+
+async function generateArtifactFields(work, type, instruction = "", chat = null) {
   const definition = ARTIFACT_DEFINITIONS[type];
   if (!definition) {
     const error = appError("ARTIFACT_TYPE_UNSUPPORTED");
@@ -2631,19 +2687,29 @@ async function generateArtifactFields(work, type, instruction = "") {
     return Object.fromEntries(fieldNames.map((field) => [field, result.storyBible[field] || ""]));
   }
   if (!config.apiKey) throw aiUnavailableError();
-  const prompt = [
+  const english = normalizeStoryLanguage(work.language) === "en";
+  const fieldNotes = english ? ARTIFACT_ENGLISH[type].fields : definition.fields;
+  const prompt = (english ? [
+    `Draft the ${ARTIFACT_ENGLISH[type].label} for the novel "${work.title || "Untitled story"}".`,
+    `Premise: ${work.premise || "none yet"}`,
+    `Material so far:\n${englishStoryMaterial(work.storyBible) || "none yet"}`,
+    conversationForDraft(chat, true) ? `The conversation with the author so far (use what was decided there, even if it is not in the material yet):\n${conversationForDraft(chat, true)}` : "",
+    instruction ? `The author also asks: ${instruction}` : "",
+    "Be specific and directly usable for a long novel. Do not overwrite core facts the author has already settled. Write every value in English."
+  ] : [
     `请为小说《${work.title || "未命名作品"}》优化${definition.label}。`,
     `作品简介：${work.premise || "暂无"}`,
     `当前资料：${compactStoryBible(work.storyBible) || "暂无"}`,
+    conversationForDraft(chat, false) ? `与作者的对话（其中已经确定的内容即使还没写进资料，也要采用）：\n${conversationForDraft(chat, false)}` : "",
     instruction ? `作者补充要求：${instruction}` : "",
     "输出必须具体、可直接用于长篇创作，不要覆盖作者已经确定的核心事实。"
-  ].filter(Boolean).join("\n\n");
+  ]).filter(Boolean).join("\n\n");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
     let output;
     if (config.endpoint === "chat") {
-      const properties = Object.fromEntries(fieldNames.map((field) => [field, { type: "string", description: definition.fields[field] }]));
+      const properties = Object.fromEntries(fieldNames.map((field) => [field, { type: "string", description: fieldNotes[field] }]));
       const toolName = "propose_story_artifact";
       const payload = await fetchAiJson(`${config.baseUrl}/chat/completions`, config.apiKey, {
         model: config.model,
@@ -2655,7 +2721,7 @@ async function generateArtifactFields(work, type, instruction = "") {
           type: "function",
           function: {
             name: toolName,
-            description: `生成${definition.label}草案`,
+            description: english ? `Draft the ${ARTIFACT_ENGLISH[type].label}` : `生成${definition.label}草案`,
             parameters: { type: "object", properties, required: fieldNames, additionalProperties: false }
           }
         }],
@@ -2668,7 +2734,7 @@ async function generateArtifactFields(work, type, instruction = "") {
     } else {
       const payload = await fetchAiJson(`${config.baseUrl}/responses`, config.apiKey, {
         model: config.model,
-        input: `${prompt}\n\n只输出 JSON，字段为：${fieldNames.join("、")}`,
+        input: english ? `${prompt}\n\nOutput JSON only, with the fields: ${fieldNames.join(", ")}` : `${prompt}\n\n只输出 JSON，字段为：${fieldNames.join("、")}`,
         max_output_tokens: config.maxOutputTokens
       }, controller.signal);
       output = extractJsonObject(extractResponseText(payload));
@@ -2684,7 +2750,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     const workspace = ensureAiWorkspace(work, { createChat: true });
     if (req.method === "GET" && parts.length === 4) {
       await writeDb(db);
-      sendJson(res, 200, { activeChatId: workspace.activeChatId, chats: workspace.chats, proposals: workspace.proposals });
+      sendJson(res, 200, { activeChatId: workspace.activeChatId, chats: workspace.chats.map(publicChat), proposals: workspace.proposals });
       return true;
     }
     if (req.method === "POST" && parts.length === 4) {
@@ -2694,7 +2760,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       workspace.activeChatId = chat.id;
       work.updatedAt = nowIso();
       await writeDb(db);
-      sendJson(res, 201, { chat, activeChatId: chat.id });
+      sendJson(res, 201, { chat: publicChat(chat), activeChatId: chat.id });
       return true;
     }
     const chatId = parts[4];
@@ -2711,7 +2777,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       workspace.activeChatId = chat.id;
       chat.updatedAt = nowIso();
       await writeDb(db);
-      sendJson(res, 200, { chat, activeChatId: chat.id });
+      sendJson(res, 200, { chat: publicChat(chat), activeChatId: chat.id });
       return true;
     }
     if (req.method === "DELETE" && parts.length === 5) {
@@ -2721,19 +2787,23 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
       }
       workspace.activeChatId = workspace.chats[0].id;
       await writeDb(db);
-      sendJson(res, 200, { ok: true, activeChatId: workspace.activeChatId, chats: workspace.chats });
+      sendJson(res, 200, { ok: true, activeChatId: workspace.activeChatId, chats: workspace.chats.map(publicChat) });
       return true;
     }
     if (req.method === "POST" && parts.length === 7 && parts[5] === "messages" && parts[6] === "stream") {
       const body = await readBody(req);
-      const content = String(body.content || "").trim().slice(0, 20000);
+      // Retrying the latest turn answers the user message that is already
+      // saved instead of saving the same words a second time.
+      const lastUserMessage = [...chat.messages].reverse().find((message) => message.role === "user");
+      const retryTarget = body.retryOf && lastUserMessage?.id === body.retryOf ? lastUserMessage : null;
+      const content = retryTarget ? retryTarget.content : String(body.content || "").trim().slice(0, 20000);
       if (!content) {
         sendError(res, "MESSAGE_EMPTY");
         return true;
       }
-      const userMessage = createMessage("user", content, { retryOf: body.retryOf });
+      const userMessage = retryTarget || createMessage("user", content, { retryOf: body.retryOf });
       const assistantMessage = createMessage("assistant", "");
-      chat.messages.push(userMessage);
+      if (!retryTarget) chat.messages.push(userMessage);
       if (chat.title === "新对话" || chat.messages.filter((message) => message.role === "user").length === 1) {
         chat.title = autoChatTitle(content);
       }
@@ -2785,7 +2855,7 @@ async function handleStudioWorkspaceApi(req, res, parts, db, work) {
     if (req.method === "POST" && parts.length === 6 && parts[5] === "proposals") {
       const body = await readBody(req);
       const type = normalizeText(body.type);
-      const generated = await generateArtifactFields(work, type, normalizeText(body.instruction));
+      const generated = await generateArtifactFields(work, type, normalizeText(body.instruction), chat);
       const proposal = createArtifactProposal(work, chat.id, type, generated, body.sourceMessageId);
       workspace.proposals.unshift(proposal);
       chat.updatedAt = nowIso();
@@ -2886,7 +2956,7 @@ async function handleAiApi(req, res, parts) {
 
 async function handleSystemApi(req, res, parts) {
   if (req.method === "POST" && parts.length === 3 && parts[2] === "shutdown") {
-    if (process.env.MOTAI_DESKTOP === "1") {
+    if (isDesktopRuntime()) {
       return sendJson(res, 200, { ok: true, desktop: true });
     }
 
@@ -2899,6 +2969,77 @@ async function handleSystemApi(req, res, parts) {
   return sendError(res, "ROUTE_NOT_FOUND");
 }
 
+// A new story record with one empty chapter and one conversation.
+function createWorkRecord(body, ownerId) {
+  const timestamp = nowIso();
+  // Default names are story content, so they follow the story's language.
+  const language = normalizeStoryLanguage(body.language);
+  const english = language === "en";
+  const title = normalizeText(body.title) || (english ? "Untitled story" : "未命名作品");
+  const chapterTitle = normalizeText(body.chapterTitle) || (english ? "Chapter 1" : "第一章");
+  const work = {
+    id: createId("work"),
+    ownerId,
+    language,
+    ...(STORY_FOCUSES.includes(body.focus) ? { focus: body.focus } : {}),
+    title,
+    author: normalizeText(body.author).slice(0, 40) || (english ? "" : "未署名"),
+    premise: normalizeText(body.premise),
+    genre: normalizeText(body.genre) || (english ? "" : "原创"),
+    status: normalizeText(body.status) || "draft",
+    tags: Array.isArray(body.tags) ? body.tags.map(normalizeText).filter(Boolean).slice(0, 8) : [],
+    targetCharacters: Number(body.targetCharacters) || 80000,
+    boldness: clampNumber(body.boldness, 0, 100, 50),
+    storyBible: normalizeStoryBible(body.storyBible),
+    coverStyle: normalizeCoverStyle(body.coverStyle),
+    coverLogline: normalizeText(body.coverLogline),
+    cover: DEFAULT_COVER_PATH,
+    coverHistory: [],
+    canon: { version: 1, status: "empty", entities: [], facts: [] },
+    generationRecords: [],
+    canonProposals: [],
+    notes: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    chapters: [
+      {
+        id: createId("chapter"),
+        title: chapterTitle,
+        content: "",
+        richContent: plainTextToRichContent(""),
+        contentFormat: "quill-delta-v1",
+        notes: "",
+        status: "draft",
+        planning: normalizeChapterPlanning(body.chapterPlanning),
+        chapterMemory: normalizeChapterMemory(),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+    ],
+    aiWorkspace: normalizeAiWorkspace({ chats: [createChatRecord()] })
+  };
+  return work;
+}
+
+// Original sample stories shipped with the app (shared/samples/<language>.json).
+function createSampleWork(language, ownerId) {
+  const sample = require(`./shared/samples/${language}.json`);
+  const work = createWorkRecord({ ...sample, language, chapterTitle: sample.chapters[0]?.title }, ownerId);
+  const template = work.chapters[0];
+  work.sample = true;
+  work.chapters = sample.chapters.map((chapter, index) => {
+    const richContent = plainTextToRichContent(chapter.content);
+    return {
+      ...template,
+      id: index === 0 ? template.id : createId("chapter"),
+      title: chapter.title,
+      richContent,
+      content: richContentToMarkdown(richContent)
+    };
+  });
+  return work;
+}
+
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (await handleAccountApi(req, res, parts)) return;
@@ -2909,7 +3050,7 @@ async function handleApi(req, res, url) {
       ok: true,
       name: brand.name.default,
       version: PACKAGE_VERSION,
-      desktop: process.env.MOTAI_DESKTOP === "1"
+      desktop: isDesktopRuntime()
     });
   }
 
@@ -2974,7 +3115,7 @@ async function handleApi(req, res, url) {
       return sendDownload(res, {
         mime: "application/json; charset=utf-8",
         buffer: Buffer.from(`${JSON.stringify(payload, null, 2)}\n`, "utf8"),
-        fileName: `墨台备份-${backupTimestamp()}.motai-backup.json`
+        fileName: `${brand.name.default}-backup-${backupTimestamp()}.json`
       });
     }
 
@@ -3003,57 +3144,24 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && parts.length === 2) {
     const works = db.works
+      .filter((work) => (work.ownerId || "local") === req.user.id)
       .map(workSummary)
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     return sendJson(res, 200, { works });
   }
 
+  if (req.method === "POST" && parts.length === 3 && parts[2] === "samples") {
+    // A copy of the built-in sample story in the requested language.
+    const body = await readBody(req, 16 * 1024);
+    const work = createSampleWork(normalizeStoryLanguage(body.language), req.user.id);
+    db.works.unshift(work);
+    await writeDb(db);
+    return sendJson(res, 201, { work });
+  }
+
   if (req.method === "POST" && parts.length === 2) {
     const body = await readBody(req);
-    const timestamp = nowIso();
-    const title = normalizeText(body.title) || "未命名作品";
-    const chapterTitle = normalizeText(body.chapterTitle) || "第一章";
-    const work = {
-      id: createId("work"),
-      ownerId: req.user.id,
-      language: normalizeStoryLanguage(body.language),
-      title,
-      author: normalizeText(body.author).slice(0, 40) || "未署名",
-      premise: normalizeText(body.premise),
-      genre: normalizeText(body.genre) || "原创",
-      status: normalizeText(body.status) || "draft",
-      tags: Array.isArray(body.tags) ? body.tags.map(normalizeText).filter(Boolean).slice(0, 8) : [],
-      targetCharacters: Number(body.targetCharacters) || 80000,
-      boldness: clampNumber(body.boldness, 0, 100, 50),
-      storyBible: normalizeStoryBible(body.storyBible),
-      coverStyle: normalizeCoverStyle(body.coverStyle),
-      coverLogline: normalizeText(body.coverLogline),
-      cover: DEFAULT_COVER_PATH,
-      coverHistory: [],
-      canon: { version: 1, status: "empty", entities: [], facts: [] },
-      generationRecords: [],
-      canonProposals: [],
-      notes: "",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      chapters: [
-        {
-          id: createId("chapter"),
-          title: chapterTitle,
-          content: "",
-          richContent: plainTextToRichContent(""),
-          contentFormat: "quill-delta-v1",
-          notes: "",
-          status: "draft",
-          planning: normalizeChapterPlanning(body.chapterPlanning),
-          chapterMemory: normalizeChapterMemory(),
-          createdAt: timestamp,
-          updatedAt: timestamp
-        }
-      ],
-      aiWorkspace: normalizeAiWorkspace({ chats: [createChatRecord()] })
-    };
-
+    const work = createWorkRecord(body, req.user.id);
     db.works.unshift(work);
     await writeDb(db);
     return sendJson(res, 201, { work });
@@ -3098,6 +3206,16 @@ async function handleApi(req, res, url) {
       if (Object.prototype.hasOwnProperty.call(body, field)) {
         work[field] = normalizeText(body[field]);
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "focus")) {
+      if (!STORY_FOCUSES.includes(body.focus)) throw appError("BAD_REQUEST");
+      work.focus = body.focus;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "language")) {
+      if (normalizeStoryLanguage(body.language, "") !== body.language) throw appError("BAD_REQUEST");
+      work.language = body.language;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "targetCharacters")) {
@@ -3293,7 +3411,7 @@ async function handleApi(req, res, url) {
     const timestamp = nowIso();
     const chapter = {
       id: createId("chapter"),
-      title: normalizeText(body.title) || `第${(work.chapters || []).length + 1}章`,
+      title: normalizeText(body.title) || (normalizeStoryLanguage(work.language) === "en" ? `Chapter ${(work.chapters || []).length + 1}` : `第${(work.chapters || []).length + 1}章`),
       content: "",
       richContent: plainTextToRichContent(""),
       contentFormat: "quill-delta-v1",
@@ -4229,7 +4347,11 @@ function buildAiPrompt(body) {
           "不得输出免责声明；不得脱离设定库、当前章节标题和匹配章纲。"
         ].join("\n");
 
+  const languageRule = normalizeStoryLanguage(work.language) === "en"
+    ? ["Output language: English. The manuscript is in English; write all prose in English and match its style. (The instructions below are in Chinese; follow them, but answer in English.)", ""]
+    : [];
   return [
+    ...languageRule,
     `任务：${getModeInstruction(mode)}`,
     "",
     "题材策略：",
@@ -4504,9 +4626,21 @@ function createAppServer() {
         return;
       }
 
-      if (url.pathname === WEB_URL_PREFIX) {
-        res.writeHead(308, { Location: `${WEB_URL_PREFIX}/` });
+      // The new interface is the front door. The previous workspace stays
+      // available at /classic/ until its remaining features are rebuilt.
+      if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === WEB_URL_PREFIX) {
+        res.writeHead(302, { Location: `${WEB_URL_PREFIX}/`, "Cache-Control": "no-store" });
         return res.end();
+      }
+
+      if (url.pathname === CLASSIC_URL_PREFIX) {
+        res.writeHead(308, { Location: `${CLASSIC_URL_PREFIX}/` });
+        return res.end();
+      }
+
+      if (url.pathname === `${CLASSIC_URL_PREFIX}/`) {
+        await serveFile(res, path.join(PUBLIC_DIR, "index.html"));
+        return;
       }
 
       if (url.pathname.startsWith(`${WEB_URL_PREFIX}/`)) {
@@ -4558,6 +4692,8 @@ if (require.main === module) {
 
 module.exports = {
   buildAiPrompt,
+  conversationForDraft,
+  buildChatSystemPrompt,
   buildImagePrompt,
   buildStoryBiblePrompt,
   createAppServer

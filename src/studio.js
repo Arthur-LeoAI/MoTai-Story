@@ -45,6 +45,23 @@ const ARTIFACT_DEFINITIONS = {
   }
 };
 
+// English names for the story-material fields, used in prompts for stories
+// written in English. (Interface labels live in shared/locales.)
+const ARTIFACT_ENGLISH = {
+  outline: { label: "story outline", fields: { logline: "Core concept", theme: "Theme", tone: "Narrative style", genrePositioning: "Genre positioning", conflict: "Main conflict", antagonistPressure: "Opposing pressure", outline: "Story outline", chapterPlan: "Chapter plan" } },
+  characters: { label: "characters and relationships", fields: { characters: "Characters", relationships: "Relationships" } },
+  world: { label: "world and its rules", fields: { worldview: "World", rules: "Rules of the world", era: "Era and background", factions: "Factions", locations: "Key places" } },
+  timeline: { label: "timeline of key events", fields: { keyEvents: "Key events", foreshadowing: "Setups and payoffs", continuityNotes: "Continuity notes" } }
+};
+
+// A chat nobody has named yet carries this stored title. Clients get an
+// `untitled` flag instead of comparing against it.
+const DEFAULT_CHAT_TITLE = "新对话";
+
+function publicChat(chat) {
+  return { ...chat, untitled: chat.title === DEFAULT_CHAT_TITLE };
+}
+
 const ALLOWED_INLINE_ATTRIBUTES = new Set(["bold", "italic", "link"]);
 const ALLOWED_LINE_ATTRIBUTES = new Set(["header", "blockquote", "list"]);
 const ALLOWED_ATTRIBUTES = new Set([...ALLOWED_INLINE_ATTRIBUTES, ...ALLOWED_LINE_ATTRIBUTES]);
@@ -379,6 +396,9 @@ function richContentToMarkdown(value) {
 
 module.exports = {
   ARTIFACT_DEFINITIONS,
+  ARTIFACT_ENGLISH,
+  DEFAULT_CHAT_TITLE,
+  publicChat,
   CHAT_CONTEXT_CHARACTER_LIMIT,
   applyArtifactProposal,
   autoChatTitle,

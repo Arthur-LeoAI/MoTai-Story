@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
@@ -43,6 +43,8 @@ export function errorText(t: TFunction, error: unknown): string {
 export interface Preferences {
   uiLocale: UiLocale;
   theme: Theme;
+  /** When the first-run welcome was finished or skipped; null before. */
+  welcomedAt: string | null;
   updatedAt: string | null;
 }
 
@@ -52,8 +54,34 @@ export interface Session {
   preferences: Preferences;
 }
 
+// The language a story is written in; independent of the interface language.
+export type StoryLanguage = "en" | "zh-CN";
+export type StoryFocus = "shape" | "write";
+
+export interface WorkSummary {
+  id: string;
+  title: string;
+  language: StoryLanguage;
+  focus: StoryFocus;
+  genre: string;
+  premise: string;
+  /** Free-text story material, keyed by field (see ARTIFACT_FIELDS). */
+  storyBible: Record<string, string>;
+  updatedAt: string;
+  lastEditedChapter: { id: string; title: string; number: number } | null;
+  stats: { wordCount: number; wordUnit: "words" | "characters"; chapterCount: number };
+}
+
+export interface NewWork {
+  premise: string;
+  language: StoryLanguage;
+  focus: StoryFocus;
+}
+
 export const api = {
   session: () => request<Session>("/api/session"),
-  updatePreferences: (patch: Partial<Pick<Preferences, "uiLocale" | "theme">>) =>
-    request<{ preferences: Preferences }>("/api/me/preferences", { method: "PATCH", body: JSON.stringify(patch) })
+  updatePreferences: (patch: Partial<Pick<Preferences, "uiLocale" | "theme">> & { welcomed?: true }) =>
+    request<{ preferences: Preferences }>("/api/me/preferences", { method: "PATCH", body: JSON.stringify(patch) }),
+  listWorks: () => request<{ works: WorkSummary[] }>("/api/works"),
+  createWork: (work: NewWork) => request<{ work: { id: string } }>("/api/works", { method: "POST", body: JSON.stringify(work) })
 };

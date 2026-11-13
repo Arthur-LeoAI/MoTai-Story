@@ -49,7 +49,11 @@ test("health endpoint and static homepage are available", async () => {
   assert.equal(health.payload.name, require("../shared/brand.json").name.default);
   assert.equal(health.payload.version, version);
 
-  const homepage = await fetch(`${baseUrl}/`);
+  // The new interface is the front door; the previous workspace is at /classic/.
+  const front = await fetch(`${baseUrl}/`, { redirect: "manual" });
+  assert.equal(front.status, 302);
+  assert.equal(front.headers.get("location"), "/app/");
+  const homepage = await fetch(`${baseUrl}/classic/`);
   assert.equal(homepage.status, 200);
   assert.match(homepage.headers.get("content-type"), /text\/html/);
 

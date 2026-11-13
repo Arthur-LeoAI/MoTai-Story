@@ -70,9 +70,9 @@ test("完整备份包含作品和本地封面，恢复前会留下回退快照",
 
   const backupResponse = await fetch(`${baseUrl}/api/backup`);
   assert.equal(backupResponse.status, 200);
-  assert.match(backupResponse.headers.get("content-disposition"), /motai-backup\.json/i);
+  assert.match(backupResponse.headers.get("content-disposition"), /-backup-\d{14}\.json/i);
   const backup = await backupResponse.json();
-  assert.equal(backup.format, "motai-backup");
+  assert.equal(backup.format, `${require("../shared/brand.json").codename}-backup`);
   assert.equal(backup.version, 1);
   assert.equal(backup.database.works.length, 1);
   assert.equal(Object.keys(backup.covers).length, 2);
@@ -91,7 +91,7 @@ test("完整备份包含作品和本地封面，恢复前会留下回退快照",
   assert.equal(restored.response.status, 200);
   assert.equal(restored.payload.workCount, 1);
   assert.equal(restored.payload.coverCount, 2);
-  assert.match(restored.payload.previousBackup, /恢复前-\d{14}\.motai-backup\.json$/);
+  assert.match(restored.payload.previousBackup, /before-restore-\d{14}\.backup\.json$/);
 
   const listed = await request("/api/works");
   assert.deepEqual(listed.payload.works.map((work) => work.title), ["备份中的小说"]);
@@ -100,7 +100,7 @@ test("完整备份包含作品和本地封面，恢复前会留下回退快照",
   assert.match(restoredWork.payload.work.chapters[0].content, /\/data\/covers\/restore-/);
   const backups = await fsp.readdir(path.join(directory, "backups"));
   assert.ok(backups.length >= 1);
-  assert.ok(backups.some((name) => name.startsWith("墨台-恢复前-")));
+  assert.ok(backups.some((name) => name.startsWith(`${require("../shared/brand.json").codename}-before-restore-`)));
 });
 
 test("无效备份不会替换当前作品库", async () => {
@@ -113,4 +113,11 @@ test("无效备份不会替换当前作品库", async () => {
   assert.equal(failed.response.status, 400);
   const after = await request("/api/works");
   assert.deepEqual(after.payload.works, before.payload.works);
+});
+
+test("backups made before the rename still restore", async () => {
+  const fresh = await request("/api/backup");
+  const legacy = { ...fresh.payload, format: "motai-backup" };
+  const restored = await request("/api/backup/restore", { method: "POST", body: JSON.stringify(legacy) });
+  assert.equal(restored.response.status, 200);
 });
