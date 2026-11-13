@@ -23,6 +23,7 @@ const {
   workSummary
 } = require("./src/domain");
 const { createJsonStore } = require("./src/storage");
+const { createPostgresStore, poolFromEnvironment } = require("./src/postgres-store");
 const { createTaskService, taskContext } = require("./src/tasks");
 const { createBetaApi } = require("./src/beta-api");
 const { normalizeTemporalFact, selectTemporalFacts, invalidateDependencies, classifyConflict, adjudicateConflict } = require("./src/temporal");
@@ -112,7 +113,15 @@ const LEGACY_SAFETY_BACKUP_PATTERN = /^墨台-自动-\d{14}\.motai-backup\.json$
 const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
-const dataStore = createJsonStore(DATA_FILE);
+// Where stories and the rest of the data live. NOVEL_STUDIO_STORAGE=postgres
+// uses the database at DATABASE_URL (see docs/FOUNDATION.md); anything else
+// keeps the JSON file. It is an explicit switch so that a connection string in
+// the environment never changes the storage by itself. Chapter history and
+// image files stay in DATA_DIR either way.
+const STORAGE_BACKEND = process.env.NOVEL_STUDIO_STORAGE === "postgres" ? "postgres" : "json";
+const dataStore = STORAGE_BACKEND === "postgres"
+  ? createPostgresStore({ createPool: () => poolFromEnvironment(process.env) })
+  : createJsonStore(DATA_FILE);
 const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
 const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
@@ -4740,7 +4749,7 @@ function createAppServer() {
 if (require.main === module) {
   const server = createAppServer();
   server.listen(PORT, "127.0.0.1", () => {
-    console.log(`${brand.name.default} is running: http://127.0.0.1:${PORT} (new frontend: /app/)`);
+    console.log(`${brand.name.default} is running: http://127.0.0.1:${PORT} (new frontend: /app/, storage: ${STORAGE_BACKEND})`);
   });
 }
 

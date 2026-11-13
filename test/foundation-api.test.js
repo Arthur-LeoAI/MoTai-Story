@@ -147,7 +147,7 @@ test("shared locale files are served for the legacy frontend", async () => {
 });
 
 test("every error helper call in the server uses a code from the catalog", () => {
-  const files = ["server.js", ...fs.readdirSync(path.join(__dirname, "..", "src")).map((name) => path.join("src", name))];
+  const files = ["server.js", ...fs.readdirSync(path.join(__dirname, "..", "src")).filter((name) => name.endsWith(".js")).map((name) => path.join("src", name))];
   const unknown = [];
   let calls = 0;
   for (const file of files) {

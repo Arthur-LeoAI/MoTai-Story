@@ -43,7 +43,17 @@ No global pnpm on the dev machine: use `npx -y pnpm@10 install`.
   - `store.getWork(id)`, `store.listWorks(ownerId)`, `store.transactWork(id, fn)` for a change made inside one transaction, and `store.saveWorks({ upserts, removals })` for stories read earlier and changed in memory.
   - Every story has a `rowVersion` that storage moves on each stored change. `saveWorks` names the version that was read; if it has moved, nothing is saved (`WORK_UPDATED_ELSEWHERE`).
   - In `server.js`: `readWorkDb(workId)` and `readOwnerDb(ownerId)` read a unit of stories, `writeDb(unit)` saves the ones that changed, `transactStoredWork(workId, fn)` changes one in a transaction. `readDb()` (everything) is only for backup and restore.
-  - Still on whole-database transactions, to be moved when the database is connected: tasks, usage, import previews, receipts, settings, user preferences (`store.transact`).
+  - Data outside stories is read and changed by collection: `readRecords` / `transactRecords` for lists (tasks, usage, import previews, receipts), `readDocument` / `transactDocument` for keyed values (user preferences, settings).
+
+## Database
+
+- Two storage backends with the same methods: the JSON file (`src/storage.js`, default) and PostgreSQL (`src/postgres-store.js`). `test/store-contract.test.js` runs one suite against both; `test/postgres-api.test.js` runs the main flows over HTTP on Postgres. Both use an in-process PostgreSQL (PGlite), never a real database.
+- Choose with `NOVEL_STUDIO_STORAGE=postgres`; the connection is `DATABASE_URL`. The switch is explicit, so a connection string in the environment never changes the storage by itself. Both go in `.env.local`, which is not committed.
+- For Supabase use the **Session pooler** connection string (Connect → Direct → Session pooler) with the database password filled in.
+- TLS: `DATABASE_SSL` = `verify` (default for remote hosts), `no-verify` or `off` (default for this computer). `DATABASE_CA_FILE` = a certificate to trust, such as the one in the Supabase database settings. `DATABASE_POOL_SIZE` (default 5).
+- Check the connection without changing anything: `node --env-file=<path to .env.local> scripts/check-database.cjs` (or `npm run check:database` where `.env.local` is in the working directory). It never prints the connection string.
+- Tables are created on first use from `src/migrations/*.sql`, in the schema `novel_studio` (not `public`, which Supabase publishes through its REST API), with row level security on and no access for Supabase's API roles. Story data is stored as `json`, not `jsonb`, so that key order survives a round trip.
+- Known limits: every write takes one lock row (`storeRevision`), so writes run one at a time, as with the file. Chapter history snapshots, covers and wallpapers are still files under `DATA_DIR`; on a server they need persistent disk or object storage (not done). Stories in an existing `data/db.json` are not copied over; use Settings → backup download, then restore after switching.
 
 ## Design tokens and fonts
 

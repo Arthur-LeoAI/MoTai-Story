@@ -13,7 +13,8 @@ For the session that starts phase 2. Read this first, then the files listed belo
 ## Progress
 
 - 2026-11-13: data model v6 is in (`docs/DATA_MODEL_V6.md`): structured objects in canon, derived facts, routes, revisions and invalidation. No interface yet.
-- 2026-11-13: decided to replace `data/db.json` with Supabase (plan section 9, row 6). Next after v6: make the storage interface per-story, then connect.
+- 2026-11-13: decided to replace `data/db.json` with Supabase (plan section 9, row 6); the user reconfirmed a hosted website with subscriptions over a local app with users' own API keys.
+- 2026-11-13: storage reads and writes per story and per collection; PostgreSQL backend added and tested on an in-process PostgreSQL (`docs/FOUNDATION.md`, "Database"). Not yet run against the real Supabase project.
 
 ## What phase 2 is
 
