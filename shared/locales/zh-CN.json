@@ -278,6 +278,7 @@
     "exitFocus": "退出专注"
   },
   "companion": {
+    "brief": "简报",
     "assist": "写作助手",
     "checks": "一致性检查",
     "scenes": "场景",
@@ -656,5 +657,33 @@
     "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
     "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
     "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。"
+  },
+  "brief": {
+    "intro": "帮你写这一章时我会记着的内容。不属于这一章的，可以取消勾选。",
+    "goal": "这一章要做到",
+    "noGoal": "还没有目标。可以在“场景”里或章节规划中添加。",
+    "sections": {
+      "people": "在场人物",
+      "places": "地点",
+      "relations": "他们之间",
+      "rules": "起作用的规则",
+      "threads": "要推进的线索",
+      "others": "也会交给助手的（{{count}}）"
+    },
+    "reasons": {
+      "named": "本章提到",
+      "event": "参与本章的事件",
+      "between": "两人都在场",
+      "always": "故事的规则",
+      "happens": "发生在本章",
+      "open": "之前埋下，尚未回收",
+      "payoff": "计划在本章回收",
+      "elsewhere": "故事中的其他内容"
+    },
+    "kept": "始终保留",
+    "noCard": "人物卡还没有内容",
+    "empty": "本章还没有提到人物页里的任何人或东西。",
+    "openCast": "打开人物页",
+    "othersHint": "本章没有提到的卡片。助手仍会看到它们；不需要的可以取消勾选。"
   }
 }

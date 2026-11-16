@@ -283,6 +283,7 @@
     "exitFocus": "Leave focus"
   },
   "companion": {
+    "brief": "Brief",
     "assist": "Assistant",
     "checks": "Checks",
     "scenes": "Scenes",
@@ -667,5 +668,33 @@
     "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
     "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
     "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first."
+  },
+  "brief": {
+    "intro": "What I keep in mind while helping with this chapter. Untick anything that does not belong here.",
+    "goal": "This chapter should",
+    "noGoal": "No goal yet. Add one in Scenes, or in the chapter plan.",
+    "sections": {
+      "people": "Who is here",
+      "places": "Where",
+      "relations": "Between them",
+      "rules": "Rules in play",
+      "threads": "Threads to move along",
+      "others": "Also given to the assistant ({{count}})"
+    },
+    "reasons": {
+      "named": "named in this chapter",
+      "event": "takes part in an event here",
+      "between": "both are here",
+      "always": "a rule of the story",
+      "happens": "happens in this chapter",
+      "open": "planted earlier, not paid off yet",
+      "payoff": "to be paid off here",
+      "elsewhere": "elsewhere in the story"
+    },
+    "kept": "always kept",
+    "noCard": "no card details yet",
+    "empty": "Nobody and nothing from Cast is named in this chapter yet.",
+    "openCast": "Open Cast",
+    "othersHint": "Cards not named in this chapter. The assistant still sees them; untick what it does not need here."
   }
 }

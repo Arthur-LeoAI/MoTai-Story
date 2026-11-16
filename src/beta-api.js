@@ -4,6 +4,7 @@ const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = 
 const { upgradeWork, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
 const { chapterDerivedFactIds } = require("./canon-model");
+const { buildSceneBrief, normalizeExcluded } = require("./scene-brief");
 function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
   const result = (res, value, status = 200) => { sendJson(res, status, value); return true; };
   return async function handle(req, res, url) {
@@ -134,6 +135,8 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
     }
     if (p[3] !== "chapters" || !p[4]) return false;
     const chapter = work.chapters.find(c => c.id === p[4]); if (!chapter) return false;
+    // The scene brief: what the assistant keeps in mind for this chapter.
+    if (p[5] === "brief" && p.length === 6 && req.method === "GET") return result(res, { brief: buildSceneBrief(work, chapter.id) });
     if (p[5] === "revisions") {
       if (req.method === "GET") return result(res, p[6] ? { chapter: await service.readSnapshot(work, chapter, p[6]) } : { revisions: chapter.revisions });
       const body = await readBody(req);
@@ -201,6 +204,8 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
         }
         for (const key of ["title", "notes", "status"]) if (body[key] !== undefined) c[key] = String(body[key]).slice(0, key === "notes" ? 10000 : 150);
         if (body.planning) c.planning = body.planning;
+        // Brief items the writer unticked; the writing context leaves those facts out.
+        if (body.briefExcluded !== undefined) c.briefExcluded = normalizeExcluded(body.briefExcluded);
       }));
     }
     if (p.length === 5 && req.method === "DELETE") {

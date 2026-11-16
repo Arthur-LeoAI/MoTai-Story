@@ -431,3 +431,53 @@ test("a scene cannot be asked for without saying what happens", async ({ request
   expect(refused.status()).toBe(400);
   expect((await refused.json()).error.code).toBe("PLAIN_ACCOUNT_REQUIRED");
 });
+
+test("the brief shows who and what this chapter touches, and an unticked card stays unticked", async ({ page, request }) => {
+  const workId = await newStory(request);
+  const card = async (data) => (await (await request.post(`/api/works/${workId}/canon/entities`, { data })).json()).item;
+  await card({ type: "character", name: "Mira", summary: "A mapmaker on the run" });
+  const kael = await card({ type: "character", name: "Kael", summary: "A warden" });
+  await card({ type: "character", name: "Voss", summary: "Not in this chapter" });
+  const rule = await card({ type: "rule", name: "Self-drawn maps", summary: "A map drawn for oneself misleads its maker" });
+  const work = await storedWork(request, workId);
+  const chapter = work.chapters[0];
+  expect((await request.patch(`/api/works/${workId}/chapters/${chapter.id}`, { data: { baseRevision: chapter.revision, content: "Mira waited at the ferry until Kael came." } })).ok()).toBeTruthy();
+
+  await page.goto(`/app/works/${workId}/write`);
+  await page.getByTestId("tab-brief").click();
+  const brief = page.getByTestId("brief");
+  await expect(page.getByTestId("brief-people").getByTestId("brief-item")).toHaveCount(2);
+  await expect(page.getByTestId("brief-people")).toContainText("Mira");
+  await expect(page.getByTestId("brief-people")).not.toContainText("Voss");
+  // Rules always apply: shown, but not something to untick.
+  const ruleItem = page.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${rule.id}"]`);
+  await expect(ruleItem).toBeVisible();
+  await expect(ruleItem.getByTestId("brief-toggle")).toHaveCount(0);
+
+  const kaelItem = page.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${kael.id}"]`);
+  await kaelItem.getByTestId("brief-toggle").uncheck();
+  await expect(kaelItem).toHaveAttribute("data-state", "off");
+  await expect(brief).toHaveAttribute("data-excluded", "1");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([`derived:entity:${kael.id}`]);
+
+  await page.reload();
+  await page.getByTestId("tab-brief").click();
+  await expect(kaelItem).toHaveAttribute("data-state", "off");
+  await kaelItem.getByTestId("brief-toggle").check();
+  await expect(kaelItem).toHaveAttribute("data-state", "on");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([]);
+});
+
+test("cards not named in the chapter are listed in the brief too, and can be left out", async ({ page, request }) => {
+  const workId = await newStory(request);
+  const voss = (await (await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "character", name: "Voss", summary: "Governor of the March" } })).json()).item;
+  await page.goto(`/app/works/${workId}/write`);
+  await page.getByTestId("tab-brief").click();
+  const others = page.getByTestId("brief-others");
+  await expect(others).toBeVisible();
+  await others.locator("summary").click();
+  const item = others.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${voss.id}"]`);
+  await item.getByTestId("brief-toggle").uncheck();
+  await expect(item).toHaveAttribute("data-state", "off");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([`derived:entity:${voss.id}`]);
+});

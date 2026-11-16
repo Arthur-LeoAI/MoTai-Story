@@ -2458,7 +2458,11 @@ async function createConstrainedGeneration(body) {
   if (mode === "scene" && !normalizeText(body.instruction)) fail("PLAIN_ACCOUNT_REQUIRED");
   const context = selectContinuityContext(work, chapter.id, { maxFacts: 240, recentChapterCount: 4 });
   context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
-  if (Array.isArray(body.excludeFactIds)) context.canonFacts = context.canonFacts.filter(f => !body.excludeFactIds.includes(f.id) || f.strength === "hard");
+  // Facts the writer left out: named in the request, or unticked in the chapter's brief. Hard facts always stay.
+  const excludeFactIds = Array.isArray(body.excludeFactIds) ? body.excludeFactIds : Array.isArray(chapter.briefExcluded) ? chapter.briefExcluded : [];
+  // Judged by each fact's own strength: selection softens facts without a place in story time.
+  const hardFactIds = new Set(continuityFacts(work).filter(f => f.strength === "hard").map(f => f.id));
+  if (excludeFactIds.length) context.canonFacts = context.canonFacts.filter(f => !excludeFactIds.includes(f.id) || hardFactIds.has(f.id));
   context.canonFactIds = context.canonFacts.map(f => f.id);
   const baseContentHash = hashChapterContent(chapter);
   const attempts = [];

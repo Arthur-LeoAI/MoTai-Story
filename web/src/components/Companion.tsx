@@ -14,8 +14,9 @@ import {
 } from "../assistApi";
 import type { WriteContext } from "../pages/Write";
 import { HistoryPanel, ScenesPanel } from "./ChapterTools";
+import { BriefPanel } from "./BriefPanel";
 
-const TABS = ["assist", "checks", "scenes", "history"] as const;
+const TABS = ["brief", "assist", "checks", "scenes", "history"] as const;
 type Tab = (typeof TABS)[number];
 
 interface Run {
@@ -385,6 +386,7 @@ export default function Companion({ context }: { context: WriteContext }) {
         <div hidden={tab !== "checks"}>
           <Checks context={context} refreshKey={checksKey} />
         </div>
+        {tab === "brief" ? <BriefPanel context={context} /> : null}
         {tab === "scenes" ? <ScenesPanel context={context} /> : null}
         {tab === "history" ? <HistoryPanel context={context} /> : null}
       </div>
