@@ -67,12 +67,11 @@
   },
   "cast": {
     "part": "Part II",
-    "subtitle": "The people in your story. A sentence each is enough to begin.",
+    "subtitle": "Who they are, and what lies between them.",
     "listLabel": "Characters",
     "empty": "No characters yet. Start with whoever you already see most clearly.",
     "noSummary": "No description yet",
     "new": "New character",
-    "newHint": "Who are they, in a sentence?",
     "newTitle": "A new character",
     "editTitle": "Character",
     "name": "Name",
@@ -120,7 +119,55 @@
     "delete": "Delete character",
     "deleteConfirm": "Delete {{name}}? Their relationships are deleted too. This cannot be undone.",
     "earlierNotes": "Earlier notes about characters",
-    "earlierNotesHint": "Written in Ideate or the previous workspace. Kept as they are; turn them into cards when you are ready."
+    "earlierNotesHint": "Written in Ideate or the previous workspace. Kept as they are; turn them into cards when you are ready.",
+    "views": {
+      "label": "View",
+      "portraits": "Portraits",
+      "relations": "Relations"
+    },
+    "map": {
+      "label": "Relations map",
+      "figure": "Fig. 1",
+      "hint": "Draw from one portrait to another to join them. Choose a line's words to change it.",
+      "needsTwo": "Add a second character to draw what lies between them.",
+      "nodeLabel": "{{name}}. Choose to see their card; drag to another portrait to join them."
+    },
+    "panel": {
+      "label": "Selected character",
+      "want": "Wants",
+      "obstacle": "What stands in the way",
+      "change": "By the end",
+      "unset": "Not decided yet",
+      "edit": "Edit"
+    },
+    "relation": {
+      "heading": "Relationships",
+      "none": "No relationships yet.",
+      "linkTo": "Join {{name}} to…",
+      "add": "Add relationship",
+      "newTitle": "A new relationship",
+      "editTitle": "Relationship",
+      "swap": "Swap direction",
+      "mentorReads": "Read as: {{from}} is {{to}}'s mentor.",
+      "kind": "What are they to each other?",
+      "kinds": {
+        "family": "Family",
+        "friend": "Friends",
+        "lover": "Lovers",
+        "mentor": "Mentor",
+        "rival": "Rivals",
+        "enemy": "Enemies",
+        "ally": "Allies",
+        "custom": "Something else"
+      },
+      "label": "In a few words (optional)",
+      "labelHint": "old friends, now hunter and quarry",
+      "tension": "What is the tension between them?",
+      "tensionHint": "He owes her his life, and the warrant has her name on it",
+      "delete": "Delete relationship",
+      "deleteConfirm": "Delete the relationship between {{from}} and {{to}}? This cannot be undone.",
+      "lineLabel": "{{from}} and {{to}}: {{kind}}. Open this relationship."
+    }
   },
   "ideate": {
     "part": "Part I",

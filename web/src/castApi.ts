@@ -27,8 +27,36 @@ export interface Entity {
   updatedAt: string;
 }
 
+export const RELATION_KINDS = ["family", "friend", "lover", "mentor", "rival", "enemy", "ally", "custom"] as const;
+export type RelationKind = (typeof RELATION_KINDS)[number];
+
+/** How two entities stand to each other. "mentor" reads from → to; the other kinds go both ways. */
+export interface Relation {
+  id: string;
+  fromId: string;
+  toId: string;
+  kind: RelationKind;
+  label: string;
+  tension: string;
+  /** Story time, half-open [storyFrom, storyUntil); null = not placed in time. */
+  storyFrom: number | null;
+  storyUntil: number | null;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RelationDraft {
+  fromId: string;
+  toId: string;
+  kind: RelationKind;
+  label: string;
+  tension: string;
+}
+
 export interface Canon {
   entities: Entity[];
+  relations: Relation[];
   canonRevision: number;
 }
 
@@ -43,6 +71,7 @@ export interface EntityDraft {
 
 const base = (workId: string) => `/api/works/${encodeURIComponent(workId)}/canon`;
 const entityPath = (workId: string, entityId: string) => `${base(workId)}/entities/${encodeURIComponent(entityId)}`;
+const relationPath = (workId: string, relationId: string) => `${base(workId)}/relations/${encodeURIComponent(relationId)}`;
 const send = (method: string, data: unknown): RequestInit => ({ method, body: JSON.stringify(data) });
 
 export const castApi = {
@@ -52,7 +81,13 @@ export const castApi = {
   update: (workId: string, entity: Entity, draft: EntityDraft) =>
     request<{ item: Entity; canonRevision: number }>(entityPath(workId, entity.id), send("PATCH", { ...draft, baseRevision: entity.revision })),
   remove: (workId: string, entity: Entity) =>
-    request<{ removed: { id: string; relationIds: string[] }; canonRevision: number }>(entityPath(workId, entity.id), send("DELETE", { baseRevision: entity.revision }))
+    request<{ removed: { id: string; relationIds: string[] }; canonRevision: number }>(entityPath(workId, entity.id), send("DELETE", { baseRevision: entity.revision })),
+  createRelation: (workId: string, draft: RelationDraft) =>
+    request<{ item: Relation; canonRevision: number }>(`${base(workId)}/relations`, send("POST", draft)),
+  updateRelation: (workId: string, relation: Relation, draft: RelationDraft) =>
+    request<{ item: Relation; canonRevision: number }>(relationPath(workId, relation.id), send("PATCH", { ...draft, baseRevision: relation.revision })),
+  removeRelation: (workId: string, relation: Relation) =>
+    request<{ removed: { id: string }; canonRevision: number }>(relationPath(workId, relation.id), send("DELETE", { baseRevision: relation.revision }))
 };
 
 /** Aliases typed as one line: commas in either language, or the Chinese enumeration comma. */

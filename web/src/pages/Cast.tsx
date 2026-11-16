@@ -3,16 +3,14 @@ import { useTranslation } from "react-i18next";
 import { ApiError, errorText, type WorkSummary } from "../api";
 import {
   CHARACTER_MAIN_FIELDS, CHARACTER_MORE_FIELDS, castApi, parseAliases,
-  type CharacterField, type Entity, type EntityDraft
+  type CharacterField, type Entity, type EntityDraft, type Relation
 } from "../castApi";
+import { RelationDialog, RelationsMap, initial, relationText, type RelationEditing } from "../components/RelationsMap";
 
-type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[] } | { state: "failed"; message: string };
+type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[]; relations: Relation[] } | { state: "failed"; message: string };
 type Editing = { mode: "new" } | { mode: "edit"; entity: Entity } | null;
 
 const ALL_FIELDS: readonly CharacterField[] = [...CHARACTER_MAIN_FIELDS, ...CHARACTER_MORE_FIELDS];
-
-/** The first letter of a name, for the medallion (a whole character, not half of a surrogate pair). */
-const initial = (name: string) => Array.from(name.trim())[0] ?? "?";
 
 function emptyDraft(): EntityDraft {
   return { name: "", aliases: [], summary: "", card: {}, notes: "" };
@@ -25,12 +23,12 @@ function draftOf(entity: Entity): EntityDraft {
 }
 
 /** One character on the grid: who they are in a sentence, and what they want and fear. */
-function CharacterCard({ entity, language, onOpen }: { entity: Entity; language: string; onOpen: () => void }) {
+function CharacterCard({ entity, language, selected, onSelect }: { entity: Entity; language: string; selected: boolean; onSelect: () => void }) {
   const { t } = useTranslation();
   return (
     <li>
-      <button type="button" className="card cast-card" onClick={onOpen} data-testid="cast-card" data-entity-id={entity.id}>
-        <span className="cast-medallion" aria-hidden="true" lang={language}>{initial(entity.name)}</span>
+      <button type="button" className={selected ? "card cast-card on" : "card cast-card"} aria-pressed={selected} onClick={onSelect} data-testid="cast-card" data-entity-id={entity.id}>
+        <span className="medal cast-medallion" aria-hidden="true" lang={language}>{initial(entity.name)}</span>
         <span className="cast-card-body">
           <span className="cast-name display" lang={language} data-testid="cast-card-name">{entity.name}</span>
           {entity.summary
@@ -207,17 +205,100 @@ function CharacterDialog({ workId, language, editing, onClose, onSaved, onRemove
   );
 }
 
-/** Cast: the characters of a story as cards (plan 5.5, card view). */
+const VIEW_KEY = "novel-studio:cast-view";
+type View = "relations" | "portraits";
+
+function storedView(): View {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "portraits" ? "portraits" : "relations";
+  } catch {
+    return "relations";
+  }
+}
+
+/** The selected character beside the map: the three questions, and their relationships. */
+function CharacterPanel({ entity, characters, relations, language, onEdit, onOpenRelation, onAddRelation }: {
+  entity: Entity;
+  characters: Entity[];
+  relations: Relation[];
+  language: string;
+  onEdit: () => void;
+  onOpenRelation: (relation: Relation) => void;
+  onAddRelation: (toId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [target, setTarget] = useState("");
+  const others = characters.filter((item) => item.id !== entity.id);
+  const nameOf = (id: string) => characters.find((item) => item.id === id)?.name ?? "";
+  const own = relations.filter((relation) => relation.fromId === entity.id || relation.toId === entity.id);
+
+  return (
+    <aside className="cast-panel" aria-label={t("cast.panel.label")} data-testid="cast-panel" data-entity-id={entity.id}>
+      <div className="card cast-panel-card">
+        <div className="cast-panel-head">
+          <div className="medal cast-panel-medal" aria-hidden="true" lang={language}>{initial(entity.name)}</div>
+          <div className="cast-card-body">
+            <h2 className="display cast-panel-name" lang={language} data-testid="cast-panel-name">{entity.name}</h2>
+            {entity.summary ? <div className="cast-summary muted" lang={language}>{entity.summary}</div> : null}
+          </div>
+        </div>
+        <hr className="rule" />
+        {(["want", "obstacle", "change"] as const).map((key) => (
+          <div key={key} data-testid={`cast-panel-${key}`}>
+            <div className="caps">{t(`cast.panel.${key}`)}</div>
+            {entity.card[key] ? <div lang={language}>{entity.card[key]}</div> : <div className="muted cast-unset">{t("cast.panel.unset")}</div>}
+          </div>
+        ))}
+        <div className="dialog-row">
+          <button type="button" className="btn" onClick={onEdit} data-testid="cast-edit">{t("cast.panel.edit")}</button>
+        </div>
+      </div>
+
+      <div className="card cast-panel-card">
+        <div className="caps">{t("cast.relation.heading")}</div>
+        {own.length ? (
+          <ul className="cast-relations" data-testid="cast-relations">
+            {own.map((relation) => (
+              <li key={relation.id}>
+                <button type="button" className="btn quiet cast-relation" onClick={() => onOpenRelation(relation)} data-testid="cast-relation" data-relation-id={relation.id}>
+                  <span lang={language}>{nameOf(relation.fromId)} {relation.kind === "mentor" ? "→" : "—"} {nameOf(relation.toId)}</span>
+                  <span className="muted">{relationText(t, relation)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="muted cast-unset">{t("cast.relation.none")}</p>}
+        {others.length ? (
+          <div className="cast-relation-add">
+            <label className="visually-hidden" htmlFor="relation-target">{t("cast.relation.linkTo", { name: entity.name })}</label>
+            <select id="relation-target" className="field" value={target} onChange={(event) => setTarget(event.target.value)} data-testid="relation-add-target">
+              <option value="">{t("cast.relation.linkTo", { name: entity.name })}</option>
+              {others.map((item) => <option key={item.id} value={item.id} lang={language}>{item.name}</option>)}
+            </select>
+            <button type="button" className="btn" disabled={!target} onClick={() => { onAddRelation(target); setTarget(""); }} data-testid="relation-add">{t("cast.relation.add")}</button>
+          </div>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+/** Cast: who the characters are, and what lies between them (plan 5.5). */
 export default function Cast({ work }: { work: WorkSummary }) {
   const { t } = useTranslation();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [editing, setEditing] = useState<Editing>(null);
+  const [relationEditing, setRelationEditing] = useState<RelationEditing>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const [view, setView] = useState<View>(storedView);
 
   const load = useCallback(async () => {
     const { canon } = await castApi.canon(work.id);
     const characters = canon.entities.filter((entity) => entity.type === "character");
-    setLoaded({ state: "ready", characters });
-    return characters;
+    const ids = new Set(characters.map((entity) => entity.id));
+    const relations = (canon.relations ?? []).filter((relation) => ids.has(relation.fromId) && ids.has(relation.toId));
+    setLoaded({ state: "ready", characters, relations });
+    return { characters, relations };
   }, [work.id]);
 
   useEffect(() => {
@@ -226,59 +307,116 @@ export default function Cast({ work }: { work: WorkSummary }) {
   }, [load]);
 
   const characters = loaded.state === "ready" ? loaded.characters : [];
+  const relations = loaded.state === "ready" ? loaded.relations : [];
+  const selected = characters.find((entity) => entity.id === selectedId) ?? characters[0] ?? null;
   const earlierNotes = (["characters", "relationships"] as const).filter((key) => work.storyBible?.[key]?.trim());
+
+  function chooseView(next: View) {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Remembering the view is a convenience only.
+    }
+  }
 
   function saved(entity: Entity) {
     setLoaded((current) => current.state !== "ready" ? current : {
-      state: "ready",
+      ...current,
       characters: current.characters.some((item) => item.id === entity.id)
         ? current.characters.map((item) => item.id === entity.id ? entity : item)
         : [...current.characters, entity]
     });
+    setSelectedId(entity.id);
   }
 
-  function removed(entityId: string) {
-    setLoaded((current) => current.state !== "ready" ? current : { state: "ready", characters: current.characters.filter((item) => item.id !== entityId) });
+  function relationSaved(relation: Relation) {
+    setLoaded((current) => current.state !== "ready" ? current : {
+      ...current,
+      relations: current.relations.some((item) => item.id === relation.id)
+        ? current.relations.map((item) => item.id === relation.id ? relation : item)
+        : [...current.relations, relation]
+    });
+  }
+
+  function relationRemoved(relationId: string) {
+    setLoaded((current) => current.state !== "ready" ? current : { ...current, relations: current.relations.filter((item) => item.id !== relationId) });
   }
 
   async function reloadEditing(): Promise<Entity | null> {
     const fresh = await load();
     const id = editing?.mode === "edit" ? editing.entity.id : "";
-    const entity = fresh.find((item) => item.id === id) ?? null;
+    const entity = fresh.characters.find((item) => item.id === id) ?? null;
     if (entity) setEditing({ mode: "edit", entity });
     return entity;
   }
 
+  async function reloadRelation(): Promise<Relation | null> {
+    const fresh = await load();
+    const id = relationEditing?.mode === "edit" ? relationEditing.relation.id : "";
+    const relation = fresh.relations.find((item) => item.id === id) ?? null;
+    if (relation) setRelationEditing({ mode: "edit", relation });
+    return relation;
+  }
+
   return (
-    <div className="cast" data-testid="cast">
+    <div className="cast" data-testid="cast" data-view={view}>
       <header className="cast-head">
-        <div className="caps">{t("cast.part")}</div>
-        <h1 className="display page-title">{t("nav.cast")}</h1>
-        <p className="page-subtitle muted">{t("cast.subtitle")}</p>
+        <div>
+          <div className="caps">{t("cast.part")}</div>
+          <h1 className="display page-title">{t("nav.cast")}</h1>
+          <p className="page-subtitle muted">{t("cast.subtitle")}</p>
+        </div>
+        <div className="cast-actions">
+          <div className="cast-views" role="group" aria-label={t("cast.views.label")}>
+            {(["portraits", "relations"] as const).map((item) => (
+              <button key={item} type="button" className={view === item ? "btn on" : "btn"} aria-pressed={view === item} onClick={() => chooseView(item)} data-testid={`cast-view-${item}`}>
+                {t(`cast.views.${item}`)}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn primary" onClick={() => setEditing({ mode: "new" })} data-testid="cast-new">{t("cast.new")}</button>
+        </div>
       </header>
       <hr className="rule2" />
 
       {loaded.state === "loading" ? <p className="muted">{t("app.loading")}</p> : null}
       {loaded.state === "failed" ? <p className="notice" role="alert" data-testid="cast-load-error">{loaded.message}</p> : null}
 
-      {loaded.state === "ready" ? (
-        <>
-          {characters.length === 0 ? <p className="muted cast-empty" data-testid="cast-empty">{t("cast.empty")}</p> : null}
-          <ul className="cast-grid" data-testid="cast-grid" aria-label={t("cast.listLabel")}>
-            {characters.map((entity) => (
-              <CharacterCard key={entity.id} entity={entity} language={work.language} onOpen={() => setEditing({ mode: "edit", entity })} />
-            ))}
-            <li>
-              <button type="button" className="cast-card cast-new" onClick={() => setEditing({ mode: "new" })} data-testid="cast-new">
-                <span className="cast-medallion cast-medallion-new" aria-hidden="true">+</span>
-                <span className="cast-card-body">
-                  <span className="cast-name display">{t("cast.new")}</span>
-                  <span className="cast-summary muted">{t("cast.newHint")}</span>
-                </span>
-              </button>
-            </li>
-          </ul>
-        </>
+      {loaded.state === "ready" && characters.length === 0 ? <p className="muted cast-empty" data-testid="cast-empty">{t("cast.empty")}</p> : null}
+
+      {loaded.state === "ready" && selected ? (
+        <div className="cast-body">
+          <section className="cast-main" aria-label={view === "relations" ? t("cast.map.label") : t("cast.listLabel")}>
+            {view === "relations" ? (
+              <RelationsMap
+                characters={characters}
+                relations={relations}
+                selectedId={selected.id}
+                language={work.language}
+                onSelect={setSelectedId}
+                onOpenRelation={(relation) => setRelationEditing({ mode: "edit", relation })}
+                onConnect={(fromId, toId) => setRelationEditing({ mode: "new", fromId, toId })}
+              />
+            ) : (
+              <ul className="cast-grid" data-testid="cast-grid">
+                {characters.map((entity) => (
+                  <CharacterCard key={entity.id} entity={entity} language={work.language} selected={entity.id === selected.id} onSelect={() => setSelectedId(entity.id)} />
+                ))}
+              </ul>
+            )}
+          </section>
+          <CharacterPanel
+            key={selected.id}
+            entity={selected}
+            characters={characters}
+            relations={relations}
+            language={work.language}
+            onEdit={() => setEditing({ mode: "edit", entity: selected })}
+            onOpenRelation={(relation) => setRelationEditing({ mode: "edit", relation })}
+            onAddRelation={(toId) => setRelationEditing({ mode: "new", fromId: selected.id, toId })}
+          />
+        </div>
       ) : null}
 
       {earlierNotes.length ? (
@@ -300,8 +438,18 @@ export default function Cast({ work }: { work: WorkSummary }) {
         editing={editing}
         onClose={() => setEditing(null)}
         onSaved={saved}
-        onRemoved={removed}
+        onRemoved={() => void load()}
         onReload={reloadEditing}
+      />
+      <RelationDialog
+        workId={work.id}
+        language={work.language}
+        characters={characters}
+        editing={relationEditing}
+        onClose={() => setRelationEditing(null)}
+        onSaved={relationSaved}
+        onRemoved={relationRemoved}
+        onReload={reloadRelation}
       />
     </div>
   );

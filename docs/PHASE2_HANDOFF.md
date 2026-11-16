@@ -15,6 +15,7 @@ For the session that starts phase 2. Read this first, then the files listed belo
 - 2026-11-13: data model v6 is in (`docs/DATA_MODEL_V6.md`): structured objects in canon, derived facts, routes, revisions and invalidation. No interface yet.
 - 2026-11-13: decided to replace `data/db.json` with Supabase (plan section 9, row 6); the user reconfirmed a hosted website with subscriptions over a local app with users' own API keys.
 - 2026-11-13: Cast page, card view (plan 5.5): characters as cards with the three main questions (want, obstacle, change) and more under "More"; create, edit, delete; a change made in another window is not overwritten (load the saved version). Earlier character notes from story material are shown read-only. Not yet: the relationship graph, AI completion of a card from one sentence, finding characters in the manuscript, portraits and colours.
+- 2026-11-16: Cast as in the mockup: Portraits / Relations views (the choice is remembered in the browser), the selected character's card and relationships beside the map, "Edit" opens the card. Relationship graph (`web/src/components/RelationsMap.tsx`): portraits on an oval, a line per relationship (parallel ones bend apart), drag from one portrait to another to create one, the kind as chips, an optional label, the tension; open a relationship from its label or from the side panel to change or delete it; a keyboard path without dragging (choose the other person beside the map). On narrow screens the figure shrinks to fit.
 - 2026-11-13: storage reads and writes per story and per collection; PostgreSQL backend added and tested on an in-process PostgreSQL (`docs/FOUNDATION.md`, "Database"). Not yet run against the real Supabase project.
 
 ## Phase 2 steps (order agreed with the user, 2026-11-13)
@@ -24,7 +25,7 @@ Done when: a Shape writer and a Write writer can each do one worthwhile thing wi
 | Step | Contents | Status |
 |---|---|---|
 | 1 | Data model v6; storage per story and per collection; PostgreSQL backend | Done (Supabase connection check pending, run by the user on another computer) |
-| 2 | Cast as in the mockup (`project/Cast.dc.html` in the design artifact): Portraits / Relations views, the selected character's card beside the map; relationship graph: draw from one portrait to another, choose the kind, one sentence of tension; edit and delete relations | Character cards done; the rest in progress |
+| 2 | Cast as in the mockup (`project/Cast.dc.html` in the design artifact): Portraits / Relations views, the selected character's card beside the map; relationship graph: draw from one portrait to another, choose the kind, one sentence of tension; edit and delete relations | Done |
 | 3 | Write: tell it plainly → prose (plan 5.9 A), reusing the generation, diff and checks pipeline | To do |
 | 4 | AI drafts of characters: "describe someone in a sentence" → card draft; `+ Add "Mira" to Cast` capture in Ideate; one shared "card draft, the writer confirms" mechanism | To do |
 | 5 | Scene brief before writing a chapter (plan 5.9 B) | To do |

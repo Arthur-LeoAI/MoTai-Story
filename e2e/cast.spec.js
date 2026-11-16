@@ -38,7 +38,7 @@ test("a character is created, shown as a card, edited and kept after a reload", 
   await page.goto(`/app/works/${workId}/cast`);
   await expect(page.getByTestId("cast")).toBeVisible();
   await expect(page.getByTestId("cast-empty")).toBeVisible();
-  await expect(cards(page)).toHaveCount(0);
+  await expect(page.getByTestId("relations-map")).toHaveCount(0);
 
   // A name is required.
   await page.getByTestId("cast-new").click();
@@ -53,6 +53,13 @@ test("a character is created, shown as a card, edited and kept after a reload", 
   await page.getByTestId("cast-save").click();
   await expect(page.getByTestId("cast-dialog")).toBeHidden();
   await expect(page.getByTestId("cast-empty")).toBeHidden();
+  // The map is the first view; the new character is selected beside it.
+  await expect(page.getByTestId("cast")).toHaveAttribute("data-view", "relations");
+  await expect(page.getByTestId("relations-node")).toHaveCount(1);
+  await expect(page.getByTestId("cast-panel-name")).toHaveText("Mira");
+  await expect(page.getByTestId("cast-panel-want")).toContainText("To find her sister");
+  await page.getByTestId("cast-view-portraits").click();
+  await expect(page.getByTestId("cast")).toHaveAttribute("data-view", "portraits");
   await expect(cards(page)).toHaveCount(1);
   await expect(page.getByTestId("cast-card-name")).toHaveText("Mira");
   await expect(page.getByTestId("cast-card-summary")).toHaveText("A mapmaker on the run");
@@ -60,7 +67,7 @@ test("a character is created, shown as a card, edited and kept after a reload", 
   await expect(page.getByTestId("cast-card-obstacle")).toContainText("The guild that trained her");
 
   // The less common questions are folded away until asked for.
-  await cards(page).first().click();
+  await page.getByTestId("cast-edit").click();
   await expect(page.getByTestId("cast-name")).toHaveValue("Mira");
   await expect(page.getByTestId("cast-field-secret")).toBeHidden();
   await page.getByTestId("cast-more").locator("summary").click();
@@ -71,7 +78,9 @@ test("a character is created, shown as a card, edited and kept after a reload", 
   await expect(page.getByTestId("cast-dialog")).toBeHidden();
   await expect(page.getByTestId("cast-card-want")).toHaveCount(0);
 
+  // The chosen view is remembered.
   await page.reload();
+  await expect(page.getByTestId("cast")).toHaveAttribute("data-view", "portraits");
   await expect(cards(page)).toHaveCount(1);
   const { canon } = await (await request.get(`/api/works/${workId}/canon`)).json();
   expect(canon.entities).toHaveLength(1);
@@ -91,7 +100,7 @@ test("a card changed in another window is not overwritten", async ({ page, reque
   const created = await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "character", name: "Kael" } });
   const kael = (await created.json()).item;
   await page.goto(`/app/works/${workId}/cast`);
-  await cards(page).first().click();
+  await page.getByTestId("cast-edit").click();
   await page.getByTestId("cast-summary").fill("Typed here");
 
   // Meanwhile, another window saves a change.
@@ -108,7 +117,7 @@ test("a card changed in another window is not overwritten", async ({ page, reque
   await page.getByTestId("cast-summary").fill("Typed again");
   await page.getByTestId("cast-save").click();
   await expect(page.getByTestId("cast-dialog")).toBeHidden();
-  await expect(page.getByTestId("cast-card-summary")).toHaveText("Typed again");
+  await expect(page.getByTestId("cast-panel")).toContainText("Typed again");
 });
 
 test("deleting a character asks first, then removes the card", async ({ page, request }) => {
@@ -119,9 +128,12 @@ test("deleting a character asks first, then removes the card", async ({ page, re
   // Other kinds of cards do not appear among the characters.
   expect((await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "location", name: "Fog Harbour" } })).ok()).toBeTruthy();
   await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-portraits").click();
   await expect(cards(page)).toHaveCount(2);
 
   await cards(page).filter({ hasText: "Voss" }).click();
+  await expect(cards(page).filter({ hasText: "Voss" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("cast-edit").click();
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.getByTestId("cast-delete").click();
   await expect(page.getByTestId("cast-dialog")).toBeVisible();
@@ -149,7 +161,128 @@ test("the cast page has no sideways scroll on a phone", async ({ page, request }
   const workId = await newStory(request);
   expect((await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "character", name: "A name long enough to need wrapping on a narrow screen", summary: "And a summary that goes on for quite a while to see how it wraps" } })).ok()).toBeTruthy();
   await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-relations").click();
+  await expect(page.getByTestId("relations-map")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.getByTestId("cast-view-portraits").click();
   await expect(cards(page)).toHaveCount(1);
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(fits).toBeTruthy();
+});
+
+async function character(request, workId, name, extra = {}) {
+  const created = await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "character", name, ...extra } });
+  expect(created.ok()).toBeTruthy();
+  return (await created.json()).item;
+}
+
+async function dragBetween(page, from, to) {
+  const a = await from.boundingBox();
+  const b = await to.boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 20, a.y + a.height / 2 + 10, { steps: 4 });
+  await expect(page.getByTestId("relations-drawing")).toHaveCount(1);
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
+  await page.mouse.up();
+}
+
+const node = (page, entity) => page.locator(`[data-testid="relations-node"][data-node-id="${entity.id}"]`);
+
+test("drawing from one portrait to another creates a relationship", async ({ page, request }) => {
+  const workId = await newStory(request);
+  const mira = await character(request, workId, "Mira");
+  const kael = await character(request, workId, "Kael");
+  await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-relations").click();
+  await expect(page.getByTestId("relations-node")).toHaveCount(2);
+  await expect(page.getByTestId("relation-label")).toHaveCount(0);
+
+  await dragBetween(page, node(page, kael), node(page, mira));
+  await expect(page.getByTestId("relation-dialog")).toBeVisible();
+  await expect(page.getByTestId("relation-from")).toHaveText("Kael");
+  await expect(page.getByTestId("relation-to")).toHaveText("Mira");
+  await expect(page.getByTestId("relations-drawing")).toHaveCount(0);
+  await page.getByTestId("relation-kind-mentor").click();
+  await expect(page.getByTestId("relation-kind-mentor")).toHaveAttribute("data-state", "on");
+  await page.getByTestId("relation-swap").click();
+  await expect(page.getByTestId("relation-from")).toHaveText("Mira");
+  await page.getByTestId("relation-tension").fill("She taught him everything he now uses against her");
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-dialog")).toBeHidden();
+  await expect(page.getByTestId("relation-label")).toHaveCount(1);
+  await expect(page.getByTestId("relation-label")).toHaveText("Mentor");
+
+  // A plain click on a portrait selects it; it does not start a line.
+  await node(page, kael).click();
+  await expect(node(page, kael)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("cast-panel-name")).toHaveText("Kael");
+  await expect(page.getByTestId("cast-relation")).toHaveCount(1);
+  await expect(page.getByTestId("relation-dialog")).toBeHidden();
+
+  const { canon } = await (await request.get(`/api/works/${workId}/canon`)).json();
+  expect(canon.relations).toHaveLength(1);
+  expect(canon.relations[0]).toMatchObject({ fromId: mira.id, toId: kael.id, kind: "mentor", tension: "She taught him everything he now uses against her" });
+});
+
+test("relationships can be added without dragging, changed, and removed", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await character(request, workId, "Mira");
+  const kael = await character(request, workId, "Kael");
+  await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-relations").click();
+  await expect(page.getByTestId("cast-panel-name")).toHaveText("Mira");
+  await expect(page.getByTestId("relation-add")).toBeDisabled();
+
+  // The keyboard path: choose the other person beside the map.
+  await page.getByTestId("relation-add-target").selectOption(kael.id);
+  await page.getByTestId("relation-add").click();
+  await page.getByTestId("relation-kind-custom").click();
+  await expect(page.getByTestId("relation-kind-custom")).toHaveAttribute("data-state", "on");
+  await page.getByTestId("relation-label-input").fill("old friends");
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-label")).toHaveText("old friends");
+
+  // A second relationship between the same two people gets its own line and label.
+  await page.getByTestId("relation-add-target").selectOption(kael.id);
+  await page.getByTestId("relation-add").click();
+  await page.getByTestId("relation-kind-enemy").click();
+  await expect(page.getByTestId("relation-kind-enemy")).toHaveAttribute("data-state", "on");
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-label")).toHaveCount(2);
+  const [first, second] = await Promise.all([0, 1].map((index) => page.getByTestId("relation-label").nth(index).boundingBox()));
+  const overlap = !(first.x + first.width <= second.x || second.x + second.width <= first.x || first.y + first.height <= second.y || second.y + second.height <= first.y);
+  expect(overlap, "labels of parallel relationships do not cover each other").toBeFalsy();
+
+  // Change one from its label on the map.
+  await page.getByTestId("relation-label").filter({ hasText: "old friends" }).click();
+  await expect(page.getByTestId("relation-label-input")).toHaveValue("old friends");
+  await page.getByTestId("relation-label-input").fill("hunter and quarry");
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-label").filter({ hasText: "hunter and quarry" })).toHaveCount(1);
+
+  // Remove the other from the side panel.
+  await page.getByTestId("cast-relation").filter({ hasText: "Enemies" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByTestId("relation-delete").click();
+  await expect(page.getByTestId("relation-label")).toHaveCount(1);
+  await expect(page.getByTestId("cast-relation")).toHaveCount(1);
+});
+
+test("deleting a character also removes the lines drawn to them", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await character(request, workId, "Mira");
+  const voss = await character(request, workId, "Voss");
+  const mira = (await (await request.get(`/api/works/${workId}/canon`)).json()).canon.entities.find((entity) => entity.name === "Mira");
+  expect((await request.post(`/api/works/${workId}/canon/relations`, { data: { fromId: voss.id, toId: mira.id, kind: "enemy" } })).ok()).toBeTruthy();
+  await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-relations").click();
+  await expect(page.getByTestId("relation-label")).toHaveCount(1);
+  await node(page, voss).click();
+  await page.getByTestId("cast-edit").click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByTestId("cast-delete").click();
+  await expect(page.getByTestId("relations-node")).toHaveCount(1);
+  await expect(page.getByTestId("relation-label")).toHaveCount(0);
+  await expect(page.getByTestId("cast-panel-name")).toHaveText("Mira");
 });

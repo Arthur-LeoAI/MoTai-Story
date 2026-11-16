@@ -1373,14 +1373,14 @@ button.story-chip:hover {
   align-self: flex-end;
 }
 
-/* Cast: character cards (plan 5.5) */
+/* Cast: character cards and the relationship graph (plan 5.5, mockup Cast.dc.html) */
 .frame-main-page {
   align-items: stretch;
   padding: var(--space-12) var(--space-8);
 }
 .cast {
   width: 100%;
-  max-width: 1080px;
+  max-width: 1280px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -1388,22 +1388,62 @@ button.story-chip:hover {
 }
 .cast-head {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.cast-head .page-subtitle {
+  margin: var(--space-1) 0 0;
+}
+.cast-actions,
+.cast-views {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
-.cast-empty {
+.cast-empty,
+.cast-unset {
   font-style: italic;
   margin: 0;
 }
-:lang(zh) .cast-empty {
+:lang(zh) .cast-empty,
+:lang(zh) .cast-unset {
   font-style: normal;
 }
+.cast-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: flex-start;
+}
+.cast-main {
+  flex: 999 1 520px;
+  min-width: 0;
+}
+
+/* The oval portrait frame of the mockup, with a thin second ring. */
+.medal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 4px var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Portraits view */
 .cast-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
   gap: var(--space-4);
 }
 .cast-grid > li {
@@ -1426,30 +1466,14 @@ button.story-chip:hover {
   border-color: var(--color-border-strong);
   box-shadow: var(--shadow-1);
 }
-.cast-new {
-  background: transparent;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-sm);
+.cast-card.on {
+  border-color: var(--color-text);
 }
 .cast-medallion {
-  flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-round);
-  border: 1px solid var(--color-entity-character);
-  color: var(--color-entity-character);
-  background: var(--color-surface-raised);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
+  flex: 0 0 48px;
+  height: 58px;
+  margin: 4px;
   font-size: var(--text-xl);
-  line-height: 1;
-}
-.cast-medallion-new {
-  border-style: dashed;
-  border-color: var(--color-border-strong);
-  color: var(--color-text-muted);
 }
 .cast-card-body {
   display: flex;
@@ -1473,6 +1497,203 @@ button.story-chip:hover {
   flex-direction: column;
   margin-block-start: var(--space-2);
 }
+
+/* Relations view */
+.relmap {
+  position: relative;
+  padding: var(--space-2);
+  overflow-x: auto;
+  container-type: inline-size;
+}
+.relmap-area {
+  position: relative;
+  min-width: 520px;
+  max-width: 760px;
+  aspect-ratio: 720 / 560;
+  margin: 0 auto;
+}
+.relmap-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.relmap-line {
+  fill: none;
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.relmap-line.on {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+.relmap-line.drawing {
+  stroke: var(--color-accent);
+  stroke-dasharray: 6 6;
+}
+.relmap-node {
+  position: absolute;
+  width: 150px;
+  transform: translate(-50%, -44px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.relmap-medal {
+  pointer-events: auto;
+  width: 72px;
+  height: 88px;
+  font-size: 32px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.relmap-medal:active {
+  cursor: grabbing;
+}
+.relmap-medal.on {
+  border: 2px solid var(--color-accent);
+}
+.relmap-name {
+  max-width: 100%;
+  padding: 0 var(--space-1);
+  background: var(--color-surface);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.relmap-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  max-width: 180px;
+  min-height: 28px;
+  padding: 2px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-fell);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 16px;
+  cursor: pointer;
+}
+.relmap-label:lang(zh) {
+  font-family: var(--font-cjk);
+  font-style: normal;
+}
+.relmap-label:hover {
+  border-color: var(--color-border-strong);
+}
+.relmap-label.on {
+  color: var(--color-accent);
+}
+.relmap-caption {
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-3);
+  width: 220px;
+}
+.relmap-caption p {
+  margin: var(--space-1) 0 0;
+  font-size: 15px;
+  line-height: 19px;
+  font-style: italic;
+}
+:lang(zh) .relmap-caption p {
+  font-style: normal;
+}
+/* A narrow map: smaller portraits so the whole figure fits, caption above it. */
+@container (max-width: 600px) {
+  .relmap-area {
+    min-width: 0;
+  }
+  .relmap-caption {
+    position: static;
+    width: auto;
+    padding: var(--space-2) var(--space-2) 0;
+  }
+  .relmap-node {
+    width: 96px;
+    transform: translate(-50%, -30px);
+    gap: var(--space-1);
+  }
+  .relmap-medal {
+    width: 48px;
+    height: 60px;
+    font-size: 22px;
+  }
+  .relmap-name {
+    font-size: var(--text-sm);
+    line-height: 16px;
+  }
+  .relmap-label {
+    max-width: 110px;
+    min-height: 24px;
+    font-size: var(--text-sm);
+    line-height: 14px;
+  }
+}
+
+/* The selected character beside the map */
+.cast-panel {
+  flex: 1 0 300px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.cast-panel-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.cast-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.cast-panel-medal {
+  flex: 0 0 60px;
+  height: 72px;
+  margin: 4px;
+  font-size: 28px;
+}
+.cast-panel-name {
+  font-size: var(--text-2xl);
+  overflow-wrap: anywhere;
+}
+.cast-relations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cast-relation {
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: var(--space-1) var(--space-2);
+  text-align: start;
+}
+.cast-relation-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.cast-relation-add .field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+/* Dialogs */
 .cast-dialog .scene-text {
   min-height: 0;
 }
@@ -1514,6 +1735,30 @@ button.story-chip:hover {
 .cast-earlier-text {
   white-space: pre-wrap;
   margin: var(--space-1) 0 0;
+}
+.relation-ends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-lg);
+}
+.relation-end {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.relation-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.relation-kind {
+  cursor: pointer;
+  padding: 0 14px;
+}
+.relation-kind:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 @media (max-width: 599px) {
   .frame-main-page {

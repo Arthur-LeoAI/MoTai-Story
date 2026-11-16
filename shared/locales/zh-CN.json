@@ -64,12 +64,11 @@
   },
   "cast": {
     "part": "第二部",
-    "subtitle": "你故事里的人。每人先写一句话就够了。",
+    "subtitle": "他们是谁，他们之间又有什么。",
     "listLabel": "人物",
     "empty": "还没有人物。从你脑海里最清楚的那个人开始。",
     "noSummary": "还没有描述",
     "new": "新人物",
-    "newHint": "用一句话说说 TA 是谁",
     "newTitle": "新人物",
     "editTitle": "人物",
     "name": "名字",
@@ -117,7 +116,55 @@
     "delete": "删除人物",
     "deleteConfirm": "删除“{{name}}”？与 TA 相关的关系也会一并删除，且无法撤销。",
     "earlierNotes": "之前关于人物的资料",
-    "earlierNotesHint": "来自“灵感”页或旧版工作台，原样保留。准备好后可以把它们整理成人物卡。"
+    "earlierNotesHint": "来自“灵感”页或旧版工作台，原样保留。准备好后可以把它们整理成人物卡。",
+    "views": {
+      "label": "视图",
+      "portraits": "肖像",
+      "relations": "关系"
+    },
+    "map": {
+      "label": "关系图",
+      "figure": "图一",
+      "hint": "从一个头像拖到另一个头像，把两人连起来。点连线上的文字可以修改。",
+      "needsTwo": "再添加一个人物，就可以画出他们之间的关系。",
+      "nodeLabel": "{{name}}。点击查看人物卡；拖到另一个头像上可建立关系。"
+    },
+    "panel": {
+      "label": "当前人物",
+      "want": "想要",
+      "obstacle": "阻碍",
+      "change": "结局时",
+      "unset": "还没想好",
+      "edit": "编辑"
+    },
+    "relation": {
+      "heading": "人物关系",
+      "none": "还没有关系。",
+      "linkTo": "把{{name}}和…连起来",
+      "add": "添加关系",
+      "newTitle": "新关系",
+      "editTitle": "关系",
+      "swap": "调换方向",
+      "mentorReads": "读作：{{from}}是{{to}}的师父。",
+      "kind": "他们是什么关系？",
+      "kinds": {
+        "family": "家人",
+        "friend": "朋友",
+        "lover": "恋人",
+        "mentor": "师徒",
+        "rival": "对手",
+        "enemy": "敌人",
+        "ally": "盟友",
+        "custom": "其他"
+      },
+      "label": "用几个字概括（可选）",
+      "labelHint": "昔日好友，如今追捕与逃亡",
+      "tension": "他们之间的张力是什么？",
+      "tensionHint": "他欠她一条命，而通缉令上写着她的名字",
+      "delete": "删除关系",
+      "deleteConfirm": "删除{{from}}与{{to}}之间的关系？此操作无法撤销。",
+      "lineLabel": "{{from}}与{{to}}：{{kind}}。打开这条关系。"
+    }
   },
   "ideate": {
     "part": "第一部分",
