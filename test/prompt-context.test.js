@@ -59,3 +59,20 @@ test("失忆重逢题材的设定提示词要求明确人物和箭头关系", ()
     assert.match(prompt, new RegExp(fragment.replace(/[()]/g, "\\$&")));
   }
 });
+
+test("telling a scene plainly: the writer's account binds the events, only the telling may change", () => {
+  const account = "她进了酒馆，看到 Kael，两人吵起来，她泼了他一杯酒走了。";
+  const prompt = buildAiPrompt({ mode: "scene", work, chapter, instruction: account });
+  assert.match(prompt, /作者对这场戏的讲述（必须忠实）：/);
+  assert.ok(prompt.includes(account));
+  for (const fragment of ["每个事件都要写到", "不得增加讲述里没有的情节事件", "可以补充的只有讲法", "本条优先于下方关于篇幅的默认要求"]) {
+    assert.ok(prompt.includes(fragment), fragment);
+  }
+  assert.ok(prompt.indexOf("本条优先于下方") < prompt.indexOf("默认生成约1800到2200个中文字符"), "the scene length rule comes before the default it overrides");
+  // Other modes keep their own wording and none of the scene rules.
+  const continued = buildAiPrompt({ mode: "continue", work, chapter, instruction: "写开头" });
+  assert.match(continued, /作者补充指令：/);
+  assert.doesNotMatch(continued, /不得增加讲述里没有的情节事件/);
+  // An English story is told to answer in English.
+  assert.match(buildAiPrompt({ mode: "scene", work: { ...work, language: "en" }, chapter, instruction: "He lets her go." }), /Output language: English/);
+});

@@ -1,8 +1,8 @@
 import { ApiError, request } from "./api";
 
-export const WRITE_MODES = ["continue", "expand", "shorten", "polish", "custom"] as const;
+export const WRITE_MODES = ["scene", "continue", "expand", "shorten", "polish", "custom"] as const;
 export type WriteMode = (typeof WRITE_MODES)[number];
-/** Modes that rewrite the selected text; "continue" adds after the cursor or at the end. */
+/** Modes that rewrite the selected text. "continue" adds at the end; "scene" writes the writer's own account as prose at the cursor. */
 export const NEEDS_SELECTION: readonly WriteMode[] = ["expand", "shorten", "polish"];
 
 export interface Hunk {

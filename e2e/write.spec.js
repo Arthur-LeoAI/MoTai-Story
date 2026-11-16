@@ -242,6 +242,7 @@ test("a suggestion that contradicts the story cannot be added", async ({ page, r
       }
     } } }) });
   });
+  await page.getByTestId("assist-mode").selectOption("continue");
   await page.getByTestId("assist-generate").click();
   const result = page.getByTestId("assist-result");
   await expect(result).toHaveAttribute("data-can-accept", "false");
@@ -385,4 +386,48 @@ test("trashing another chapter keeps the open one, and a stale reorder is refuse
   await firstItem.hover();
   await firstItem.getByTestId("chapter-up").click();
   await expect(page.getByTestId("chapter-item").first()).toHaveAttribute("data-chapter-id", chapters[0].id);
+});
+
+test("told plainly, a scene is written at the cursor, with the writer's words beside it", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("Mira waited at the ferry.");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  // Telling a scene is where the assistant starts; it needs the writer's account.
+  await expect(page.getByTestId("assist-mode")).toHaveValue("scene");
+  await expect(page.getByTestId("assist-generate")).toBeDisabled();
+  const account = "Kael catches up with her at the ferry. He has the warrant but he lets her go.";
+  await page.getByTestId("assist-instruction").fill(account);
+  let started;
+  page.on("request", (req) => { if (req.url().endsWith("/api/tasks") && req.method() === "POST") started = req.postDataJSON(); });
+  await page.getByTestId("assist-generate").click();
+
+  const result = page.getByTestId("assist-result");
+  await expect(result).toBeVisible({ timeout: 15000 });
+  expect(started).toMatchObject({ workId, mode: "scene", instruction: account, selectedText: "" });
+  expect(started.range.length).toBe(0);
+  await expect(page.getByTestId("assist-account")).toContainText(account);
+  await expect(page.getByTestId("assist-faithful")).toBeVisible();
+  const scene = (await page.getByTestId("assist-hunk-after").allInnerTexts()).join("\n");
+  expect(scene).toContain("Kael catches up with her at the ferry.");
+  expect(scene).toContain("He has the warrant but he lets her go.");
+  // Nothing changes until the writer adds it.
+  await expect(editor(page)).toHaveText("Mira waited at the ferry.");
+
+  await page.getByTestId("assist-accept").click();
+  await expect(page.getByTestId("assist-notice")).toBeVisible();
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].content).toContain("Kael catches up with her at the ferry.");
+  const content = (await storedWork(request, workId)).chapters[0].content;
+  expect(content.indexOf("Mira waited at the ferry.")).toBeLessThan(content.indexOf("Kael catches up"));
+});
+
+test("a scene cannot be asked for without saying what happens", async ({ request }) => {
+  const workId = await newStory(request);
+  const work = await storedWork(request, workId);
+  const chapter = work.chapters[0];
+  const refused = await request.post("/api/tasks", { data: { requestId: `scene-empty-${workId}`, workId, chapterId: chapter.id, baseRevision: chapter.revision, mode: "scene", instruction: "   ", range: { index: 0, length: 0 } } });
+  expect(refused.status()).toBe(400);
+  expect((await refused.json()).error.code).toBe("PLAIN_ACCOUNT_REQUIRED");
 });

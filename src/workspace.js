@@ -118,7 +118,17 @@ function makeHunks(chapter, range, output) {
   const original = sliceDelta(chapter.richContent, range.index, range.index + range.length).map(op => op.insert).join("");
   const oldParts = original.match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) || [];
   const newParts = String(output).match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) || [];
-  if (!range.length) return newParts.map((text, index) => ({ id: `h${index}`, index: range.index, length: 0, before: "", after: text }));
+  if (!range.length) {
+    // An insertion: one change per paragraph, so the writer can take some and
+    // leave others. Each carries its own line break, so any choice still reads
+    // as whole paragraphs: after the end of a line of text the break comes
+    // first, otherwise last. Blank lines between paragraphs are left out; the
+    // editor spaces paragraphs itself.
+    const flat = (chapter.richContent.ops || []).map(op => typeof op.insert === "string" ? op.insert : "\ufffc").join("");
+    const afterText = range.index > 0 && flat[range.index - 1] !== "\n";
+    const paragraphs = String(output).split("\n").map(part => part.trim()).filter(Boolean);
+    return paragraphs.map((text, index) => ({ id: `h${index}`, index: range.index, length: 0, before: "", after: afterText ? `\n${text}` : `${text}\n` }));
+  }
   // Different paragraph counts are one atomic replacement; never guess alignment.
   if (oldParts.length !== newParts.length) return [{ id: "h0", ...range, before: original, after: output }];
   let offset = range.index;

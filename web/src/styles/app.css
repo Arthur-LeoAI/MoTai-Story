@@ -1373,6 +1373,26 @@ button.story-chip:hover {
   align-self: flex-end;
 }
 
+/* Write: the writer's own account beside the scene written from it (plan 5.9 A) */
+.assist-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block-end: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.assist-account blockquote {
+  margin: 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+.assist-account blockquote:lang(zh) {
+  font-style: normal;
+}
+
 /* Cast: character cards and the relationship graph (plan 5.5, mockup Cast.dc.html) */
 .frame-main-page {
   align-items: stretch;

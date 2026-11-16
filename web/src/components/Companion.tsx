@@ -22,6 +22,9 @@ interface Run {
   /** Chapter revision the result was generated from; it can only be merged onto that. */
   baseRevision: number;
   chapterId: string;
+  mode: WriteMode;
+  /** What the writer typed; for a scene, their own account, kept beside the prose. */
+  instruction: string;
   result: GenerationResult;
   selected: Set<string>;
 }
@@ -29,7 +32,8 @@ interface Run {
 function Assistant({ context, onReviewQueued }: { context: WriteContext; onReviewQueued: (task: Task) => void }) {
   const { t } = useTranslation();
   const { work, chapter } = context;
-  const [mode, setMode] = useState<WriteMode>("continue");
+  // Telling a scene plainly is the main way in (plan 5.9 A); the rest are in the list.
+  const [mode, setMode] = useState<WriteMode>("scene");
   const [instruction, setInstruction] = useState("");
   const [task, setTask] = useState<Task | null>(null);
   const [run, setRun] = useState<Run | null>(null);
@@ -58,8 +62,18 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
       setError(t("assist.selectFirst"));
       return;
     }
-    // "Continue" always adds at the end; the others work on the selection.
-    const range: Range = mode === "continue" ? { index: end, length: 0 } : selection && selection.length ? selection : { index: selection?.index ?? end, length: 0 };
+    const account = instruction.trim();
+    if (mode === "scene" && !account) {
+      setError(t("errors.PLAIN_ACCOUNT_REQUIRED"));
+      return;
+    }
+    // "Continue" always adds at the end; a scene goes in at the cursor (after
+    // any selection, which it leaves alone); the others work on the selection.
+    const range: Range = mode === "continue"
+      ? { index: end, length: 0 }
+      : mode === "scene"
+        ? { index: selection ? selection.index + selection.length : end, length: 0 }
+        : selection && selection.length ? selection : { index: selection?.index ?? end, length: 0 };
     const selectedText = range.length ? editor.textIn(range) : "";
     setError("");
     setNotice("");
@@ -74,14 +88,14 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
         chapterId: current.id,
         baseRevision: current.revision,
         mode,
-        instruction: instruction.trim(),
+        instruction: account,
         selectedText,
         range
       });
       setTask(started);
       const result = await followTask(started, setTask, controller.signal);
       const hunks = result.generation.hunks ?? [];
-      setRun({ baseRevision: current.revision, chapterId: current.id, result, selected: new Set(hunks.map((hunk) => hunk.id)) });
+      setRun({ baseRevision: current.revision, chapterId: current.id, mode, instruction: account, result, selected: new Set(hunks.map((hunk) => hunk.id)) });
     } catch (cause) {
       setError(errorText(t, cause));
     } finally {
@@ -143,15 +157,15 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
         {WRITE_MODES.map((item) => <option key={item} value={item}>{t(`assist.modes.${item}`)}</option>)}
       </select>
       <p className="muted assist-hint">{t(`assist.hints.${mode}`)}</p>
-      <label className="caps" htmlFor="assist-instruction">{t("assist.tellPlainly")}</label>
+      <label className="caps" htmlFor="assist-instruction">{mode === "scene" ? t("assist.tellPlainly") : t("assist.instructionLabel")}</label>
       <textarea
         id="assist-instruction"
         className="field assist-instruction"
-        rows={4}
+        rows={mode === "scene" ? 6 : 4}
         maxLength={4000}
         value={instruction}
         lang={work.language}
-        placeholder={t("assist.instructionPlaceholder")}
+        placeholder={mode === "scene" ? t("assist.scenePlaceholder") : t("assist.instructionPlaceholder")}
         onChange={(event) => setInstruction(event.target.value)}
         disabled={generating}
         data-testid="assist-instruction"
@@ -160,7 +174,7 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
         {generating ? (
           <button type="button" className="btn" onClick={stop} data-testid="assist-stop">{t("ideate.stop")}</button>
         ) : (
-          <button type="button" className="btn primary" disabled={context.busy || busy} onClick={() => void generate()} data-testid="assist-generate">{t("assist.generate")}</button>
+          <button type="button" className="btn primary" disabled={context.busy || busy || (mode === "scene" && !instruction.trim())} onClick={() => void generate()} data-testid="assist-generate">{mode === "scene" ? t("assist.generateScene") : t("assist.generate")}</button>
         )}
         {task ? <span className="muted assist-status" role="status" data-testid="assist-status" data-status={task.status}>{t(`assist.status.${task.status}`)}</span> : null}
       </div>
@@ -169,7 +183,13 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
 
       {run ? (
         <section className="card assist-result" data-testid="assist-result" data-can-accept={run.result.canAccept} data-rewrites={run.result.generation.rewriteCount}>
-          <div className="caps">{t("assist.result")}</div>
+          {run.mode === "scene" ? (
+            <div className="assist-account" data-testid="assist-account">
+              <div className="caps">{t("assist.yourAccount")}</div>
+              <blockquote lang={work.language}>{run.instruction}</blockquote>
+            </div>
+          ) : null}
+          <div className="caps">{run.mode === "scene" ? t("assist.sceneResult") : t("assist.result")}</div>
           {hunks.length > 1 ? <p className="muted assist-hint">{t("assist.chooseChanges")}</p> : null}
           {hunks.length === 0 ? <p className="muted assist-hint" data-testid="assist-no-change">{t("assist.noChange")}</p> : null}
           <div className="hunks">
@@ -190,7 +210,8 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
                 ) : null}
                 <span className="hunk-body">
                   {hunk.before ? <del className="hunk-before" lang={work.language}>{hunk.before}</del> : null}
-                  <ins className="hunk-after" lang={work.language} data-testid="assist-hunk-after">{hunk.after}</ins>
+                  {/* An inserted paragraph carries its own line break; it is not shown. */}
+                  <ins className="hunk-after" lang={work.language} data-testid="assist-hunk-after">{hunk.before ? hunk.after : hunk.after.replace(/^\n+|\n+$/g, "")}</ins>
                 </span>
               </label>
             ))}
@@ -223,6 +244,7 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
             <button type="button" className="btn" disabled={busy} onClick={() => void generate()} data-testid="assist-regenerate">{t("assist.again")}</button>
             <button type="button" className="btn quiet" disabled={busy} onClick={() => setRun(null)} data-testid="assist-discard">{t("draft.discard")}</button>
           </div>
+          {run.mode === "scene" ? <p className="muted assist-hint" data-testid="assist-faithful">{t("assist.sceneFaithful")}</p> : null}
           <p className="muted assist-hint">{t("assist.unchanged")}</p>
         </section>
       ) : null}

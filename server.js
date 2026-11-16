@@ -2453,6 +2453,7 @@ async function createConstrainedGeneration(body) {
   }
 
   const mode = normalizeText(body.mode) || "continue";
+  if (mode === "scene" && !normalizeText(body.instruction)) fail("PLAIN_ACCOUNT_REQUIRED");
   const context = selectContinuityContext(work, chapter.id, { maxFacts: 240, recentChapterCount: 4 });
   context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
   if (Array.isArray(body.excludeFactIds)) context.canonFacts = context.canonFacts.filter(f => !body.excludeFactIds.includes(f.id) || f.strength === "hard");
@@ -2461,7 +2462,10 @@ async function createConstrainedGeneration(body) {
   const attempts = [];
   let analysis = { conflicts: [], facts: [], chapterMemory: normalizeChapterMemory() };
   let result = null;
-  const baseInstruction = [normalizeText(body.instruction), scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  const extraInstruction = [scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  // For a scene, the writer's account is its own section of the prompt.
+  const account = mode === "scene" ? normalizeText(body.instruction) : "";
+  const baseInstruction = [normalizeText(body.instruction), extraInstruction].filter(Boolean).join("\n");
   let instruction = baseInstruction;
   const task = taskContext.getStore();
 
@@ -2473,6 +2477,8 @@ async function createConstrainedGeneration(body) {
       result = await callOpenAiWriter({
         mode,
         instruction,
+        account,
+        extraInstruction,
         selectedText: String(body.selectedText || ""),
         work,
         chapter,
@@ -2481,7 +2487,7 @@ async function createConstrainedGeneration(body) {
       });
       task?.signal.throwIfAborted();
       if (task) { task.stage = "review"; await task.update({ status: "checking", draft: result.text }); }
-      const ruleConflicts = detectRuleConflicts(mode === "continue" ? chapter : { ...chapter, content: "" }, result.text);
+      const ruleConflicts = detectRuleConflicts(["continue", "scene"].includes(mode) ? chapter : { ...chapter, content: "" }, result.text);
       analysis = await analyzeGeneratedText(work, chapter, result.text, context);
       analysis.conflicts = [...ruleConflicts, ...analysis.conflicts];
       attempts.push({ index, status: "completed", output: result.text, usage: result.usage || {}, startedAt, finishedAt: nowIso() });
@@ -3000,7 +3006,7 @@ async function handleAiApi(req, res, parts) {
   if (req.method === "POST" && parts.length === 3 && parts[2] === "write") {
     const body = await readBody(req);
     const mode = normalizeText(body.mode) || "continue";
-    const continuityModes = new Set(["continue", "polish", "expand", "shorten", "custom"]);
+    const continuityModes = new Set(["continue", "scene", "polish", "expand", "shorten", "custom"]);
     let result;
     if (continuityModes.has(mode)) {
       await ensureMigrated();
@@ -4376,6 +4382,7 @@ function getModeInstruction(mode) {
     outline: "基于设定库扩展或细化章节大纲。只输出可用大纲，不要重新生成无关主线，要承接已有世界观、人物、势力和章节规划。",
     brainstorm: "基于设定库给出可直接采用的剧情灵感，必须服务当前章节冲突和后续章纲。",
     title: "根据当前章节正文和章纲生成一个贴合剧情、有小说感的中文章节标题。只输出标题。",
+    scene: "把作者用大白话讲述的这场戏写成小说正文（作者的讲述见下方“作者对这场戏的讲述”）。只输出可直接插入章节的小说正文。",
     custom: "根据作者补充指令处理当前作品和章节。如果指令要求写正文，默认只输出可直接插入章节的小说正文。只有作者明确要求方案时，才输出方案。"
   };
 
@@ -4446,10 +4453,22 @@ function buildAiPrompt(body) {
     selectedText ? "作者选中文本：" : "当前章节正文：",
     limitText(targetText, 9000),
     "",
-    "作者补充指令：",
-    instruction || "无",
+    ...(mode === "scene" && body.account ? [
+      "作者对这场戏的讲述（必须忠实）：",
+      normalizeText(body.account),
+      "",
+      "其他写作要求：",
+      normalizeText(body.extraInstruction) || "无"
+    ] : [mode === "scene" ? "作者对这场戏的讲述（必须忠实）：" : "作者补充指令：", instruction || "无"]),
     "",
     "写作约束：",
+    ...(mode === "scene" ? [
+      "- 本次任务以作者的讲述为准：讲述中的每个事件都要写到，先后顺序和结果不变。",
+      "- 不得增加讲述里没有的情节事件、新的重要人物、新的结果或新的秘密；不得替作者决定讲述里没有说的事。",
+      "- 可以补充的只有讲法：场景、动作、对白、感官细节、人物神态和节奏。对白只能表达讲述中已有的意思。",
+      "- 篇幅约为讲述的五到十倍，至少三百字；作者在讲述中另有要求时以作者为准。本条优先于下方关于篇幅的默认要求。",
+      "- 这段正文接在当前章节已有正文之后（或作者光标所在处），开头要与上文自然衔接，不要重复上文。"
+    ] : []),
     "- 本次生成开始前，必须重新阅读并遵守上方的设定库摘要、世界观、人物设定、故事大纲、章节规划和连续性提醒；不得只依赖上一轮对话记忆。",
     "- 右侧工具栏生成内容必须参考设定库，尤其要使用世界观、人物设定、势力/组织、主线冲突、章节规划和连续性提醒。",
     "- 当前章节为空时，不要说“可以怎么写”，要直接写本章开场正文。",
@@ -4538,6 +4557,15 @@ function buildLocalAiDraft(body) {
 
   if (mode === "title") {
     return "新的转折";
+  }
+
+  if (mode === "scene") {
+    const english = normalizeStoryLanguage(work.language) === "en";
+    const beats = (normalizeText(body.account) || instruction).split(english ? /(?<=[.!?])\s+/u : /(?<=[。！？!?])/u).map((item) => item.trim()).filter(Boolean);
+    const detail = english
+      ? ["The light had not yet reached the water.", "Neither of them looked away first.", "Somewhere behind them a rope creaked against the post."]
+      : ["天色还没有完全亮开。", "两个人谁也没有先移开目光。", "身后传来缆绳摩擦木桩的轻响。"];
+    return beats.map((beat, index) => `${beat}${english ? " " : ""}${detail[index % detail.length]}`).join("\n\n");
   }
 
   if (mode === "polish" && sourceText) {

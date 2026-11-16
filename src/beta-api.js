@@ -15,6 +15,8 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
         const body = await readBody(req);
         const work = await store.getWork(body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
         if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, body.baseRevision);
+        // Writing a scene needs the writer's own account of it.
+        if (body.mode === "scene" && !String(body.instruction || "").trim()) fail("PLAIN_ACCOUNT_REQUIRED");
         return result(res, { task: await tasks.create(body) }, 202);
       }
       if (req.method === "POST" && p[3] === "cancel") return result(res, { task: await tasks.cancel(p[2]) });

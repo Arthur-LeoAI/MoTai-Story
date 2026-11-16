@@ -49,6 +49,9 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
     });
     quill.on("text-change", (_delta, _old, source) => {
       if (source === "user") onChangeRef.current();
+      // Typing moves the cursor without a selection change; remember where it is now.
+      const range = quill.hasFocus() ? quill.getSelection() : null;
+      if (range) selectionRef.current = { index: range.index, length: range.length };
     });
     // Keep the last real selection: clicking into the side panel blurs the editor.
     quill.on("selection-change", (range) => {

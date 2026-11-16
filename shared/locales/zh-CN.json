@@ -270,6 +270,7 @@
   "assist": {
     "what": "要我做什么？",
     "modes": {
+      "scene": "把我讲的写成一场戏",
       "continue": "续写本章",
       "expand": "扩写选中内容",
       "shorten": "精简选中内容",
@@ -277,6 +278,7 @@
       "custom": "按我的指令"
     },
     "hints": {
+      "scene": "用大白话讲讲发生了什么。我会把它写成一场戏，放在光标处，不改变发生的事。",
       "continue": "在本章末尾接着写。",
       "expand": "先选中一段。我会补充细节，但不改变发生的事。",
       "shorten": "先选中一段。我会保留要紧的，删去其余。",
@@ -315,7 +317,13 @@
     "blocked": "请先解决矛盾",
     "accepted": "已加入本章。之前的文字保留在本章历史中。",
     "unchanged": "只有加入本章后，你的正文才会改变。",
-    "noChange": "建议的文字与原文相同，没有需要修改的地方。"
+    "noChange": "建议的文字与原文相同，没有需要修改的地方。",
+    "instructionLabel": "还有什么要注意的（可选）",
+    "scenePlaceholder": "她进了酒馆，看到 Kael，两人吵起来，她泼了他一杯酒走了。",
+    "generateScene": "写成一场戏",
+    "yourAccount": "你讲的",
+    "sceneResult": "写成的这场戏",
+    "sceneFaithful": "发生的事和你讲的一样，只是换了讲法。"
   },
   "checks": {
     "intro": "我会通读本章，与已确定的设定对照，并列出新的事实供你确认。",
@@ -629,6 +637,7 @@
     "WORK_UPDATED_ELSEWHERE": "作品已在其他窗口更新，未保存内容仍保留。",
     "SCENE_NEEDS_RELOCATION": "场景需要重新定位后才能生成。",
     "BACKUP_HISTORY_INVALID": "备份中的章节历史引用无效。",
-    "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。"
+    "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
+    "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。"
   }
 }
