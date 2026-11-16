@@ -114,6 +114,8 @@ function transformScenes(chapter, before, after) {
     else { scene.needsRelocation = true; scene.start = Math.min(scene.start, b.length - 1); scene.end = Math.min(scene.end, b.length - 1); }
   }
 }
+// Up to this many inserted paragraphs can be taken one by one; more are one change.
+const MAX_INSERTED_PARTS = 8;
 function makeHunks(chapter, range, output) {
   const original = sliceDelta(chapter.richContent, range.index, range.index + range.length).map(op => op.insert).join("");
   const oldParts = original.match(/[^\n]*(?:\n|$)/g)?.filter(Boolean) || [];
@@ -127,6 +129,10 @@ function makeHunks(chapter, range, output) {
     const flat = (chapter.richContent.ops || []).map(op => typeof op.insert === "string" ? op.insert : "\ufffc").join("");
     const afterText = range.index > 0 && flat[range.index - 1] !== "\n";
     const paragraphs = String(output).split("\n").map(part => part.trim()).filter(Boolean);
+    if (paragraphs.length > MAX_INSERTED_PARTS) {
+      const whole = paragraphs.join("\n");
+      return [{ id: "h0", index: range.index, length: 0, before: "", after: afterText ? `\n${whole}` : `${whole}\n` }];
+    }
     return paragraphs.map((text, index) => ({ id: `h${index}`, index: range.index, length: 0, before: "", after: afterText ? `\n${text}` : `${text}\n` }));
   }
   // Different paragraph counts are one atomic replacement; never guess alignment.

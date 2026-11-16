@@ -86,6 +86,15 @@ export const castApi = {
     request<{ item: Relation; canonRevision: number }>(`${base(workId)}/relations`, send("POST", draft)),
   updateRelation: (workId: string, relation: Relation, draft: RelationDraft) =>
     request<{ item: Relation; canonRevision: number }>(relationPath(workId, relation.id), send("PATCH", { ...draft, baseRevision: relation.revision })),
+  /** An AI draft of a character from a sentence; nothing is saved. With a chat message, that exchange is used too. */
+  sketchCharacter: (workId: string, input: { description: string; chatId?: string; messageId?: string }) =>
+    request<{ draft: EntityDraft }>(`${base(workId)}/drafts/character`, send("POST", input)),
+  /** People named in a chat exchange who are not in the Cast yet. */
+  castCandidates: (workId: string, chatId: string, messageId: string) =>
+    request<{ candidates: Array<{ name: string; summary: string }> }>(
+      `/api/works/${encodeURIComponent(workId)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/cast-candidates`,
+      send("POST", {})
+    ),
   removeRelation: (workId: string, relation: Relation) =>
     request<{ removed: { id: string }; canonRevision: number }>(relationPath(workId, relation.id), send("DELETE", { baseRevision: relation.revision }))
 };

@@ -13,6 +13,7 @@ import {
   type Proposal,
   type StoryMaterial
 } from "../ideateApi";
+import { CastCapture } from "../components/CastCapture";
 
 interface IdeateProps {
   work: WorkSummary;
@@ -341,6 +342,8 @@ export default function Ideate({ work }: IdeateProps) {
   );
 
   const showPending = pending && pending.chatId === chat?.id;
+  // New people are looked for under the latest finished reply only.
+  const captureFrom = !streaming ? chat?.messages.filter((message) => message.role === "assistant" && message.status === "complete").at(-1) : undefined;
   const isEmpty = chat && chat.messages.length === 0 && chatProposals.length === 0 && !showPending;
 
   return (
@@ -367,6 +370,7 @@ export default function Ideate({ work }: IdeateProps) {
                 {message.status === "interrupted" ? <div className="muted turn-note">{t("ideate.interrupted")}</div> : null}
               </div>
               {proposalsAfter(message.id).map(renderDraft)}
+              {chat && captureFrom?.id === message.id ? <CastCapture key={message.id} work={work} chatId={chat.id} messageId={message.id} /> : null}
             </div>
           ))}
           {showPending && pending.userText ? (

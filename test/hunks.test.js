@@ -31,3 +31,10 @@ test("replacing a selection keeps the existing paragraph-by-paragraph comparison
   const hunks = makeHunks(source, { index: 0, length: 9 }, "One.\nTwo, better.");
   assert.deepEqual(hunks.map((hunk) => [hunk.before, hunk.after]), [["Two.", "Two, better."]]);
 });
+
+test("a long insertion is one change rather than a long list of paragraphs", () => {
+  const output = Array.from({ length: 12 }, (_, index) => `Paragraph ${index + 1}.`).join("\n\n");
+  const hunks = makeHunks(chapter("First line.\n"), { index: 11, length: 0 }, output);
+  assert.equal(hunks.length, 1);
+  assert.equal(merged(chapter("First line.\n"), { index: 11, length: 0 }, output), `First line.\n${Array.from({ length: 12 }, (_, index) => `Paragraph ${index + 1}.`).join("\n")}\n`);
+});

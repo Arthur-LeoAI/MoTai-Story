@@ -4,6 +4,7 @@ const fsp = require("fs/promises");
 const path = require("path");
 const {
   clampNumber,
+  countCharacters,
   createId,
   emptyStoryBible,
   findChapter,
@@ -72,11 +73,12 @@ const {
   selectChatContext
 } = require("./src/studio");
 const { appError, toErrorResponse } = require("./src/errors");
-const { authenticate } = require("./src/auth");
+const { assertOwner, authenticate } = require("./src/auth");
 const { createPreferenceRepository } = require("./src/preferences");
 const { continuityFacts, describeCanon } = require("./src/canon-model");
 const { createCanonRepository } = require("./src/canon-store");
 const { createCanonApi } = require("./src/canon-api");
+const canonDrafts = require("./src/canon-drafts");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -2816,7 +2818,86 @@ async function generateArtifactFields(work, type, instruction = "", chat = null)
   }
 }
 
+// One structured answer from the AI, shaped by `spec` (see src/canon-drafts.js).
+async function callStructuredAi(work, spec) {
+  const config = getAiConfig(true);
+  if (!config.apiKey) throw aiUnavailableError();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    if (config.endpoint === "chat") {
+      const payload = await fetchAiJson(`${config.baseUrl}/chat/completions`, config.apiKey, {
+        model: config.model,
+        messages: [{ role: "system", content: spec.system }, { role: "user", content: spec.prompt }],
+        tools: [{ type: "function", function: { name: spec.toolName, description: spec.description, parameters: { type: "object", properties: spec.properties, required: spec.required } } }],
+        tool_choice: { type: "function", function: { name: spec.toolName } },
+        temperature: temperatureFromBoldness(getWorkBoldness(work)),
+        max_tokens: config.maxOutputTokens
+      }, controller.signal);
+      const argumentsText = payload?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      return argumentsText ? JSON.parse(argumentsText) : extractJsonObject(extractChatText(payload));
+    }
+    const payload = await fetchAiJson(`${config.baseUrl}/responses`, config.apiKey, {
+      model: config.model,
+      input: `${spec.system}\n\n${spec.prompt}\n\nJSON only, with the keys: ${Object.keys(spec.properties).join(", ")}`,
+      max_output_tokens: config.maxOutputTokens
+    }, controller.signal);
+    return extractJsonObject(extractResponseText(payload));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// The exchange a message belongs to: the author's message before it, and the reply.
+function exchangeFor(chat, messageId, english) {
+  const index = chat.messages.findIndex((message) => message.id === messageId);
+  if (index < 0) return "";
+  const turns = chat.messages.slice(Math.max(0, index - 1), index + 1);
+  return turns.map((turn) => `${turn.role === "user" ? (english ? "Author" : "作者") : (english ? "Assistant" : "助手")}: ${limitText(turn.content, 6000)}`).join("\n");
+}
+
+// AI drafts for the Cast: nothing here is saved to the story.
+async function handleCanonDraftApi(req, res, parts, db, work) {
+  // POST /api/works/:id/canon/drafts/character { description, chatId?, messageId? }
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "character") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 64 * 1024);
+    const description = normalizeText(body.description).slice(0, 2000);
+    if (!description) throw appError("DRAFT_DESCRIPTION_REQUIRED");
+    const chat = body.chatId ? normalizeAiWorkspace(work.aiWorkspace).chats.find((item) => item.id === body.chatId) : null;
+    const conversation = chat && body.messageId ? exchangeFor(chat, normalizeText(body.messageId), normalizeStoryLanguage(work.language) === "en") : "";
+    const draft = isTestAiEnabled()
+      ? canonDrafts.testCharacterDraft(work, description)
+      : canonDrafts.normalizeCharacterDraft(await callStructuredAi(work, canonDrafts.characterDraftRequest(work, { description, conversation })));
+    sendJson(res, 200, { draft });
+    return true;
+  }
+  // POST /api/works/:id/chats/:chatId/messages/:messageId/cast-candidates
+  // The people named in that exchange who are not in the Cast yet. Worked
+  // out once per message and kept on it; always filtered against the Cast
+  // as it is now.
+  if (req.method === "POST" && parts.length === 8 && parts[3] === "chats" && parts[5] === "messages" && parts[7] === "cast-candidates") {
+    assertOwner(req.user, work);
+    const workspace = ensureAiWorkspace(work, { createChat: false });
+    const chat = workspace.chats.find((item) => item.id === parts[4]);
+    if (!chat) throw appError("CHAT_NOT_FOUND");
+    const message = chat.messages.find((item) => item.id === parts[6]);
+    if (!message || message.role !== "assistant") throw appError("NOT_FOUND");
+    if (!Array.isArray(message.castCandidates)) {
+      const exchange = exchangeFor(chat, message.id, normalizeStoryLanguage(work.language) === "en");
+      message.castCandidates = isTestAiEnabled()
+        ? canonDrafts.testCandidates(work, exchange)
+        : canonDrafts.normalizeCandidates(await callStructuredAi(work, canonDrafts.candidatesRequest(work, exchange)), work);
+      await writeDb(db);
+    }
+    sendJson(res, 200, { candidates: canonDrafts.normalizeCandidates({ characters: message.castCandidates }, work) });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
+  if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
   if (parts[3] === "chats") {
     const workspace = ensureAiWorkspace(work, { createChat: true });
     if (req.method === "GET" && parts.length === 4) {
@@ -4373,6 +4454,25 @@ async function callStoryBibleGenerator(work) {
   }
 }
 
+// The rules for writing a scene from the writer's own account (plan 5.9 A).
+// The length is a number worked out from the account, so a short account
+// gets a short scene; the general length and "hook" rules do not apply.
+function sceneConstraints(account, language) {
+  const english = normalizeStoryLanguage(language) === "en";
+  const size = english ? String(account || "").trim().split(/\s+/).filter(Boolean).length : countCharacters(account);
+  const low = Math.max(english ? 120 : 250, size * 4);
+  const high = Math.max(english ? 300 : 600, size * 8);
+  return [
+    "- 本次任务以作者的讲述为准：讲述中的每个事件都要写到，先后顺序和结果不变；最后一个事件写完就结束，不要再往后写。",
+    "- 不得添加讲述之外的任何新信息：新的情节事件、往事、罪名或指控、计划、路线、约定、秘密、新的重要人物、新的结果，都不允许；不要替作者决定讲述里没有说的事。",
+    "- 对白只能说出讲述里已有的意思，可以换说法、加语气，但不能借对白引入新信息。",
+    "- 可以补充的只有讲法：场景、动作、神态、感官细节和节奏。",
+    `- 篇幅：约 ${low} 到 ${high} 个${english ? "英文单词" : "汉字"}，不要超过上限；作者在讲述中另有要求时以作者为准。`,
+    "- 这段正文接在当前章节已有正文之后（或作者光标所在处），开头要与上文自然衔接，不要重复上文。",
+    "- 遵守上方的设定和连续性约束；它们和讲述冲突时，以讲述为准，并照讲述写。"
+  ];
+}
+
 function getModeInstruction(mode) {
   const modes = {
     continue: "续写当前章节。默认只输出可直接插入章节的小说正文，不要输出写作方案、分析、说明或标题；当前章节为空时，按当前章节标题和匹配章纲直接写开头。",
@@ -4462,19 +4562,14 @@ function buildAiPrompt(body) {
     ] : [mode === "scene" ? "作者对这场戏的讲述（必须忠实）：" : "作者补充指令：", instruction || "无"]),
     "",
     "写作约束：",
-    ...(mode === "scene" ? [
-      "- 本次任务以作者的讲述为准：讲述中的每个事件都要写到，先后顺序和结果不变。",
-      "- 不得增加讲述里没有的情节事件、新的重要人物、新的结果或新的秘密；不得替作者决定讲述里没有说的事。",
-      "- 可以补充的只有讲法：场景、动作、对白、感官细节、人物神态和节奏。对白只能表达讲述中已有的意思。",
-      "- 篇幅约为讲述的五到十倍，至少三百字；作者在讲述中另有要求时以作者为准。本条优先于下方关于篇幅的默认要求。",
-      "- 这段正文接在当前章节已有正文之后（或作者光标所在处），开头要与上文自然衔接，不要重复上文。"
-    ] : []),
-    "- 本次生成开始前，必须重新阅读并遵守上方的设定库摘要、世界观、人物设定、故事大纲、章节规划和连续性提醒；不得只依赖上一轮对话记忆。",
-    "- 右侧工具栏生成内容必须参考设定库，尤其要使用世界观、人物设定、势力/组织、主线冲突、章节规划和连续性提醒。",
-    "- 当前章节为空时，不要说“可以怎么写”，要直接写本章开场正文。",
-    "- 如果作者要求写第一章、写开头、写战斗或写某个场景，直接按要求写小说正文，不要只分析。",
-    "- 续写、扩写、按指令写正文时，默认生成约1800到2200个中文字符；如果作者另有字数要求，以作者要求为准。",
-    "- 正文要写足场景推进、动作、对话、心理和结尾钩子，不要用提纲式短段落凑数。",
+    ...(mode === "scene" ? sceneConstraints(body.account || instruction, work.language) : [
+      "- 本次生成开始前，必须重新阅读并遵守上方的设定库摘要、世界观、人物设定、故事大纲、章节规划和连续性提醒；不得只依赖上一轮对话记忆。",
+      "- 右侧工具栏生成内容必须参考设定库，尤其要使用世界观、人物设定、势力/组织、主线冲突、章节规划和连续性提醒。",
+      "- 当前章节为空时，不要说“可以怎么写”，要直接写本章开场正文。",
+      "- 如果作者要求写第一章、写开头、写战斗或写某个场景，直接按要求写小说正文，不要只分析。",
+      "- 续写、扩写、按指令写正文时，默认生成约1800到2200个中文字符；如果作者另有字数要求，以作者要求为准。",
+      "- 正文要写足场景推进、动作、对话、心理和结尾钩子，不要用提纲式短段落凑数。"
+    ]),
     "- 对同人作品，必须贴合原作世界和角色关系，但不要照搬原作大段文本。",
     "- 大胆程度只影响反转、爽点和新奇度，不允许推翻原作核心设定或作者设定。",
     "",

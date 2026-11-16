@@ -85,7 +85,15 @@ function normalizeMessage(value) {
     content: String(source.content || "").slice(0, 200000),
     status,
     createdAt: normalizeDate(source.createdAt),
-    ...(normalizeText(source.retryOf) ? { retryOf: normalizeText(source.retryOf) } : {})
+    ...(normalizeText(source.retryOf) ? { retryOf: normalizeText(source.retryOf) } : {}),
+    // New people named in this exchange, found once (see server.js, cast-candidates).
+    ...(Array.isArray(source.castCandidates) ? {
+      castCandidates: source.castCandidates
+        .filter(isObject)
+        .map((item) => ({ name: normalizeText(item.name).slice(0, 160), summary: normalizeText(item.summary).slice(0, 300) }))
+        .filter((item) => item.name)
+        .slice(0, 8)
+    } : {})
   };
 }
 

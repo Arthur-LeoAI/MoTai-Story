@@ -164,6 +164,15 @@
       "delete": "删除关系",
       "deleteConfirm": "删除{{from}}与{{to}}之间的关系？此操作无法撤销。",
       "lineLabel": "{{from}}与{{to}}：{{kind}}。打开这条关系。"
+    },
+    "draftTitle": "人物草稿",
+    "draftNote": "根据你的话起草的。保存前不会写入，可以先改任何地方。",
+    "sketch": {
+      "label": "用一句话描述一个新人物",
+      "placeholder": "一个自己从没渡过河的摆渡人",
+      "submit": "起草这个人物",
+      "busy": "正在起草…",
+      "waiting": "正在根据你的话起草人物卡，完成后会打开给你确认。"
     }
   },
   "ideate": {
@@ -194,7 +203,14 @@
     "save": "保存",
     "cancel": "取消",
     "delete": "删除",
-    "deleteConfirm": "删除这段对话？删除后无法恢复。"
+    "deleteConfirm": "删除这段对话？删除后无法恢复。",
+    "capture": {
+      "add": "+ 把“{{name}}”加入人物",
+      "sketching": "正在起草…",
+      "added": "已加入人物：{{names}}。",
+      "separator": "、",
+      "openCast": "打开人物页"
+    }
   },
   "draft": {
     "heading": "草案：{{type}}",
@@ -638,6 +654,7 @@
     "SCENE_NEEDS_RELOCATION": "场景需要重新定位后才能生成。",
     "BACKUP_HISTORY_INVALID": "备份中的章节历史引用无效。",
     "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
-    "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。"
+    "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
+    "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。"
   }
 }

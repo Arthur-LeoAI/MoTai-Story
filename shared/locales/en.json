@@ -167,6 +167,15 @@
       "delete": "Delete relationship",
       "deleteConfirm": "Delete the relationship between {{from}} and {{to}}? This cannot be undone.",
       "lineLabel": "{{from}} and {{to}}: {{kind}}. Open this relationship."
+    },
+    "draftTitle": "A draft character",
+    "draftNote": "Sketched from your words. Nothing is saved until you save it; change anything first.",
+    "sketch": {
+      "label": "Describe someone new in a sentence",
+      "placeholder": "A ferryman who has never crossed the river himself",
+      "submit": "Sketch this character",
+      "busy": "Sketching…",
+      "waiting": "Sketching a card from your sentence. It opens for you to check."
     }
   },
   "ideate": {
@@ -198,7 +207,14 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "deleteConfirm": "Delete this conversation? This cannot be undone."
+    "deleteConfirm": "Delete this conversation? This cannot be undone.",
+    "capture": {
+      "add": "+ Add “{{name}}” to Cast",
+      "sketching": "Sketching…",
+      "added": "Now in Cast: {{names}}.",
+      "separator": ", ",
+      "openCast": "Open Cast"
+    }
   },
   "draft": {
     "heading": "A draft: {{type}}",
@@ -649,6 +665,7 @@
     "SCENE_NEEDS_RELOCATION": "This scene has to be placed in the text again before generating.",
     "BACKUP_HISTORY_INVALID": "A chapter history reference in the backup is not valid.",
     "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
-    "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words."
+    "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
+    "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first."
   }
 }

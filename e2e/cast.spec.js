@@ -286,3 +286,31 @@ test("deleting a character also removes the lines drawn to them", async ({ page,
   await expect(page.getByTestId("relation-label")).toHaveCount(0);
   await expect(page.getByTestId("cast-panel-name")).toHaveText("Mira");
 });
+
+test("a character sketched from one sentence opens as a draft and is saved only when the writer saves it", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/cast`);
+  await expect(page.getByTestId("cast-empty")).toBeVisible();
+  await expect(page.getByTestId("cast-sketch-submit")).toBeDisabled();
+  await page.getByTestId("cast-sketch-input").fill("Kael, her oldest friend, now a warden");
+  await page.getByTestId("cast-sketch-submit").click();
+
+  await expect(page.getByTestId("cast-dialog")).toBeVisible();
+  await expect(page.getByTestId("cast-draft-note")).toBeVisible();
+  await expect(page.getByTestId("cast-name")).toHaveValue("Kael");
+  await expect(page.getByTestId("cast-summary")).toHaveValue("Kael, her oldest friend, now a warden");
+  // Closing the draft keeps nothing.
+  await page.getByTestId("cast-cancel").click();
+  await expect(page.getByTestId("cast-empty")).toBeVisible();
+  expect((await (await request.get(`/api/works/${workId}/canon`)).json()).canon.entities).toHaveLength(0);
+
+  await page.getByTestId("cast-sketch-input").fill("Kael, her oldest friend, now a warden");
+  await page.getByTestId("cast-sketch-submit").click();
+  await page.getByTestId("cast-field-change").fill("He chooses her over his oath");
+  await page.getByTestId("cast-save").click();
+  await expect(page.getByTestId("cast-dialog")).toBeHidden();
+  await expect(page.getByTestId("cast-panel-name")).toHaveText("Kael");
+  await expect(page.getByTestId("cast-panel-change")).toContainText("He chooses her over his oath");
+  // With someone in Cast, the sentence box sits beside the map.
+  await expect(page.getByTestId("cast-panel").getByTestId("cast-sketch")).toBeVisible();
+});

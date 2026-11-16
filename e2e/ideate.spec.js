@@ -261,3 +261,37 @@ test("retrying after a reply fails does not save the question twice", async ({ p
   const saved = chats.find((chat) => chat.messages.some((message) => message.content === "Only once, please"));
   expect(saved.messages.filter((message) => message.role === "user")).toHaveLength(1);
 });
+
+test("someone new named in the conversation can be added to Cast after checking a draft", async ({ page, request }) => {
+  const workId = await newStory(request, { title: "Capture" });
+  await page.goto(`/app/works/${workId}/ideate`);
+  await expect(page.getByTestId("chat-empty")).toBeVisible();
+  await page.getByTestId("chat-input").fill("Who should stand in her way? Maybe a warden called Kael.");
+  await page.getByTestId("chat-send").click();
+  await expect(assistantReplies(page)).toHaveCount(1);
+
+  const chip = page.getByTestId("capture-chip");
+  await expect(chip).toHaveCount(1);
+  await expect(chip).toHaveAttribute("data-name", "Kael");
+  await chip.click();
+  // The draft opens for checking; nothing is in Cast yet.
+  await expect(page.getByTestId("cast-dialog")).toBeVisible();
+  await expect(page.getByTestId("cast-draft-note")).toBeVisible();
+  await expect(page.getByTestId("cast-name")).toHaveValue("Kael");
+  expect((await (await request.get(`/api/works/${workId}/canon`)).json()).canon.entities).toHaveLength(0);
+  await page.getByTestId("cast-summary").fill("Her oldest friend, now a warden");
+  await page.getByTestId("cast-save").click();
+
+  await expect(page.getByTestId("cast-dialog")).toBeHidden();
+  await expect(page.getByTestId("capture-notice")).toContainText("Kael");
+  await expect(chip).toHaveCount(0);
+  const { canon } = await (await request.get(`/api/works/${workId}/canon`)).json();
+  expect(canon.entities.map((entity) => [entity.type, entity.name, entity.summary])).toEqual([["character", "Kael", "Her oldest friend, now a warden"]]);
+
+  // After a reload, someone already in Cast is not offered again.
+  await page.reload();
+  await expect(assistantReplies(page)).toHaveCount(1);
+  await expect(page.getByTestId("capture-chip")).toHaveCount(0);
+  await page.getByTestId("capture-open-cast").or(page.getByTestId("nav-cast")).first().click();
+  await expect(page.getByTestId("cast")).toBeVisible();
+});
