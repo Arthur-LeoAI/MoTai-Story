@@ -667,7 +667,8 @@
     "BACKUP_HISTORY_INVALID": "A chapter history reference in the backup is not valid.",
     "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
     "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
-    "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first."
+    "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
+    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read."
   },
   "brief": {
     "intro": "What I keep in mind while helping with this chapter. Untick anything that does not belong here.",
@@ -696,5 +697,24 @@
     "empty": "Nobody and nothing from Cast is named in this chapter yet.",
     "openCast": "Open Cast",
     "othersHint": "Cards not named in this chapter. The assistant still sees them; untick what it does not need here."
+  },
+  "extract": {
+    "intro": "Already written some of the story? I can read it and list the people, relationships and events for you to keep.",
+    "start": "Find people and events in the manuscript",
+    "starting": "Starting…",
+    "reading": "Reading chapter {{done}} of {{total}}…",
+    "title": "Found in your manuscript",
+    "summary": "Read {{read}} of {{total}} chapters with text.",
+    "shortened_one": "{{count}} long chapter was read only in part.",
+    "shortened_other": "{{count}} long chapters were read only in part.",
+    "characters": "People not in Cast yet ({{count}})",
+    "noneNew": "Nobody new: everyone named is already in Cast.",
+    "relations": "Relationships ({{count}})",
+    "needsBoth": "Needs both people: tick them above, or add them to Cast first.",
+    "events": "Events ({{count}})",
+    "add": "Add the ticked ones",
+    "unchanged": "Nothing is added until you choose. You can change or delete anything later in Cast.",
+    "added": "Added {{characters}} people, {{relations}} relationships and {{events}} events.",
+    "partly": "So far, {{characters}} people, {{relations}} relationships and {{events}} events were added."
   }
 }

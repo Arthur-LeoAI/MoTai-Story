@@ -4,9 +4,10 @@ import { errorText, type WorkSummary } from "../api";
 import { castApi, type Entity, type Relation } from "../castApi";
 import { CharacterDialog, type CharacterEditing } from "../components/CharacterDialog";
 import { SketchCharacter } from "../components/SketchCharacter";
+import { ManuscriptExtract } from "../components/ManuscriptExtract";
 import { RelationDialog, RelationsMap, initial, relationText, type RelationEditing } from "../components/RelationsMap";
 
-type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[]; relations: Relation[] } | { state: "failed"; message: string };
+type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[]; relations: Relation[]; entities: Entity[] } | { state: "failed"; message: string };
 type Editing = CharacterEditing;
 
 /** One character on the grid: who they are in a sentence, and what they want and fear. */
@@ -121,13 +122,14 @@ export default function Cast({ work }: { work: WorkSummary }) {
   const [relationEditing, setRelationEditing] = useState<RelationEditing>(null);
   const [selectedId, setSelectedId] = useState("");
   const [view, setView] = useState<View>(storedView);
+  const [extractNotice, setExtractNotice] = useState("");
 
   const load = useCallback(async () => {
     const { canon } = await castApi.canon(work.id);
     const characters = canon.entities.filter((entity) => entity.type === "character");
     const ids = new Set(characters.map((entity) => entity.id));
     const relations = (canon.relations ?? []).filter((relation) => ids.has(relation.fromId) && ids.has(relation.toId));
-    setLoaded({ state: "ready", characters, relations });
+    setLoaded({ state: "ready", characters, relations, entities: canon.entities });
     return { characters, relations };
   }, [work.id]);
 
@@ -138,6 +140,9 @@ export default function Cast({ work }: { work: WorkSummary }) {
 
   const characters = loaded.state === "ready" ? loaded.characters : [];
   const relations = loaded.state === "ready" ? loaded.relations : [];
+  const allEntities = loaded.state === "ready" ? loaded.entities : [];
+  // Reading the manuscript needs a manuscript.
+  const hasText = (work.stats?.wordCount ?? 0) > 0;
   const selected = characters.find((entity) => entity.id === selectedId) ?? characters[0] ?? null;
   const earlierNotes = (["characters", "relationships"] as const).filter((key) => work.storyBible?.[key]?.trim());
 
@@ -209,6 +214,7 @@ export default function Cast({ work }: { work: WorkSummary }) {
         </div>
       </header>
       <hr className="rule2" />
+      {extractNotice ? <p className="assist-done" role="status" data-testid="extract-notice">{extractNotice}</p> : null}
 
       {loaded.state === "loading" ? <p className="muted">{t("app.loading")}</p> : null}
       {loaded.state === "failed" ? <p className="notice" role="alert" data-testid="cast-load-error">{loaded.message}</p> : null}
@@ -217,6 +223,7 @@ export default function Cast({ work }: { work: WorkSummary }) {
         <div className="cast-start">
           <p className="muted cast-empty" data-testid="cast-empty">{t("cast.empty")}</p>
           <SketchCharacter workId={work.id} language={work.language} onDraft={(draft) => setEditing({ mode: "new", draft })} />
+          {hasText ? <ManuscriptExtract workId={work.id} language={work.language} entities={allEntities} onAdded={(notice) => { setExtractNotice(notice); void load(); }} /> : null}
         </div>
       ) : null}
 
@@ -254,6 +261,11 @@ export default function Cast({ work }: { work: WorkSummary }) {
             <div className="card cast-panel-card">
               <SketchCharacter workId={work.id} language={work.language} onDraft={(draft) => setEditing({ mode: "new", draft })} />
             </div>
+            {hasText ? (
+              <div className="card cast-panel-card">
+                <ManuscriptExtract workId={work.id} language={work.language} entities={allEntities} onAdded={(notice) => { setExtractNotice(notice); void load(); }} />
+              </div>
+            ) : null}
           </CharacterPanel>
         </div>
       ) : null}

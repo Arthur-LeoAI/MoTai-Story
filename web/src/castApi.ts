@@ -95,6 +95,13 @@ export const castApi = {
       `/api/works/${encodeURIComponent(workId)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/cast-candidates`,
       send("POST", {})
     ),
+  /** Starts reading the manuscript for people, relationships and events (a background task). */
+  extractManuscript: (workId: string) =>
+    request<{ task: ExtractTask }>(`${base(workId)}/drafts/manuscript`, send("POST", { requestId: crypto.randomUUID() })),
+  task: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}`),
+  cancelTask: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, send("POST", {})),
+  createEvent: (workId: string, event: { title: string; summary: string; chapterId: string; participantIds: string[]; locationId: string }) =>
+    request<{ item: { id: string } }>(`${base(workId)}/events`, send("POST", event)),
   removeRelation: (workId: string, relation: Relation) =>
     request<{ removed: { id: string }; canonRevision: number }>(relationPath(workId, relation.id), send("DELETE", { baseRevision: relation.revision }))
 };
@@ -102,4 +109,22 @@ export const castApi = {
 /** Aliases typed as one line: commas in either language, or the Chinese enumeration comma. */
 export function parseAliases(value: string): string[] {
   return [...new Set(value.split(/[,，、;；]/).map((item) => item.trim()).filter(Boolean))];
+}
+
+/** What reading the manuscript found: drafts only, nothing saved. Names refer to cards by their main name. */
+export interface ManuscriptDrafts {
+  characters: Array<{ name: string; aliases: string[]; summary: string; card: { want?: string }; chapterId: string }>;
+  relations: Array<{ from: string; to: string; kind: RelationKind; label: string; tension: string }>;
+  events: Array<{ chapterId: string; chapterTitle: string; title: string; summary: string; participants: string[]; location: string }>;
+}
+
+export interface ExtractTask {
+  id: string;
+  status: "queued" | "generating" | "checking" | "completed" | "failed" | "cancelled" | "interrupted";
+  progress?: { done: number; total: number };
+  result?: { drafts: ManuscriptDrafts; chaptersRead: number; chaptersWithText: number; shortened: string[] };
+  errorCode?: string;
+  errorParams?: Record<string, unknown>;
+  errorStatus?: number;
+  message?: string;
 }

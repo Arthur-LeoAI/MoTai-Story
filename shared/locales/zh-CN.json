@@ -656,7 +656,8 @@
     "BACKUP_HISTORY_INVALID": "备份中的章节历史引用无效。",
     "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
     "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
-    "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。"
+    "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。",
+    "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。"
   },
   "brief": {
     "intro": "帮你写这一章时我会记着的内容。不属于这一章的，可以取消勾选。",
@@ -685,5 +686,23 @@
     "empty": "本章还没有提到人物页里的任何人或东西。",
     "openCast": "打开人物页",
     "othersHint": "本章没有提到的卡片。助手仍会看到它们；不需要的可以取消勾选。"
+  },
+  "extract": {
+    "intro": "已经写了一部分？我可以读一遍正文，列出其中的人物、关系和事件，供你挑选保留。",
+    "start": "从正文中找出人物和事件",
+    "starting": "正在开始…",
+    "reading": "正在读第 {{done}} 章，共 {{total}} 章…",
+    "title": "在正文中找到的",
+    "summary": "读了 {{total}} 个有正文的章节中的 {{read}} 个。",
+    "shortened_other": "有 {{count}} 个较长的章节只读了一部分。",
+    "characters": "人物页里还没有的人物（{{count}}）",
+    "noneNew": "没有新人物：提到的人都已在人物页中。",
+    "relations": "人物关系（{{count}}）",
+    "needsBoth": "需要两个人都在：先在上面勾选他们，或先把他们加入人物页。",
+    "events": "事件（{{count}}）",
+    "add": "加入勾选的内容",
+    "unchanged": "你确认前不会加入任何内容。之后也可以在人物页修改或删除。",
+    "added": "已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。",
+    "partly": "目前已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。"
   }
 }

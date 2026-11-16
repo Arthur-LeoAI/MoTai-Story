@@ -126,7 +126,7 @@ const dataStore = STORAGE_BACKEND === "postgres"
   : createJsonStore(DATA_FILE);
 const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
-const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
+const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : input.kind === "extract" ? extractManuscriptTask(input) : createConstrainedGeneration(input));
 const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readWork: async (workId) => findWork(await readWorkDb(workId), workId), ensureMigrated, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
 const canonApi = createCanonApi({ repository: createCanonRepository(dataStore), readDb: ensureMigrated, readBody, sendJson });
 let migrationTask;
@@ -2411,6 +2411,42 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
   };
 }
 
+// Reads the manuscript chapter by chapter and drafts the people,
+// relationships and events in it (plan 8, phase 2: "extract characters and
+// events from an imported manuscript"). Nothing is saved to the story: the
+// result is a set of drafts for the writer to tick and keep.
+async function extractManuscriptTask(input) {
+  const db = await readWorkDb(input.workId);
+  const work = findWork(db, input.workId);
+  if (!work) fail("WORK_NOT_FOUND");
+  const task = taskContext.getStore();
+  const written = (work.chapters || []).filter((chapter) => countCharacters(chapter.content) > 0);
+  if (!written.length) fail("MANUSCRIPT_EMPTY");
+  const chapters = written.slice(0, canonDrafts.MAX_CHAPTERS);
+  const knownNames = new Set(normalizeCanon(work.canon).entities.flatMap((entity) => [entity.name, ...entity.aliases]).filter(Boolean));
+  const results = [];
+  for (const [index, chapter] of chapters.entries()) {
+    task?.signal.throwIfAborted();
+    if (task) await task.update({ status: "generating", progress: { done: index, total: chapters.length } });
+    const extraction = isTestAiEnabled()
+      ? canonDrafts.testChapterExtraction(work, chapter)
+      : canonDrafts.normalizeChapterExtraction(await callStructuredAi(work, canonDrafts.chapterExtractionRequest(work, chapter, { index, total: chapters.length, knownNames: [...knownNames] })), chapter.id);
+    results.push(extraction);
+    // Later chapters are told the names found so far, so one person keeps one name.
+    for (const person of extraction.characters) knownNames.add(person.name);
+  }
+  if (task) await task.update({ progress: { done: chapters.length, total: chapters.length } });
+  const drafts = canonDrafts.mergeExtractions(work, results);
+  const titles = new Map(chapters.map((chapter) => [chapter.id, chapter.title || ""]));
+  drafts.events = drafts.events.map((event) => ({ ...event, chapterTitle: titles.get(event.chapterId) || "" }));
+  return {
+    drafts,
+    chaptersRead: chapters.length,
+    chaptersWithText: written.length,
+    shortened: chapters.filter((chapter) => String(chapter.content || "").length > canonDrafts.CHARS_PER_CHAPTER).map((chapter) => chapter.id)
+  };
+}
+
 async function reviewChapterTask(input) {
   const db = await readWorkDb(input.workId), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
   if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, input.baseRevision);
@@ -2874,6 +2910,15 @@ async function handleCanonDraftApi(req, res, parts, db, work) {
       ? canonDrafts.testCharacterDraft(work, description)
       : canonDrafts.normalizeCharacterDraft(await callStructuredAi(work, canonDrafts.characterDraftRequest(work, { description, conversation })));
     sendJson(res, 200, { draft });
+    return true;
+  }
+  // POST /api/works/:id/canon/drafts/manuscript → a background task (see extractManuscriptTask).
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "manuscript") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 16 * 1024);
+    if (!(work.chapters || []).some((chapter) => countCharacters(chapter.content) > 0)) throw appError("MANUSCRIPT_EMPTY");
+    const task = await taskService.create({ kind: "extract", workId: work.id, requestId: normalizeText(body.requestId) || createId("request") });
+    sendJson(res, 202, { task });
     return true;
   }
   // POST /api/works/:id/chats/:chatId/messages/:messageId/cast-candidates

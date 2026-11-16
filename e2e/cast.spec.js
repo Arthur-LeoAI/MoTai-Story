@@ -314,3 +314,34 @@ test("a character sketched from one sentence opens as a draft and is saved only 
   // With someone in Cast, the sentence box sits beside the map.
   await expect(page.getByTestId("cast-panel").getByTestId("cast-sketch")).toBeVisible();
 });
+
+test("people and events found in the manuscript are added only when ticked", async ({ page, request }) => {
+  const workId = await newStory(request, { focus: "write" });
+  const work = (await (await request.get(`/api/works/${workId}`)).json()).work;
+  const chapter = work.chapters[0];
+  expect((await request.patch(`/api/works/${workId}/chapters/${chapter.id}`, { data: { baseRevision: chapter.revision, content: "Mira waited at the ferry, and then Kael came down the path while Voss watched." } })).ok()).toBeTruthy();
+  await character(request, workId, "Mira");
+
+  await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("extract-start").first().click();
+  const dialog = page.getByTestId("extract-dialog");
+  await expect(dialog).toBeVisible({ timeout: 15000 });
+  // Mira is already in Cast, so she is not offered again.
+  await expect(dialog.getByTestId("extract-character")).toHaveCount(2);
+  await expect(dialog.locator('[data-testid="extract-character"][data-name="Mira"]')).toHaveCount(0);
+  expect((await (await request.get(`/api/works/${workId}/canon`)).json()).canon.entities).toHaveLength(1);
+
+  // Leaving Voss out also rules out the relationship that needs him.
+  await dialog.locator('[data-testid="extract-character"][data-name="Voss"] input').uncheck();
+  await expect(dialog.getByTestId("extract-relation").first()).toHaveAttribute("data-state", "missing");
+  await dialog.getByTestId("extract-add").click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId("extract-notice").first()).toBeVisible();
+
+  const { canon } = await (await request.get(`/api/works/${workId}/canon`)).json();
+  expect(canon.entities.map((entity) => entity.name).sort()).toEqual(["Kael", "Mira"]);
+  expect(canon.relations).toHaveLength(0);
+  expect(canon.events).toHaveLength(1);
+  expect(canon.events[0].chapterId).toBe(chapter.id);
+  await expect(page.getByTestId("relations-node")).toHaveCount(2);
+});
