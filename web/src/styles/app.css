@@ -1373,6 +1373,90 @@ button.story-chip:hover {
   align-self: flex-end;
 }
 
+/* Timeline (plan 5.7) */
+.timeline {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.timeline-list {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.timeline-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.timeline-event {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.timeline-num {
+  flex: 0 0 28px;
+  padding-block-start: var(--space-3);
+  font-family: var(--font-fell);
+  font-style: italic;
+  color: var(--color-accent);
+}
+.timeline-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.timeline-title {
+  font-size: var(--text-md);
+}
+.timeline-sub {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+.timeline-sub:lang(zh) {
+  font-style: normal;
+}
+.timeline-sub.flashback {
+  color: var(--color-accent);
+}
+.timeline-move {
+  display: flex;
+  flex-direction: column;
+}
+.timeline-move .btn {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+}
+.timeline-add .field {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.event-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

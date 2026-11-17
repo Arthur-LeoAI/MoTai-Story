@@ -668,7 +668,8 @@
     "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
     "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
     "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
-    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read."
+    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read.",
+    "EVENT_ORDER_INVALID": "The new order must list every event once."
   },
   "brief": {
     "intro": "What I keep in mind while helping with this chapter. Untick anything that does not belong here.",
@@ -716,5 +717,47 @@
     "unchanged": "Nothing is added until you choose. You can change or delete anything later in Cast.",
     "added": "Added {{characters}} people, {{relations}} relationships and {{events}} events.",
     "partly": "So far, {{characters}} people, {{relations}} relationships and {{events}} events were added."
+  },
+  "timeline": {
+    "part": "Part IV",
+    "subtitle": "What happens, to whom, and in what order the reader learns it.",
+    "orderLabel": "Order",
+    "orders": {
+      "happened": "As it happened",
+      "told": "As it is told"
+    },
+    "listHeading": {
+      "happened": "Events, in the order they happened",
+      "told": "Events, in the order the reader meets them"
+    },
+    "listLabel": "Events",
+    "new": "New event",
+    "newTitle": "A new event",
+    "editTitle": "Event",
+    "empty": "Nothing has happened yet. Start with the first thing you know.",
+    "addLabel": "And then what happened?",
+    "addPlaceholder": "She crosses the river at night, alone",
+    "add": "Add",
+    "notPlaced": "Not placed",
+    "notTold": "Not told yet",
+    "toldIn": "Told in {{chapter}}",
+    "flashbackTo": "A flashback to {{when}}",
+    "earlier": "earlier",
+    "toldHint": "This order follows the chapters. To change it, change which chapter tells an event.",
+    "listSeparator": ", ",
+    "earlierAria": "Move “{{title}}” earlier",
+    "laterAria": "Move “{{title}}” later",
+    "whenHint": "Three years earlier; the next night",
+    "fields": {
+      "title": "What happens",
+      "summary": "In a few sentences",
+      "when": "When, in your words",
+      "chapter": "Told in",
+      "who": "Who takes part",
+      "where": "Where"
+    },
+    "noPlace": "No place",
+    "delete": "Delete event",
+    "deleteConfirm": "Delete “{{title}}”? This cannot be undone."
   }
 }

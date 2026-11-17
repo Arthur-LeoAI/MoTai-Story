@@ -25,6 +25,11 @@ function createCanonApi({ repository, readDb, readBody, sendJson }) {
       sendJson(res, 201, await repository.create(workId, req.user, collection, await readBody(req, 256 * 1024)));
       return true;
     }
+    // POST /api/works/:workId/canon/events/order { eventIds, canonRevision }
+    if (parts.length === 6 && req.method === "POST" && collection === "events" && itemId === "order") {
+      sendJson(res, 200, await repository.reorderEvents(workId, req.user, await readBody(req, 256 * 1024)));
+      return true;
+    }
     if (parts.length === 6 && req.method === "PATCH") {
       sendJson(res, 200, await repository.update(workId, req.user, collection, itemId, await readBody(req, 256 * 1024)));
       return true;

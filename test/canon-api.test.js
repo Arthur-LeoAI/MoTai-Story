@@ -291,3 +291,25 @@ test("ownership: another user cannot read or change the story's objects", async 
   await assert.rejects(repository.read("w1", null), code("AUTH_REQUIRED"));
   assert.deepEqual((await work()).canon.entities.map((entity) => entity.name), ["A"]);
 });
+
+test("events can be put in a new story order, against the canon revision they were read at", async () => {
+  const { repository, work } = await fixture("event-order");
+  const user = LOCAL_USER;
+  const a = (await repository.create("w1", user, "events", { title: "A" })).item;
+  const b = (await repository.create("w1", user, "events", { title: "B" })).item;
+  const c = (await repository.create("w1", user, "events", { title: "C" })).item;
+  assert.deepEqual([a.storyOrder, b.storyOrder, c.storyOrder], [1, 2, 3]);
+  const before = await work();
+
+  await assert.rejects(repository.reorderEvents("w1", user, { eventIds: [c.id, a.id] , canonRevision: before.canonRevision }), code("EVENT_ORDER_INVALID"));
+  await assert.rejects(repository.reorderEvents("w1", user, { eventIds: [c.id, a.id, a.id], canonRevision: before.canonRevision }), code("EVENT_ORDER_INVALID"));
+  await assert.rejects(repository.reorderEvents("w1", user, { eventIds: [c.id, a.id, b.id] }), code("BASE_REVISION_REQUIRED"));
+  await assert.rejects(repository.reorderEvents("w1", user, { eventIds: [c.id, a.id, b.id], canonRevision: before.canonRevision - 1 }), code("REVISION_CONFLICT"));
+
+  const result = await repository.reorderEvents("w1", user, { eventIds: [c.id, a.id, b.id], canonRevision: before.canonRevision });
+  assert.deepEqual(result.events.map((event) => [event.title, event.storyOrder]), [["C", 1], ["A", 2], ["B", 3]]);
+  assert.equal(result.canonRevision, before.canonRevision + 1);
+  const stored = (await work()).canon.events;
+  assert.deepEqual(stored.map((event) => [event.title, event.revision]), [["A", 2], ["B", 2], ["C", 2]]);
+  await assert.rejects(repository.reorderEvents("stranger-work", user, { eventIds: [], canonRevision: 1 }), code("WORK_NOT_FOUND"));
+});
