@@ -105,7 +105,10 @@ test("a Shape story starts from one sentence and opens in Ideate", async ({ page
   await expect(frame.locator('[data-testid^="nav-"]').first()).toHaveAttribute("data-testid", "nav-ideate");
 
   // Every page is reachable; nothing is locked by the focus.
-  for (const section of ["cast", "world", "timeline", "plot"]) {
+  await page.getByTestId("nav-cast").click();
+  await expect(page.getByTestId("cast")).toBeVisible();
+  await expect(page.getByTestId("nav-cast")).toHaveAttribute("aria-current", "page");
+  for (const section of ["world", "timeline", "plot"]) {
     await page.getByTestId(`nav-${section}`).click();
     await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", section);
     await expect(page.getByTestId(`nav-${section}`)).toHaveAttribute("aria-current", "page");

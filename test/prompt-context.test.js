@@ -59,3 +59,27 @@ test("失忆重逢题材的设定提示词要求明确人物和箭头关系", ()
     assert.match(prompt, new RegExp(fragment.replace(/[()]/g, "\\$&")));
   }
 });
+
+test("telling a scene plainly: the writer's account binds the events, only the telling may change", () => {
+  const account = "她进了酒馆，看到 Kael，两人吵起来，她泼了他一杯酒走了。";
+  const prompt = buildAiPrompt({ mode: "scene", work, chapter, instruction: account });
+  assert.match(prompt, /作者对这场戏的讲述（必须忠实）：/);
+  assert.ok(prompt.includes(account));
+  for (const fragment of ["每个事件都要写到", "最后一个事件写完就结束", "不得添加讲述之外的任何新信息", "罪名或指控", "对白只能说出讲述里已有的意思", "可以补充的只有讲法"]) {
+    assert.ok(prompt.includes(fragment), fragment);
+  }
+  // The length is worked out from the account; the general length and hook rules are left out.
+  assert.match(prompt, /篇幅：约 250 到 600 个汉字/);
+  assert.doesNotMatch(prompt, /默认生成约1800到2200个中文字符/);
+  assert.doesNotMatch(prompt, /正文要写足场景推进、动作、对话、心理和结尾钩子/);
+  const long = "她".repeat(200);
+  assert.match(buildAiPrompt({ mode: "scene", work, chapter, instruction: long }), /篇幅：约 800 到 1600 个汉字/);
+  assert.match(buildAiPrompt({ mode: "scene", work: { ...work, language: "en" }, chapter, instruction: "He lets her go and tells her not to come back." }), /篇幅：约 120 到 300 个英文单词/);
+  // Other modes keep their own wording and none of the scene rules.
+  const continued = buildAiPrompt({ mode: "continue", work, chapter, instruction: "写开头" });
+  assert.match(continued, /作者补充指令：/);
+  assert.doesNotMatch(continued, /不得添加讲述之外的任何新信息/);
+  assert.match(continued, /默认生成约1800到2200个中文字符/);
+  // An English story is told to answer in English.
+  assert.match(buildAiPrompt({ mode: "scene", work: { ...work, language: "en" }, chapter, instruction: "He lets her go." }), /Output language: English/);
+});

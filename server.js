@@ -4,6 +4,7 @@ const fsp = require("fs/promises");
 const path = require("path");
 const {
   clampNumber,
+  countCharacters,
   createId,
   emptyStoryBible,
   findChapter,
@@ -23,6 +24,7 @@ const {
   workSummary
 } = require("./src/domain");
 const { createJsonStore } = require("./src/storage");
+const { createPostgresStore, poolFromEnvironment } = require("./src/postgres-store");
 const { createTaskService, taskContext } = require("./src/tasks");
 const { createBetaApi } = require("./src/beta-api");
 const { normalizeTemporalFact, selectTemporalFacts, invalidateDependencies, classifyConflict, adjudicateConflict } = require("./src/temporal");
@@ -45,6 +47,7 @@ const {
   applyCanonProposal,
   canAcceptGeneration,
   hashChapterContent,
+  normalizeCanon,
   normalizeCanonProposal,
   normalizeChapterMemory,
   normalizeConflict,
@@ -70,8 +73,12 @@ const {
   selectChatContext
 } = require("./src/studio");
 const { appError, toErrorResponse } = require("./src/errors");
-const { authenticate } = require("./src/auth");
+const { assertOwner, authenticate } = require("./src/auth");
 const { createPreferenceRepository } = require("./src/preferences");
+const { continuityFacts, describeCanon } = require("./src/canon-model");
+const { createCanonRepository } = require("./src/canon-store");
+const { createCanonApi } = require("./src/canon-api");
+const canonDrafts = require("./src/canon-drafts");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -108,11 +115,20 @@ const LEGACY_SAFETY_BACKUP_PATTERN = /^墨台-自动-\d{14}\.motai-backup\.json$
 const BACKUP_VERSION = 1;
 const AUTOMATIC_BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const AUTOMATIC_BACKUP_RETENTION = 7;
-const dataStore = createJsonStore(DATA_FILE);
+// Where stories and the rest of the data live. NOVEL_STUDIO_STORAGE=postgres
+// uses the database at DATABASE_URL (see docs/FOUNDATION.md); anything else
+// keeps the JSON file. It is an explicit switch so that a connection string in
+// the environment never changes the storage by itself. Chapter history and
+// image files stay in DATA_DIR either way.
+const STORAGE_BACKEND = process.env.NOVEL_STUDIO_STORAGE === "postgres" ? "postgres" : "json";
+const dataStore = STORAGE_BACKEND === "postgres"
+  ? createPostgresStore({ createPool: () => poolFromEnvironment(process.env) })
+  : createJsonStore(DATA_FILE);
 const preferenceRepository = createPreferenceRepository(dataStore);
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
-const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : createConstrainedGeneration(input));
-const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
+const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : input.kind === "extract" ? extractManuscriptTask(input) : createConstrainedGeneration(input));
+const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readWork: async (workId) => findWork(await readWorkDb(workId), workId), ensureMigrated, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
+const canonApi = createCanonApi({ repository: createCanonRepository(dataStore), readDb: ensureMigrated, readBody, sendJson });
 let migrationTask;
 const databaseBaselines = new WeakMap();
 let automaticBackupTask = null;
@@ -190,7 +206,8 @@ const MIME_TYPES = {
   ".txt": "text/plain; charset=utf-8"
 };
 
-async function readDb() {
+// Upgrades stored data once per run, keeping a copy of the old file first.
+async function ensureMigrated() {
   if (!migrationTask) migrationTask = (async () => {
     const existing = await dataStore.read();
     if (existing.schemaVersion < DATABASE_SCHEMA_VERSION && existing.works.length) {
@@ -204,6 +221,58 @@ async function readDb() {
     });
   })();
   await migrationTask;
+}
+
+// A unit of stories read for one request: writeDb saves the ones that changed,
+// each against the version it was read at.
+async function storyUnit(works) {
+  // Each story is completed on its own; nothing in it depends on other stories.
+  const complete = async (work) => {
+    const upgraded = upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION, works: [work] });
+    return (await migrateCoverStorage(upgraded.db)).db.works[0];
+  };
+  const completed = [];
+  for (const work of works) {
+    let next = await complete(work);
+    if (JSON.stringify(next) !== JSON.stringify(work)) {
+      // A story saved in an older or incomplete shape is completed in storage
+      // first, inside a transaction, so that reading it never leaves a request
+      // holding changes that a parallel request would collide with.
+      await dataStore.transactWork(work.id, async (current) => { Object.assign(current, await complete(current)); });
+      const stored = await dataStore.getWork(work.id);
+      next = stored ? await complete(stored) : null;
+    }
+    if (next) completed.push(next);
+  }
+  const db = { schemaVersion: DATABASE_SCHEMA_VERSION, works: completed };
+  databaseBaselines.set(db, structuredClone(db));
+  return db;
+}
+
+// One story (or none, when it does not exist or a new one is being created).
+async function readWorkDb(workId) {
+  await ensureMigrated();
+  const work = workId ? await dataStore.getWork(workId) : null;
+  return storyUnit(work ? [work] : []);
+}
+
+// The stories of one user.
+async function readOwnerDb(ownerId) {
+  await ensureMigrated();
+  return storyUnit(await dataStore.listWorks(ownerId));
+}
+
+// One story changed inside a storage transaction.
+function transactStoredWork(workId, mutator) {
+  return dataStore.transactWork(workId, (stored) => {
+    Object.assign(stored, upgradeDatabase({ schemaVersion: DATABASE_SCHEMA_VERSION, works: [stored] }).db.works[0]);
+    return mutator(stored);
+  });
+}
+
+// The whole database. Only for backup and restore, which act on everything.
+async function readDb() {
+  await ensureMigrated();
   const raw = await dataStore.read();
   const upgraded = upgradeDatabase(raw);
   const covers = await migrateCoverStorage(upgraded.db);
@@ -221,21 +290,22 @@ async function writeDb(db, { automaticBackup = true } = {}) {
   const baseline = databaseBaselines.get(db);
   let saved;
   if (baseline) {
-    saved = await dataStore.transact(stored => {
-      const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
-      const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
-      for (const w of [...changes, ...removed]) {
-        if (JSON.stringify(stored.works.find(x => x.id === w.id)) !== JSON.stringify(baseline.works.find(x => x.id === w.id))) fail("WORK_UPDATED_ELSEWHERE");
-      }
-      stored.works = stored.works.filter(w => !removed.some(x => x.id === w.id));
-      for (const w of changes) { const at = stored.works.findIndex(x => x.id === w.id); if (at < 0) stored.works.unshift(w); else stored.works[at] = w; }
-      return stored;
+    const readVersion = id => baseline.works.find(x => x.id === id)?.rowVersion ?? null;
+    const changes = migrated.works.filter(w => JSON.stringify(w) !== JSON.stringify(baseline.works.find(x => x.id === w.id)));
+    const removed = baseline.works.filter(w => !migrated.works.some(x => x.id === w.id));
+    const stored = await dataStore.saveWorks({
+      upserts: changes.map(work => ({ work, expectedVersion: readVersion(work.id) })),
+      removals: removed.map(work => ({ id: work.id, expectedVersion: readVersion(work.id) }))
     });
-  } else saved = await dataStore.write(migrated);
-  db.storeRevision = saved.storeRevision;
+    // What storage holds now for this unit: saved stories as saved, the rest as read.
+    saved = { works: migrated.works.map(w => stored.find(x => x.id === w.id) || baseline.works.find(x => x.id === w.id)).filter(Boolean) };
+  } else {
+    saved = await dataStore.write(migrated);
+    db.storeRevision = saved.storeRevision;
+  }
   for (const work of db.works) {
     const persisted = saved.works.find(w => w.id === work.id);
-    if (persisted) { work.structureRevision = persisted.structureRevision; work.canonRevision = persisted.canonRevision; work.volumes = persisted.volumes; work.deletedChapters = persisted.deletedChapters; work.writingPreferences = persisted.writingPreferences;
+    if (persisted) { work.rowVersion = persisted.rowVersion; work.structureRevision = persisted.structureRevision; work.canonRevision = persisted.canonRevision; work.volumes = persisted.volumes; work.deletedChapters = persisted.deletedChapters; work.writingPreferences = persisted.writingPreferences;
       for (const chapter of work.chapters || []) { const c = persisted.chapters.find(x => x.id === chapter.id); if (c) Object.assign(chapter, { revision: c.revision, revisions: c.revisions, scenes: c.scenes }); }
     }
   }
@@ -1584,14 +1654,14 @@ async function fetchAiJson(url, apiKey, requestBody, signal) {
   if (ctx?.signal) signal = signal ? AbortSignal.any([signal, ctx.signal]) : ctx.signal;
   const usageId = createId("usage"), started = Date.now();
   const reserved = JSON.stringify(requestBody).length + Number(requestBody.max_tokens || requestBody.max_output_tokens || 0);
-  await dataStore.transact(db => {
-    db.usage ||= []; db.settings ||= { dailyTokenLimit: 200000 };
+  const dailyTokenLimit = (await dataStore.readDocument("settings", "dailyTokenLimit")) ?? 200000;
+  await dataStore.transactRecords("usage", usage => {
     const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
-    const used = db.usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
-    if (used + reserved > db.settings.dailyTokenLimit) fail("AI_DAILY_LIMIT_REACHED");
-    db.usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
+    const used = usage.filter(u => u.day === day).reduce((n, u) => n + (u.totalTokens ?? u.reserved), 0);
+    if (used + reserved > dailyTokenLimit) fail("AI_DAILY_LIMIT_REACHED");
+    usage.push({ id: usageId, day, taskId: ctx?.taskId || "", workId: ctx?.workId || "", stage: ctx?.stage || "other", model: requestBody.model, reserved, status: "pending", createdAt: nowIso() });
   });
-  const finishUsage = async values => dataStore.transact(db => { const u = db.usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
+  const finishUsage = async values => dataStore.transactRecords("usage", usage => { const u = usage.find(u => u.id === usageId); Object.assign(u, values, { durationMs: Date.now() - started }); });
   let response;
   try {
     response = await fetch(url, {
@@ -2341,13 +2411,49 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
   };
 }
 
+// Reads the manuscript chapter by chapter and drafts the people,
+// relationships and events in it (plan 8, phase 2: "extract characters and
+// events from an imported manuscript"). Nothing is saved to the story: the
+// result is a set of drafts for the writer to tick and keep.
+async function extractManuscriptTask(input) {
+  const db = await readWorkDb(input.workId);
+  const work = findWork(db, input.workId);
+  if (!work) fail("WORK_NOT_FOUND");
+  const task = taskContext.getStore();
+  const written = (work.chapters || []).filter((chapter) => countCharacters(chapter.content) > 0);
+  if (!written.length) fail("MANUSCRIPT_EMPTY");
+  const chapters = written.slice(0, canonDrafts.MAX_CHAPTERS);
+  const knownNames = new Set(normalizeCanon(work.canon).entities.flatMap((entity) => [entity.name, ...entity.aliases]).filter(Boolean));
+  const results = [];
+  for (const [index, chapter] of chapters.entries()) {
+    task?.signal.throwIfAborted();
+    if (task) await task.update({ status: "generating", progress: { done: index, total: chapters.length } });
+    const extraction = isTestAiEnabled()
+      ? canonDrafts.testChapterExtraction(work, chapter)
+      : canonDrafts.normalizeChapterExtraction(await callStructuredAi(work, canonDrafts.chapterExtractionRequest(work, chapter, { index, total: chapters.length, knownNames: [...knownNames] })), chapter.id);
+    results.push(extraction);
+    // Later chapters are told the names found so far, so one person keeps one name.
+    for (const person of extraction.characters) knownNames.add(person.name);
+  }
+  if (task) await task.update({ progress: { done: chapters.length, total: chapters.length } });
+  const drafts = canonDrafts.mergeExtractions(work, results);
+  const titles = new Map(chapters.map((chapter) => [chapter.id, chapter.title || ""]));
+  drafts.events = drafts.events.map((event) => ({ ...event, chapterTitle: titles.get(event.chapterId) || "" }));
+  return {
+    drafts,
+    chaptersRead: chapters.length,
+    chaptersWithText: written.length,
+    shortened: chapters.filter((chapter) => String(chapter.content || "").length > canonDrafts.CHARS_PER_CHAPTER).map((chapter) => chapter.id)
+  };
+}
+
 async function reviewChapterTask(input) {
-  const db = await readDb(), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
+  const db = await readWorkDb(input.workId), work = findWork(db, input.workId), chapter = work && findChapter(work, input.chapterId);
   if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, input.baseRevision);
   const task = taskContext.getStore(); if (task) { task.stage = "review"; await task.update({ status: "checking" }); }
   const context = selectContinuityContext(work, chapter.id);
   const scene = chapter.scenes?.[0];
-  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
   const analysis = await analyzeGeneratedText(work, { ...chapter, content: "" }, chapter.content, context);
   task?.signal.throwIfAborted();
   return workspaceService.mutate(work.id, chapter.id, input.baseRevision, (w, c) => {
@@ -2369,7 +2475,7 @@ function selectedGenerationOutput(record) {
 async function createConstrainedGeneration(body) {
   const workId = normalizeText(body.workId || body.work?.id);
   const chapterId = normalizeText(body.chapterId || body.chapter?.id);
-  const db = await readDb();
+  const db = await readWorkDb(workId);
   const work = findWork(db, workId);
   const chapter = work && findChapter(work, chapterId);
   if (!work || !chapter) {
@@ -2385,15 +2491,23 @@ async function createConstrainedGeneration(body) {
   }
 
   const mode = normalizeText(body.mode) || "continue";
+  if (mode === "scene" && !normalizeText(body.instruction)) fail("PLAIN_ACCOUNT_REQUIRED");
   const context = selectContinuityContext(work, chapter.id, { maxFacts: 240, recentChapterCount: 4 });
-  context.canonFacts = selectTemporalFacts(work.canon.facts, { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
-  if (Array.isArray(body.excludeFactIds)) context.canonFacts = context.canonFacts.filter(f => !body.excludeFactIds.includes(f.id) || f.strength === "hard");
+  context.canonFacts = selectTemporalFacts(continuityFacts(work), { storyTime: scene?.storyTime ?? null, readerOrder: work.chapters.findIndex(c => c.id === chapter.id), povId: scene?.povId || "" });
+  // Facts the writer left out: named in the request, or unticked in the chapter's brief. Hard facts always stay.
+  const excludeFactIds = Array.isArray(body.excludeFactIds) ? body.excludeFactIds : Array.isArray(chapter.briefExcluded) ? chapter.briefExcluded : [];
+  // Judged by each fact's own strength: selection softens facts without a place in story time.
+  const hardFactIds = new Set(continuityFacts(work).filter(f => f.strength === "hard").map(f => f.id));
+  if (excludeFactIds.length) context.canonFacts = context.canonFacts.filter(f => !excludeFactIds.includes(f.id) || hardFactIds.has(f.id));
   context.canonFactIds = context.canonFacts.map(f => f.id);
   const baseContentHash = hashChapterContent(chapter);
   const attempts = [];
   let analysis = { conflicts: [], facts: [], chapterMemory: normalizeChapterMemory() };
   let result = null;
-  const baseInstruction = [normalizeText(body.instruction), scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  const extraInstruction = [scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  // For a scene, the writer's account is its own section of the prompt.
+  const account = mode === "scene" ? normalizeText(body.instruction) : "";
+  const baseInstruction = [normalizeText(body.instruction), extraInstruction].filter(Boolean).join("\n");
   let instruction = baseInstruction;
   const task = taskContext.getStore();
 
@@ -2405,6 +2519,8 @@ async function createConstrainedGeneration(body) {
       result = await callOpenAiWriter({
         mode,
         instruction,
+        account,
+        extraInstruction,
         selectedText: String(body.selectedText || ""),
         work,
         chapter,
@@ -2413,7 +2529,7 @@ async function createConstrainedGeneration(body) {
       });
       task?.signal.throwIfAborted();
       if (task) { task.stage = "review"; await task.update({ status: "checking", draft: result.text }); }
-      const ruleConflicts = detectRuleConflicts(mode === "continue" ? chapter : { ...chapter, content: "" }, result.text);
+      const ruleConflicts = detectRuleConflicts(["continue", "scene"].includes(mode) ? chapter : { ...chapter, content: "" }, result.text);
       analysis = await analyzeGeneratedText(work, chapter, result.text, context);
       analysis.conflicts = [...ruleConflicts, ...analysis.conflicts];
       attempts.push({ index, status: "completed", output: result.text, usage: result.usage || {}, startedAt, finishedAt: nowIso() });
@@ -2461,11 +2577,8 @@ async function createConstrainedGeneration(body) {
     });
   }
 
-  await dataStore.transact((stored) => {
+  await transactStoredWork(work.id, (currentWork) => {
     task?.signal.throwIfAborted();
-    const upgraded = upgradeDatabase(stored).db;
-    Object.assign(stored, upgraded);
-    const currentWork = findWork(stored, work.id);
     const currentChapter = currentWork && findChapter(currentWork, chapter.id);
     if (!currentChapter || hashChapterContent(currentChapter) !== baseContentHash) {
       const error = appError("CHAPTER_CHANGED_DURING_GENERATION");
@@ -2505,7 +2618,7 @@ function buildChatSystemPrompt(work) {
       `Premise: ${work.premise || "none yet"}`,
       "",
       "Story material so far:",
-      englishStoryMaterial(work.storyBible) || "Nothing yet. Start by helping the author say the idea clearly."
+      [describeCanon(work), englishStoryMaterial(work.storyBible)].filter(Boolean).join("\n") || "Nothing yet. Start by helping the author say the idea clearly."
     ].join("\n");
   }
   const storyBible = compactStoryBible(work.storyBible);
@@ -2520,7 +2633,7 @@ function buildChatSystemPrompt(work) {
     `创作简介：${work.premise || "暂无"}`,
     "",
     "当前创作资料：",
-    storyBible || "暂时为空。请先帮助作者把灵感说清楚。"
+    [describeCanon(work), storyBible].filter(Boolean).join("\n") || "暂时为空。请先帮助作者把灵感说清楚。"
   ].join("\n");
 }
 
@@ -2745,7 +2858,95 @@ async function generateArtifactFields(work, type, instruction = "", chat = null)
   }
 }
 
+// One structured answer from the AI, shaped by `spec` (see src/canon-drafts.js).
+async function callStructuredAi(work, spec) {
+  const config = getAiConfig(true);
+  if (!config.apiKey) throw aiUnavailableError();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    if (config.endpoint === "chat") {
+      const payload = await fetchAiJson(`${config.baseUrl}/chat/completions`, config.apiKey, {
+        model: config.model,
+        messages: [{ role: "system", content: spec.system }, { role: "user", content: spec.prompt }],
+        tools: [{ type: "function", function: { name: spec.toolName, description: spec.description, parameters: { type: "object", properties: spec.properties, required: spec.required } } }],
+        tool_choice: { type: "function", function: { name: spec.toolName } },
+        temperature: temperatureFromBoldness(getWorkBoldness(work)),
+        max_tokens: config.maxOutputTokens
+      }, controller.signal);
+      const argumentsText = payload?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      return argumentsText ? JSON.parse(argumentsText) : extractJsonObject(extractChatText(payload));
+    }
+    const payload = await fetchAiJson(`${config.baseUrl}/responses`, config.apiKey, {
+      model: config.model,
+      input: `${spec.system}\n\n${spec.prompt}\n\nJSON only, with the keys: ${Object.keys(spec.properties).join(", ")}`,
+      max_output_tokens: config.maxOutputTokens
+    }, controller.signal);
+    return extractJsonObject(extractResponseText(payload));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// The exchange a message belongs to: the author's message before it, and the reply.
+function exchangeFor(chat, messageId, english) {
+  const index = chat.messages.findIndex((message) => message.id === messageId);
+  if (index < 0) return "";
+  const turns = chat.messages.slice(Math.max(0, index - 1), index + 1);
+  return turns.map((turn) => `${turn.role === "user" ? (english ? "Author" : "作者") : (english ? "Assistant" : "助手")}: ${limitText(turn.content, 6000)}`).join("\n");
+}
+
+// AI drafts for the Cast: nothing here is saved to the story.
+async function handleCanonDraftApi(req, res, parts, db, work) {
+  // POST /api/works/:id/canon/drafts/character { description, chatId?, messageId? }
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "character") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 64 * 1024);
+    const description = normalizeText(body.description).slice(0, 2000);
+    if (!description) throw appError("DRAFT_DESCRIPTION_REQUIRED");
+    const chat = body.chatId ? normalizeAiWorkspace(work.aiWorkspace).chats.find((item) => item.id === body.chatId) : null;
+    const conversation = chat && body.messageId ? exchangeFor(chat, normalizeText(body.messageId), normalizeStoryLanguage(work.language) === "en") : "";
+    const draft = isTestAiEnabled()
+      ? canonDrafts.testCharacterDraft(work, description)
+      : canonDrafts.normalizeCharacterDraft(await callStructuredAi(work, canonDrafts.characterDraftRequest(work, { description, conversation })));
+    sendJson(res, 200, { draft });
+    return true;
+  }
+  // POST /api/works/:id/canon/drafts/manuscript → a background task (see extractManuscriptTask).
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "manuscript") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 16 * 1024);
+    if (!(work.chapters || []).some((chapter) => countCharacters(chapter.content) > 0)) throw appError("MANUSCRIPT_EMPTY");
+    const task = await taskService.create({ kind: "extract", workId: work.id, requestId: normalizeText(body.requestId) || createId("request") });
+    sendJson(res, 202, { task });
+    return true;
+  }
+  // POST /api/works/:id/chats/:chatId/messages/:messageId/cast-candidates
+  // The people named in that exchange who are not in the Cast yet. Worked
+  // out once per message and kept on it; always filtered against the Cast
+  // as it is now.
+  if (req.method === "POST" && parts.length === 8 && parts[3] === "chats" && parts[5] === "messages" && parts[7] === "cast-candidates") {
+    assertOwner(req.user, work);
+    const workspace = ensureAiWorkspace(work, { createChat: false });
+    const chat = workspace.chats.find((item) => item.id === parts[4]);
+    if (!chat) throw appError("CHAT_NOT_FOUND");
+    const message = chat.messages.find((item) => item.id === parts[6]);
+    if (!message || message.role !== "assistant") throw appError("NOT_FOUND");
+    if (!Array.isArray(message.castCandidates)) {
+      const exchange = exchangeFor(chat, message.id, normalizeStoryLanguage(work.language) === "en");
+      message.castCandidates = isTestAiEnabled()
+        ? canonDrafts.testCandidates(work, exchange)
+        : canonDrafts.normalizeCandidates(await callStructuredAi(work, canonDrafts.candidatesRequest(work, exchange)), work);
+      await writeDb(db);
+    }
+    sendJson(res, 200, { candidates: canonDrafts.normalizeCandidates({ characters: message.castCandidates }, work) });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
+  if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
   if (parts[3] === "chats") {
     const workspace = ensureAiWorkspace(work, { createChat: true });
     if (req.method === "GET" && parts.length === 4) {
@@ -2935,15 +3136,16 @@ async function handleAiApi(req, res, parts) {
   if (req.method === "POST" && parts.length === 3 && parts[2] === "write") {
     const body = await readBody(req);
     const mode = normalizeText(body.mode) || "continue";
-    const continuityModes = new Set(["continue", "polish", "expand", "shorten", "custom"]);
+    const continuityModes = new Set(["continue", "scene", "polish", "expand", "shorten", "custom"]);
     let result;
     if (continuityModes.has(mode)) {
-      await readDb();
+      await ensureMigrated();
       const task = await taskService.create({ ...body, requestId: body.requestId || createId("request") });
       result = await taskService.wait(task.id);
     } else {
-      const db = await readDb();
-      const work = findWork(db, normalizeText(body.workId || body.work?.id));
+      const requestedWorkId = normalizeText(body.workId || body.work?.id);
+      const db = await readWorkDb(requestedWorkId);
+      const work = findWork(db, requestedWorkId);
       const chapter = work && findChapter(work, normalizeText(body.chapterId || body.chapter?.id));
       if (!work || !chapter) return sendError(res, "WORK_OR_CHAPTER_NOT_FOUND");
       result = await callOpenAiWriter({ ...body, work, chapter });
@@ -2995,7 +3197,7 @@ function createWorkRecord(body, ownerId) {
     coverLogline: normalizeText(body.coverLogline),
     cover: DEFAULT_COVER_PATH,
     coverHistory: [],
-    canon: { version: 1, status: "empty", entities: [], facts: [] },
+    canon: normalizeCanon(),
     generationRecords: [],
     canonProposals: [],
     notes: "",
@@ -3043,6 +3245,7 @@ function createSampleWork(language, ownerId) {
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (await handleAccountApi(req, res, parts)) return;
+  if (await canonApi(req, res, url)) return;
   if (await betaApi(req, res, url)) return;
 
   if (parts.length === 1 && parts[0] === "api") {
@@ -3092,7 +3295,7 @@ async function handleApi(req, res, url) {
     const name = normalizeText(body.name).slice(0, 80) || (action === "generate" ? "AI 生成壁纸" : "自定义壁纸");
     const theme = UI_WALLPAPER_THEMES.has(body.theme) ? body.theme : "";
     const wallpaperWork = action === "generate" && normalizeText(body.workId)
-      ? findWork(await readDb(), normalizeText(body.workId))
+      ? findWork(await readWorkDb(normalizeText(body.workId)), normalizeText(body.workId))
       : null;
     const image = action === "upload"
       ? await saveWallpaperBuffer(parseUploadedWallpaper(body.image))
@@ -3140,7 +3343,9 @@ async function handleApi(req, res, url) {
     return sendError(res, "ROUTE_NOT_FOUND");
   }
 
-  const db = await readDb();
+  // The list reads the requester's stories; every other route reads one story
+  // (or none, when it creates one).
+  const db = req.method === "GET" && parts.length === 2 ? await readOwnerDb(req.user.id) : await readWorkDb(parts[2]);
 
   if (req.method === "GET" && parts.length === 2) {
     const works = db.works
@@ -3360,10 +3565,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     const proposalId = parts[4];
     const action = parts[5];
-    const result = await dataStore.transact((stored) => {
-      const upgraded = upgradeDatabase(stored).db;
-      Object.assign(stored, upgraded);
-      const storedWork = findWork(stored, work.id);
+    const result = await transactStoredWork(work.id, (storedWork) => {
       const proposal = storedWork?.canonProposals.find((item) => item.id === proposalId);
       if (!proposal) {
         const error = appError("CANON_PROPOSAL_NOT_FOUND");
@@ -3440,10 +3642,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && parts.length === 8 && parts[5] === "generations" && parts[7] === "accept") {
     const body = await readBody(req, 2 * 1024 * 1024, "RICH_CONTENT_TOO_LARGE");
     const generationId = parts[6];
-    const result = await dataStore.transact((stored) => {
-      const upgraded = upgradeDatabase(stored).db;
-      Object.assign(stored, upgraded);
-      const storedWork = findWork(stored, work.id);
+    const result = await transactStoredWork(work.id, (storedWork) => {
       const storedChapter = storedWork && findChapter(storedWork, chapter.id);
       const record = storedWork?.generationRecords.find((item) => item.id === generationId);
       if (!storedChapter || !record || record.chapterId !== storedChapter.id) {
@@ -4304,6 +4503,25 @@ async function callStoryBibleGenerator(work) {
   }
 }
 
+// The rules for writing a scene from the writer's own account (plan 5.9 A).
+// The length is a number worked out from the account, so a short account
+// gets a short scene; the general length and "hook" rules do not apply.
+function sceneConstraints(account, language) {
+  const english = normalizeStoryLanguage(language) === "en";
+  const size = english ? String(account || "").trim().split(/\s+/).filter(Boolean).length : countCharacters(account);
+  const low = Math.max(english ? 120 : 250, size * 4);
+  const high = Math.max(english ? 300 : 600, size * 8);
+  return [
+    "- 本次任务以作者的讲述为准：讲述中的每个事件都要写到，先后顺序和结果不变；最后一个事件写完就结束，不要再往后写。",
+    "- 不得添加讲述之外的任何新信息：新的情节事件、往事、罪名或指控、计划、路线、约定、秘密、新的重要人物、新的结果，都不允许；不要替作者决定讲述里没有说的事。",
+    "- 对白只能说出讲述里已有的意思，可以换说法、加语气，但不能借对白引入新信息。",
+    "- 可以补充的只有讲法：场景、动作、神态、感官细节和节奏。",
+    `- 篇幅：约 ${low} 到 ${high} 个${english ? "英文单词" : "汉字"}，不要超过上限；作者在讲述中另有要求时以作者为准。`,
+    "- 这段正文接在当前章节已有正文之后（或作者光标所在处），开头要与上文自然衔接，不要重复上文。",
+    "- 遵守上方的设定和连续性约束；它们和讲述冲突时，以讲述为准，并照讲述写。"
+  ];
+}
+
 function getModeInstruction(mode) {
   const modes = {
     continue: "续写当前章节。默认只输出可直接插入章节的小说正文，不要输出写作方案、分析、说明或标题；当前章节为空时，按当前章节标题和匹配章纲直接写开头。",
@@ -4313,6 +4531,7 @@ function getModeInstruction(mode) {
     outline: "基于设定库扩展或细化章节大纲。只输出可用大纲，不要重新生成无关主线，要承接已有世界观、人物、势力和章节规划。",
     brainstorm: "基于设定库给出可直接采用的剧情灵感，必须服务当前章节冲突和后续章纲。",
     title: "根据当前章节正文和章纲生成一个贴合剧情、有小说感的中文章节标题。只输出标题。",
+    scene: "把作者用大白话讲述的这场戏写成小说正文（作者的讲述见下方“作者对这场戏的讲述”）。只输出可直接插入章节的小说正文。",
     custom: "根据作者补充指令处理当前作品和章节。如果指令要求写正文，默认只输出可直接插入章节的小说正文。只有作者明确要求方案时，才输出方案。"
   };
 
@@ -4383,16 +4602,23 @@ function buildAiPrompt(body) {
     selectedText ? "作者选中文本：" : "当前章节正文：",
     limitText(targetText, 9000),
     "",
-    "作者补充指令：",
-    instruction || "无",
+    ...(mode === "scene" && body.account ? [
+      "作者对这场戏的讲述（必须忠实）：",
+      normalizeText(body.account),
+      "",
+      "其他写作要求：",
+      normalizeText(body.extraInstruction) || "无"
+    ] : [mode === "scene" ? "作者对这场戏的讲述（必须忠实）：" : "作者补充指令：", instruction || "无"]),
     "",
     "写作约束：",
-    "- 本次生成开始前，必须重新阅读并遵守上方的设定库摘要、世界观、人物设定、故事大纲、章节规划和连续性提醒；不得只依赖上一轮对话记忆。",
-    "- 右侧工具栏生成内容必须参考设定库，尤其要使用世界观、人物设定、势力/组织、主线冲突、章节规划和连续性提醒。",
-    "- 当前章节为空时，不要说“可以怎么写”，要直接写本章开场正文。",
-    "- 如果作者要求写第一章、写开头、写战斗或写某个场景，直接按要求写小说正文，不要只分析。",
-    "- 续写、扩写、按指令写正文时，默认生成约1800到2200个中文字符；如果作者另有字数要求，以作者要求为准。",
-    "- 正文要写足场景推进、动作、对话、心理和结尾钩子，不要用提纲式短段落凑数。",
+    ...(mode === "scene" ? sceneConstraints(body.account || instruction, work.language) : [
+      "- 本次生成开始前，必须重新阅读并遵守上方的设定库摘要、世界观、人物设定、故事大纲、章节规划和连续性提醒；不得只依赖上一轮对话记忆。",
+      "- 右侧工具栏生成内容必须参考设定库，尤其要使用世界观、人物设定、势力/组织、主线冲突、章节规划和连续性提醒。",
+      "- 当前章节为空时，不要说“可以怎么写”，要直接写本章开场正文。",
+      "- 如果作者要求写第一章、写开头、写战斗或写某个场景，直接按要求写小说正文，不要只分析。",
+      "- 续写、扩写、按指令写正文时，默认生成约1800到2200个中文字符；如果作者另有字数要求，以作者要求为准。",
+      "- 正文要写足场景推进、动作、对话、心理和结尾钩子，不要用提纲式短段落凑数。"
+    ]),
     "- 对同人作品，必须贴合原作世界和角色关系，但不要照搬原作大段文本。",
     "- 大胆程度只影响反转、爽点和新奇度，不允许推翻原作核心设定或作者设定。",
     "",
@@ -4477,6 +4703,15 @@ function buildLocalAiDraft(body) {
     return "新的转折";
   }
 
+  if (mode === "scene") {
+    const english = normalizeStoryLanguage(work.language) === "en";
+    const beats = (normalizeText(body.account) || instruction).split(english ? /(?<=[.!?])\s+/u : /(?<=[。！？!?])/u).map((item) => item.trim()).filter(Boolean);
+    const detail = english
+      ? ["The light had not yet reached the water.", "Neither of them looked away first.", "Somewhere behind them a rope creaked against the post."]
+      : ["天色还没有完全亮开。", "两个人谁也没有先移开目光。", "身后传来缆绳摩擦木桩的轻响。"];
+    return beats.map((beat, index) => `${beat}${english ? " " : ""}${detail[index % detail.length]}`).join("\n\n");
+  }
+
   if (mode === "polish" && sourceText) {
     return sourceText.replace(/[ \t]+/g, "").replace(/\n{3,}/g, "\n\n").trim();
   }
@@ -4537,7 +4772,7 @@ async function handleAccountApi(req, res, parts) {
 
   if (parts[1] === "session" && parts.length === 2) {
     if (req.method !== "GET") return sendError(res, "METHOD_NOT_ALLOWED"), true;
-    await readDb();
+    await ensureMigrated();
     const preferences = await preferenceRepository.get(user.id);
     sendJson(res, 200, {
       user: { id: user.id, kind: user.kind, displayName: user.displayName },
@@ -4548,7 +4783,7 @@ async function handleAccountApi(req, res, parts) {
   }
 
   if (parts[1] === "me" && parts[2] === "preferences" && parts.length === 3) {
-    await readDb();
+    await ensureMigrated();
     if (req.method === "GET") {
       sendJson(res, 200, { preferences: await preferenceRepository.get(user.id) });
       return true;
@@ -4686,7 +4921,7 @@ function createAppServer() {
 if (require.main === module) {
   const server = createAppServer();
   server.listen(PORT, "127.0.0.1", () => {
-    console.log(`${brand.name.default} is running: http://127.0.0.1:${PORT} (new frontend: /app/)`);
+    console.log(`${brand.name.default} is running: http://127.0.0.1:${PORT} (new frontend: /app/, storage: ${STORAGE_BACKEND})`);
   });
 }
 

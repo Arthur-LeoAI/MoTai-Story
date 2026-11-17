@@ -14,15 +14,14 @@ function createTaskService(store, execute) {
   let running = false, initialized;
   const controllers = new Map();
   async function init() {
-    if (!initialized) initialized = store.transact(db => {
-      db.tasks ||= []; db.usage ||= [];
-      for (const task of db.tasks) if (!terminal.has(task.status)) { Object.assign(task, { status: "interrupted" }, taskError(appError("TASK_INTERRUPTED_BY_RESTART"))); }
+    if (!initialized) initialized = store.transactRecords("tasks", tasks => {
+      for (const task of tasks) if (!terminal.has(task.status)) { Object.assign(task, { status: "interrupted" }, taskError(appError("TASK_INTERRUPTED_BY_RESTART"))); }
     });
     return initialized;
   }
   async function update(id, values) {
-    return store.transact(db => {
-      const t = db.tasks.find(t => t.id === id);
+    return store.transactRecords("tasks", tasks => {
+      const t = tasks.find(t => t.id === id);
       if (!t || terminal.has(t.status)) return t;
       Object.assign(t, values, { updatedAt: nowIso() }); return t;
     });
@@ -32,7 +31,7 @@ function createTaskService(store, execute) {
     running = true;
     try {
       while (true) {
-        const db = await store.read(), task = db.tasks.find(t => t.status === "queued");
+        const task = (await store.readRecords("tasks")).find(t => t.status === "queued");
         if (!task) break;
         const controller = new AbortController(); controllers.set(task.id, controller);
         try {
@@ -48,14 +47,14 @@ function createTaskService(store, execute) {
   async function create(input) {
     await init();
     if (!input.requestId || typeof input.requestId !== "string" || input.requestId.length > 120) fail("REQUEST_ID_REQUIRED");
-    const task = await store.transact(db => {
-      const prior = db.tasks.find(t => t.requestId === input.requestId);
+    const task = await store.transactRecords("tasks", tasks => {
+      const prior = tasks.find(t => t.requestId === input.requestId);
       if (prior) {
         if (JSON.stringify(prior.input) !== JSON.stringify(input)) fail("REQUEST_ID_REUSED");
         return prior;
       }
       const task = { id: createId("task"), requestId: input.requestId, workId: input.workId, chapterId: input.chapterId, status: "queued", input, createdAt: nowIso(), updatedAt: nowIso(), draft: "" };
-      db.tasks.push(task); return task;
+      tasks.push(task); return task;
     });
     void pump(); return task;
   }
@@ -64,8 +63,8 @@ function createTaskService(store, execute) {
     const task = await update(id, { status: "cancelled", ...taskError(appError("TASK_CANCELLED")) });
     controllers.get(id)?.abort(); return task;
   }
-  async function get(id) { await init(); return (await store.read()).tasks.find(t => t.id === id); }
-  async function list(workId) { await init(); return (await store.read()).tasks.filter(t => !workId || t.workId === workId).slice(-100).reverse(); }
+  async function get(id) { await init(); return (await store.readRecords("tasks")).find(t => t.id === id); }
+  async function list(workId) { await init(); return (await store.readRecords("tasks")).filter(t => !workId || t.workId === workId).slice(-100).reverse(); }
   async function wait(id) {
     while (true) {
       const task = await get(id);

@@ -62,6 +62,119 @@
     "comingTitle": "「{{section}}」正在重做",
     "comingBody": "这个页面会在重新设计的后续步骤中上线。在那之前，所有功能仍可在当前的工作台里使用。"
   },
+  "cast": {
+    "part": "第二部",
+    "subtitle": "他们是谁，他们之间又有什么。",
+    "listLabel": "人物",
+    "empty": "还没有人物。从你脑海里最清楚的那个人开始。",
+    "noSummary": "还没有描述",
+    "new": "新人物",
+    "newTitle": "新人物",
+    "editTitle": "人物",
+    "name": "名字",
+    "summary": "一句话：TA 是谁",
+    "summaryHint": "一个从师门出逃的制图师",
+    "more": "更多",
+    "aliases": "别名",
+    "aliasesHint": "其他称呼，用逗号或顿号分开",
+    "notes": "你的备注",
+    "notesHint": "其他想记下的。只有你能看到，写作助手不会使用。",
+    "fields": {
+      "want": {
+        "label": "TA 想要什么？",
+        "short": "想要",
+        "hint": "在 TA 自己眼里，TA 在追求什么"
+      },
+      "obstacle": {
+        "label": "什么在拦着 TA？TA 害怕什么？",
+        "short": "阻碍",
+        "hint": "一个人、一个弱点、一种恐惧，或世界的某条规则"
+      },
+      "change": {
+        "label": "故事结束时，TA 会变成什么样？",
+        "short": "变化",
+        "hint": "现在还不知道也没关系"
+      },
+      "appearance": {
+        "label": "外貌",
+        "hint": "陌生人第一眼会注意到什么"
+      },
+      "voice": {
+        "label": "说话方式",
+        "hint": "句子长短、用词习惯等，写对白时会用到"
+      },
+      "secret": {
+        "label": "秘密",
+        "hint": "TA 隐瞒了什么，瞒着谁"
+      },
+      "background": {
+        "label": "背景",
+        "hint": "在故事里仍然起作用的过去"
+      }
+    },
+    "loadSaved": "载入已保存的版本",
+    "delete": "删除人物",
+    "deleteConfirm": "删除“{{name}}”？与 TA 相关的关系也会一并删除，且无法撤销。",
+    "earlierNotes": "之前关于人物的资料",
+    "earlierNotesHint": "来自“灵感”页或旧版工作台，原样保留。准备好后可以把它们整理成人物卡。",
+    "views": {
+      "label": "视图",
+      "portraits": "肖像",
+      "relations": "关系"
+    },
+    "map": {
+      "label": "关系图",
+      "figure": "图一",
+      "hint": "从一个头像拖到另一个头像，把两人连起来。点连线上的文字可以修改。",
+      "needsTwo": "再添加一个人物，就可以画出他们之间的关系。",
+      "nodeLabel": "{{name}}。点击查看人物卡；拖到另一个头像上可建立关系。"
+    },
+    "panel": {
+      "label": "当前人物",
+      "want": "想要",
+      "obstacle": "阻碍",
+      "change": "结局时",
+      "unset": "还没想好",
+      "edit": "编辑"
+    },
+    "relation": {
+      "heading": "人物关系",
+      "none": "还没有关系。",
+      "linkTo": "把{{name}}和…连起来",
+      "add": "添加关系",
+      "newTitle": "新关系",
+      "editTitle": "关系",
+      "swap": "调换方向",
+      "mentorReads": "读作：{{from}}是{{to}}的师父。",
+      "kind": "他们是什么关系？",
+      "kinds": {
+        "family": "家人",
+        "friend": "朋友",
+        "lover": "恋人",
+        "mentor": "师徒",
+        "rival": "对手",
+        "enemy": "敌人",
+        "ally": "盟友",
+        "custom": "其他"
+      },
+      "label": "用几个字概括（可选）",
+      "labelHint": "昔日好友，如今追捕与逃亡",
+      "tension": "他们之间的张力是什么？",
+      "tensionHint": "他欠她一条命，而通缉令上写着她的名字",
+      "delete": "删除关系",
+      "deleteConfirm": "删除{{from}}与{{to}}之间的关系？此操作无法撤销。",
+      "lineLabel": "{{from}}与{{to}}：{{kind}}。打开这条关系。"
+    },
+    "draftTitle": "人物草稿",
+    "draftNote": "根据你的话起草的。保存前不会写入，可以先改任何地方。",
+    "sketch": {
+      "label": "用一句话描述一个新人物",
+      "placeholder": "一个自己从没渡过河的摆渡人",
+      "submit": "起草这个人物",
+      "busy": "正在起草…",
+      "waiting": "正在根据你的话起草人物卡，完成后会打开给你确认。"
+    }
+  },
   "ideate": {
     "part": "第一部分",
     "subtitle": "我们聊一聊。我来提问，你用自己的话回答。",
@@ -90,7 +203,14 @@
     "save": "保存",
     "cancel": "取消",
     "delete": "删除",
-    "deleteConfirm": "删除这段对话？删除后无法恢复。"
+    "deleteConfirm": "删除这段对话？删除后无法恢复。",
+    "capture": {
+      "add": "+ 把“{{name}}”加入人物",
+      "sketching": "正在起草…",
+      "added": "已加入人物：{{names}}。",
+      "separator": "、",
+      "openCast": "打开人物页"
+    }
   },
   "draft": {
     "heading": "草案：{{type}}",
@@ -158,6 +278,7 @@
     "exitFocus": "退出专注"
   },
   "companion": {
+    "brief": "简报",
     "assist": "写作助手",
     "checks": "一致性检查",
     "scenes": "场景",
@@ -166,6 +287,7 @@
   "assist": {
     "what": "要我做什么？",
     "modes": {
+      "scene": "把我讲的写成一场戏",
       "continue": "续写本章",
       "expand": "扩写选中内容",
       "shorten": "精简选中内容",
@@ -173,6 +295,7 @@
       "custom": "按我的指令"
     },
     "hints": {
+      "scene": "用大白话讲讲发生了什么。我会把它写成一场戏，放在光标处，不改变发生的事。",
       "continue": "在本章末尾接着写。",
       "expand": "先选中一段。我会补充细节，但不改变发生的事。",
       "shorten": "先选中一段。我会保留要紧的，删去其余。",
@@ -211,7 +334,13 @@
     "blocked": "请先解决矛盾",
     "accepted": "已加入本章。之前的文字保留在本章历史中。",
     "unchanged": "只有加入本章后，你的正文才会改变。",
-    "noChange": "建议的文字与原文相同，没有需要修改的地方。"
+    "noChange": "建议的文字与原文相同，没有需要修改的地方。",
+    "instructionLabel": "还有什么要注意的（可选）",
+    "scenePlaceholder": "她进了酒馆，看到 Kael，两人吵起来，她泼了他一杯酒走了。",
+    "generateScene": "写成一场戏",
+    "yourAccount": "你讲的",
+    "sceneResult": "写成的这场戏",
+    "sceneFaithful": "发生的事和你讲的一样，只是换了讲法。"
   },
   "checks": {
     "intro": "我会通读本章，与已确定的设定对照，并列出新的事实供你确认。",
@@ -442,6 +571,12 @@
     "CANON_FACT_ID_CONFLICT": "新增事实缺少唯一 ID，或 ID 已存在。",
     "CANON_FACT_NOT_ACTIVE": "要变更的事实不存在或已失效。",
     "FACT_FIELDS_REQUIRED": "请填写事实名称和内容。",
+    "CANON_ITEM_NOT_FOUND": "这张卡片、这条关系或这个事件已经不存在。",
+    "CANON_NAME_REQUIRED": "请先填写名称或一句话描述。",
+    "CANON_ENTITY_TYPE_UNSUPPORTED": "卡片只能是人物、地点、势力、物品或规则，创建后不能更改类别。",
+    "CANON_REFERENCE_NOT_FOUND": "它引用的内容已经不存在（{{field}}）。",
+    "CANON_RELATION_SELF": "一条关系需要两个不同的人物或势力。",
+    "CANON_STORY_RANGE_INVALID": "这段时间的结束必须晚于开始。",
     "CONFLICT_NOT_FOUND": "未找到冲突。",
     "ADJUDICATION_REASON_REQUIRED": "请填写误判依据。",
     "REVIEW_BASIS_STALE": "正文或设定已变化，请重新审校。",
@@ -519,6 +654,55 @@
     "WORK_UPDATED_ELSEWHERE": "作品已在其他窗口更新，未保存内容仍保留。",
     "SCENE_NEEDS_RELOCATION": "场景需要重新定位后才能生成。",
     "BACKUP_HISTORY_INVALID": "备份中的章节历史引用无效。",
-    "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。"
+    "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
+    "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
+    "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。",
+    "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。"
+  },
+  "brief": {
+    "intro": "帮你写这一章时我会记着的内容。不属于这一章的，可以取消勾选。",
+    "goal": "这一章要做到",
+    "noGoal": "还没有目标。可以在“场景”里或章节规划中添加。",
+    "sections": {
+      "people": "在场人物",
+      "places": "地点",
+      "relations": "他们之间",
+      "rules": "起作用的规则",
+      "threads": "要推进的线索",
+      "others": "也会交给助手的（{{count}}）"
+    },
+    "reasons": {
+      "named": "本章提到",
+      "event": "参与本章的事件",
+      "between": "两人都在场",
+      "always": "故事的规则",
+      "happens": "发生在本章",
+      "open": "之前埋下，尚未回收",
+      "payoff": "计划在本章回收",
+      "elsewhere": "故事中的其他内容"
+    },
+    "kept": "始终保留",
+    "noCard": "人物卡还没有内容",
+    "empty": "本章还没有提到人物页里的任何人或东西。",
+    "openCast": "打开人物页",
+    "othersHint": "本章没有提到的卡片。助手仍会看到它们；不需要的可以取消勾选。"
+  },
+  "extract": {
+    "intro": "已经写了一部分？我可以读一遍正文，列出其中的人物、关系和事件，供你挑选保留。",
+    "start": "从正文中找出人物和事件",
+    "starting": "正在开始…",
+    "reading": "正在读第 {{done}} 章，共 {{total}} 章…",
+    "title": "在正文中找到的",
+    "summary": "读了 {{total}} 个有正文的章节中的 {{read}} 个。",
+    "shortened_other": "有 {{count}} 个较长的章节只读了一部分。",
+    "characters": "人物页里还没有的人物（{{count}}）",
+    "noneNew": "没有新人物：提到的人都已在人物页中。",
+    "relations": "人物关系（{{count}}）",
+    "needsBoth": "需要两个人都在：先在上面勾选他们，或先把他们加入人物页。",
+    "events": "事件（{{count}}）",
+    "add": "加入勾选的内容",
+    "unchanged": "你确认前不会加入任何内容。之后也可以在人物页修改或删除。",
+    "added": "已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。",
+    "partly": "目前已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。"
   }
 }

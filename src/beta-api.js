@@ -1,19 +1,23 @@
 "use strict";
 const { createId, nowIso, normalizeStoryLanguage, STORY_FOCUSES } = require("./domain");
 const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = require("./studio");
-const { upgradeWorkspace, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
+const { upgradeWork, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
-function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
+const { chapterDerivedFactIds } = require("./canon-model");
+const { buildSceneBrief, normalizeExcluded } = require("./scene-brief");
+function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated, readBody, sendJson, analyze, canAccept, hash, normalizeMemory, selectContext }) {
   const result = (res, value, status = 200) => { sendJson(res, status, value); return true; };
   return async function handle(req, res, url) {
     const p = url.pathname.split("/").filter(Boolean);
     if (p[0] !== "api") return false;
     if (p[1] === "tasks") {
-      await readDb();
+      await ensureMigrated();
       if (req.method === "POST" && p.length === 2) {
-        const body = await readBody(req); const db = await store.read();
-        const work = db.works.find(w => w.id === body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
+        const body = await readBody(req);
+        const work = await store.getWork(body.workId), chapter = work?.chapters.find(c => c.id === body.chapterId);
         if (!chapter) fail("CHAPTER_NOT_FOUND"); ensureVersion(chapter.revision, body.baseRevision);
+        // Writing a scene needs the writer's own account of it.
+        if (body.mode === "scene" && !String(body.instruction || "").trim()) fail("PLAIN_ACCOUNT_REQUIRED");
         return result(res, { task: await tasks.create(body) }, 202);
       }
       if (req.method === "POST" && p[3] === "cancel") return result(res, { task: await tasks.cancel(p[2]) });
@@ -32,22 +36,21 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
       if (req.method === "GET") return result(res, p[2] ? { task: await tasks.get(p[2]) } : { tasks: await tasks.list(url.searchParams.get("workId")) });
     }
     if (p[1] === "usage" && req.method === "GET") {
-      const db = await readDb(); const entries = db.usage.filter(u => !url.searchParams.get("workId") || u.workId === url.searchParams.get("workId"));
-      return result(res, { entries, dailyTokenLimit: db.settings.dailyTokenLimit, totalTokens: entries.reduce((n, u) => n + (u.totalTokens || 0), 0), unknownCalls: entries.filter(u => u.totalTokens === undefined).length });
+      await ensureMigrated(); const usage = await store.readRecords("usage"); const entries = usage.filter(u => !url.searchParams.get("workId") || u.workId === url.searchParams.get("workId"));
+      return result(res, { entries, dailyTokenLimit: (await store.readDocument("settings", "dailyTokenLimit")) ?? 200000, totalTokens: entries.reduce((n, u) => n + (u.totalTokens || 0), 0), unknownCalls: entries.filter(u => u.totalTokens === undefined).length });
     }
     if (p[1] === "imports" && req.method === "POST") {
-      const body = await readBody(req, 30 * 1024 * 1024); await readDb();
+      const body = await readBody(req, 30 * 1024 * 1024); await ensureMigrated();
       const { parseManuscript } = require("./manuscript-import");
       if (p.length === 2) {
         const parsed = await parseManuscript(body);
         const preview = { ...parsed, id: createId("import"), createdAt: nowIso() };
-        await store.transact(db => { db.imports.push(preview); });
+        await store.transactRecords("imports", imports => { imports.push(preview); });
         return result(res, { preview });
       }
       if (p[3] === "confirm") {
-        const saved = await store.transact(async db => {
-          const preview = db.imports.find(i => i.id === p[2]); if (!preview) fail("IMPORT_PREVIEW_NOT_FOUND");
-          if (preview.workId) return { work: db.works.find(w => w.id === preview.workId) };
+        const preview = (await store.readRecords("imports")).find(i => i.id === p[2]); if (!preview) fail("IMPORT_PREVIEW_NOT_FOUND");
+        if (preview.workId) return result(res, { work: await store.getWork(preview.workId) }, 201);
           const chapters = body.chapters || preview.chapters.map((chapter, sourceIndex) => ({ ...chapter, sourceIndex }));
           if (!Array.isArray(chapters) || !chapters.length || chapters.length > 10000) fail("IMPORT_CHAPTERS_INVALID");
           if (chapters.reduce((n, c) => n + String(c.content || "").length, 0) > 1000000) fail("IMPORT_TEXT_TOO_LARGE");
@@ -56,21 +59,30 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
           // the writer chose, and open in Write (they already have text).
           const language = normalizeStoryLanguage(body.language);
           const english = language === "en";
-          const work = { id: createId("work"), ownerId: req.user?.id || "local", language, focus: STORY_FOCUSES.includes(body.focus) ? body.focus : "write", title: String(body.title || preview.title || (english ? "Imported story" : "导入作品")).slice(0, 100), genre: english ? "" : "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
+          const work = { id: createId("work"), ownerId: req.user?.id || "local", language, focus: STORY_FOCUSES.includes(body.focus) ? body.focus : "write", title: String(body.title || preview.title || (english ? "Imported story" : "导入作品")).slice(0, 100), genre: english ? "" : "原创", premise: "", createdAt: timestamp, updatedAt: timestamp, storyBible: {}, canon: { entities: [], relations: [], events: [], threads: [], setups: [], facts: [] }, generationRecords: [], canonProposals: [], chapters: chapters.map(c => {
             // Only reuse the server-parsed Delta. Titles are editable and not unique;
             // neither a title lookup nor a client-supplied Delta establishes provenance.
             const original = Number.isInteger(c.sourceIndex) ? preview.chapters[c.sourceIndex] : null;
             const delta = original?.richContent && c.content === original.content ? normalizeRichContent(original.richContent) : plainTextToRichContent(String(c.content || ""));
             return { id: createId("chapter"), title: String(c.title || (english ? "Untitled chapter" : "未命名章节")).slice(0, 100), richContent: delta, content: richContentToMarkdown(delta), createdAt: timestamp, updatedAt: timestamp, status: "draft" };
           }) };
-          db.works.push(work); upgradeWorkspace(db);
-          for (const chapter of work.chapters) await service.snapshot(work, chapter, "import");
-          preview.workId = work.id; return { work };
-        }); return result(res, saved, 201);
+          // The preview is claimed first, so confirming twice cannot create two stories.
+          const claim = () => store.transactRecords("imports", imports => { const current = imports.find(i => i.id === p[2]); if (!current) fail("IMPORT_PREVIEW_NOT_FOUND"); current.workId ||= work.id; return current.workId; });
+          const claimedBy = await claim();
+          if (claimedBy !== work.id) return result(res, { work: await store.getWork(claimedBy) }, 201);
+          try {
+            upgradeWork(work);
+            for (const chapter of work.chapters) await service.snapshot(work, chapter, "import");
+            const [stored] = await store.saveWorks({ upserts: [{ work, expectedVersion: null }] });
+            return result(res, { work: stored }, 201);
+          } catch (error) {
+            await store.transactRecords("imports", imports => { const current = imports.find(i => i.id === p[2]); if (current?.workId === work.id) current.workId = ""; });
+            throw error;
+          }
       }
     }
     if (p[1] !== "works" || !p[2]) return false;
-    const db = await readDb(), work = db.works.find(w => w.id === p[2]);
+    const work = await readWork(p[2]);
     if (!work) return false;
     if (p[3] === "export" && req.method === "GET" && url.searchParams.get("format") === "docx") {
       const { createDocx } = require("./manuscript-import"); const buffer = await createDocx(work);
@@ -93,6 +105,9 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
           if (body.chapterIds.length !== w.chapters.length || new Set(body.chapterIds).size !== w.chapters.length || body.chapterIds.some(id => !w.chapters.some(c => c.id === id))) fail("CHAPTER_ORDER_INVALID");
           w.chapters = body.chapterIds.map(id => w.chapters.find(c => c.id === id));
           for (const c of w.chapters) invalidateDependencies(w, { chapterId: c.id, reason: "章节顺序变化" });
+          // Events and setups become known in the chapter that tells them, so
+          // a new chapter order changes what their derived facts say.
+          invalidateDependencies(w, { factIds: chapterDerivedFactIds(w.canon, w.chapters.map(c => c.id)), reason: "章节顺序变化" });
         }
       }));
     }
@@ -120,6 +135,8 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
     }
     if (p[3] !== "chapters" || !p[4]) return false;
     const chapter = work.chapters.find(c => c.id === p[4]); if (!chapter) return false;
+    // The scene brief: what the assistant keeps in mind for this chapter.
+    if (p[5] === "brief" && p.length === 6 && req.method === "GET") return result(res, { brief: buildSceneBrief(work, chapter.id) });
     if (p[5] === "revisions") {
       if (req.method === "GET") return result(res, p[6] ? { chapter: await service.readSnapshot(work, chapter, p[6]) } : { revisions: chapter.revisions });
       const body = await readBody(req);
@@ -187,12 +204,14 @@ function createBetaApi({ store, service, tasks, readDb, readBody, sendJson, anal
         }
         for (const key of ["title", "notes", "status"]) if (body[key] !== undefined) c[key] = String(body[key]).slice(0, key === "notes" ? 10000 : 150);
         if (body.planning) c.planning = body.planning;
+        // Brief items the writer unticked; the writing context leaves those facts out.
+        if (body.briefExcluded !== undefined) c.briefExcluded = normalizeExcluded(body.briefExcluded);
       }));
     }
     if (p.length === 5 && req.method === "DELETE") {
       const body = await readBody(req);
       return result(res, await service.mutate(work.id, chapter.id, body.baseRevision, async (w, c) => {
-        await service.snapshot(w, c, "delete"); invalidateDependencies(w, { chapterId: c.id, reason: "章节删除" });
+        await service.snapshot(w, c, "delete"); invalidateDependencies(w, { chapterId: c.id, factIds: chapterDerivedFactIds(w.canon, [c.id]), reason: "章节删除" });
         c.deletedAt = nowIso(); w.deletedChapters.push(c); w.chapters = w.chapters.filter(x => x.id !== c.id);
       }));
     }

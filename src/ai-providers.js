@@ -246,6 +246,12 @@ function normalizeTemperature(value) {
 
 function applyDeepSeekThinking(body) {
   if (body.model !== "deepseek-flash") return body;
+  // Thinking mode refuses a forced tool call (DeepSeek Chat Completions docs:
+  // "required" and named tool choices return 400 unless thinking is
+  // disabled). Structured answers (drafts, lists) force a tool, so they run
+  // without thinking.
+  const forcesTool = body.tool_choice === "required" || (body.tool_choice && typeof body.tool_choice === "object");
+  if (forcesTool) return { ...body, thinking: { type: "disabled" } };
   const result = { ...body, thinking: { type: "enabled" }, reasoning_effort: "high" };
   // Thinking and final text share the output budget.
   result.max_tokens = Math.max(8192, Number(body.max_tokens) || 0);

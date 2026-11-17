@@ -242,6 +242,7 @@ test("a suggestion that contradicts the story cannot be added", async ({ page, r
       }
     } } }) });
   });
+  await page.getByTestId("assist-mode").selectOption("continue");
   await page.getByTestId("assist-generate").click();
   const result = page.getByTestId("assist-result");
   await expect(result).toHaveAttribute("data-can-accept", "false");
@@ -385,4 +386,98 @@ test("trashing another chapter keeps the open one, and a stale reorder is refuse
   await firstItem.hover();
   await firstItem.getByTestId("chapter-up").click();
   await expect(page.getByTestId("chapter-item").first()).toHaveAttribute("data-chapter-id", chapters[0].id);
+});
+
+test("told plainly, a scene is written at the cursor, with the writer's words beside it", async ({ page, request }) => {
+  const workId = await newStory(request);
+  await page.goto(`/app/works/${workId}/write`);
+  await editor(page).click();
+  await page.keyboard.type("Mira waited at the ferry.");
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 5000 });
+
+  // Telling a scene is where the assistant starts; it needs the writer's account.
+  await expect(page.getByTestId("assist-mode")).toHaveValue("scene");
+  await expect(page.getByTestId("assist-generate")).toBeDisabled();
+  const account = "Kael catches up with her at the ferry. He has the warrant but he lets her go.";
+  await page.getByTestId("assist-instruction").fill(account);
+  let started;
+  page.on("request", (req) => { if (req.url().endsWith("/api/tasks") && req.method() === "POST") started = req.postDataJSON(); });
+  await page.getByTestId("assist-generate").click();
+
+  const result = page.getByTestId("assist-result");
+  await expect(result).toBeVisible({ timeout: 15000 });
+  expect(started).toMatchObject({ workId, mode: "scene", instruction: account, selectedText: "" });
+  expect(started.range.length).toBe(0);
+  await expect(page.getByTestId("assist-account")).toContainText(account);
+  await expect(page.getByTestId("assist-faithful")).toBeVisible();
+  const scene = (await page.getByTestId("assist-hunk-after").allInnerTexts()).join("\n");
+  expect(scene).toContain("Kael catches up with her at the ferry.");
+  expect(scene).toContain("He has the warrant but he lets her go.");
+  // Nothing changes until the writer adds it.
+  await expect(editor(page)).toHaveText("Mira waited at the ferry.");
+
+  await page.getByTestId("assist-accept").click();
+  await expect(page.getByTestId("assist-notice")).toBeVisible();
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].content).toContain("Kael catches up with her at the ferry.");
+  const content = (await storedWork(request, workId)).chapters[0].content;
+  expect(content.indexOf("Mira waited at the ferry.")).toBeLessThan(content.indexOf("Kael catches up"));
+});
+
+test("a scene cannot be asked for without saying what happens", async ({ request }) => {
+  const workId = await newStory(request);
+  const work = await storedWork(request, workId);
+  const chapter = work.chapters[0];
+  const refused = await request.post("/api/tasks", { data: { requestId: `scene-empty-${workId}`, workId, chapterId: chapter.id, baseRevision: chapter.revision, mode: "scene", instruction: "   ", range: { index: 0, length: 0 } } });
+  expect(refused.status()).toBe(400);
+  expect((await refused.json()).error.code).toBe("PLAIN_ACCOUNT_REQUIRED");
+});
+
+test("the brief shows who and what this chapter touches, and an unticked card stays unticked", async ({ page, request }) => {
+  const workId = await newStory(request);
+  const card = async (data) => (await (await request.post(`/api/works/${workId}/canon/entities`, { data })).json()).item;
+  await card({ type: "character", name: "Mira", summary: "A mapmaker on the run" });
+  const kael = await card({ type: "character", name: "Kael", summary: "A warden" });
+  await card({ type: "character", name: "Voss", summary: "Not in this chapter" });
+  const rule = await card({ type: "rule", name: "Self-drawn maps", summary: "A map drawn for oneself misleads its maker" });
+  const work = await storedWork(request, workId);
+  const chapter = work.chapters[0];
+  expect((await request.patch(`/api/works/${workId}/chapters/${chapter.id}`, { data: { baseRevision: chapter.revision, content: "Mira waited at the ferry until Kael came." } })).ok()).toBeTruthy();
+
+  await page.goto(`/app/works/${workId}/write`);
+  await page.getByTestId("tab-brief").click();
+  const brief = page.getByTestId("brief");
+  await expect(page.getByTestId("brief-people").getByTestId("brief-item")).toHaveCount(2);
+  await expect(page.getByTestId("brief-people")).toContainText("Mira");
+  await expect(page.getByTestId("brief-people")).not.toContainText("Voss");
+  // Rules always apply: shown, but not something to untick.
+  const ruleItem = page.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${rule.id}"]`);
+  await expect(ruleItem).toBeVisible();
+  await expect(ruleItem.getByTestId("brief-toggle")).toHaveCount(0);
+
+  const kaelItem = page.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${kael.id}"]`);
+  await kaelItem.getByTestId("brief-toggle").uncheck();
+  await expect(kaelItem).toHaveAttribute("data-state", "off");
+  await expect(brief).toHaveAttribute("data-excluded", "1");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([`derived:entity:${kael.id}`]);
+
+  await page.reload();
+  await page.getByTestId("tab-brief").click();
+  await expect(kaelItem).toHaveAttribute("data-state", "off");
+  await kaelItem.getByTestId("brief-toggle").check();
+  await expect(kaelItem).toHaveAttribute("data-state", "on");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([]);
+});
+
+test("cards not named in the chapter are listed in the brief too, and can be left out", async ({ page, request }) => {
+  const workId = await newStory(request);
+  const voss = (await (await request.post(`/api/works/${workId}/canon/entities`, { data: { type: "character", name: "Voss", summary: "Governor of the March" } })).json()).item;
+  await page.goto(`/app/works/${workId}/write`);
+  await page.getByTestId("tab-brief").click();
+  const others = page.getByTestId("brief-others");
+  await expect(others).toBeVisible();
+  await others.locator("summary").click();
+  const item = others.locator(`[data-testid="brief-item"][data-fact-id="derived:entity:${voss.id}"]`);
+  await item.getByTestId("brief-toggle").uncheck();
+  await expect(item).toHaveAttribute("data-state", "off");
+  await expect.poll(async () => (await storedWork(request, workId)).chapters[0].briefExcluded).toEqual([`derived:entity:${voss.id}`]);
 });

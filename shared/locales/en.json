@@ -65,6 +65,119 @@
     "comingTitle": "{{section}} is being rebuilt",
     "comingBody": "This page arrives in a later step of the redesign. Until then, everything still works in the current workspace."
   },
+  "cast": {
+    "part": "Part II",
+    "subtitle": "Who they are, and what lies between them.",
+    "listLabel": "Characters",
+    "empty": "No characters yet. Start with whoever you already see most clearly.",
+    "noSummary": "No description yet",
+    "new": "New character",
+    "newTitle": "A new character",
+    "editTitle": "Character",
+    "name": "Name",
+    "summary": "Who they are, in a sentence",
+    "summaryHint": "A mapmaker on the run from the people who trained her",
+    "more": "More about them",
+    "aliases": "Also called",
+    "aliasesHint": "Other names, separated by commas",
+    "notes": "Your notes",
+    "notesHint": "Anything else. Only you see this; the assistant does not use it.",
+    "fields": {
+      "want": {
+        "label": "What do they want?",
+        "short": "Wants",
+        "hint": "What they are after, in their own eyes"
+      },
+      "obstacle": {
+        "label": "What stands in their way, or what do they fear?",
+        "short": "In the way",
+        "hint": "A person, a flaw, a fear, a rule of the world"
+      },
+      "change": {
+        "label": "How are they different by the end?",
+        "short": "Becomes",
+        "hint": "It is fine not to know yet"
+      },
+      "appearance": {
+        "label": "How they look",
+        "hint": "What a stranger would notice first"
+      },
+      "voice": {
+        "label": "How they speak",
+        "hint": "Short sentences? Old-fashioned words? Used when writing their lines."
+      },
+      "secret": {
+        "label": "A secret",
+        "hint": "What they hide, and from whom"
+      },
+      "background": {
+        "label": "Where they come from",
+        "hint": "The past that still matters in the story"
+      }
+    },
+    "loadSaved": "Load the saved version",
+    "delete": "Delete character",
+    "deleteConfirm": "Delete {{name}}? Their relationships are deleted too. This cannot be undone.",
+    "earlierNotes": "Earlier notes about characters",
+    "earlierNotesHint": "Written in Ideate or the previous workspace. Kept as they are; turn them into cards when you are ready.",
+    "views": {
+      "label": "View",
+      "portraits": "Portraits",
+      "relations": "Relations"
+    },
+    "map": {
+      "label": "Relations map",
+      "figure": "Fig. 1",
+      "hint": "Draw from one portrait to another to join them. Choose a line's words to change it.",
+      "needsTwo": "Add a second character to draw what lies between them.",
+      "nodeLabel": "{{name}}. Choose to see their card; drag to another portrait to join them."
+    },
+    "panel": {
+      "label": "Selected character",
+      "want": "Wants",
+      "obstacle": "What stands in the way",
+      "change": "By the end",
+      "unset": "Not decided yet",
+      "edit": "Edit"
+    },
+    "relation": {
+      "heading": "Relationships",
+      "none": "No relationships yet.",
+      "linkTo": "Join {{name}} to…",
+      "add": "Add relationship",
+      "newTitle": "A new relationship",
+      "editTitle": "Relationship",
+      "swap": "Swap direction",
+      "mentorReads": "Read as: {{from}} is {{to}}'s mentor.",
+      "kind": "What are they to each other?",
+      "kinds": {
+        "family": "Family",
+        "friend": "Friends",
+        "lover": "Lovers",
+        "mentor": "Mentor",
+        "rival": "Rivals",
+        "enemy": "Enemies",
+        "ally": "Allies",
+        "custom": "Something else"
+      },
+      "label": "In a few words (optional)",
+      "labelHint": "old friends, now hunter and quarry",
+      "tension": "What is the tension between them?",
+      "tensionHint": "He owes her his life, and the warrant has her name on it",
+      "delete": "Delete relationship",
+      "deleteConfirm": "Delete the relationship between {{from}} and {{to}}? This cannot be undone.",
+      "lineLabel": "{{from}} and {{to}}: {{kind}}. Open this relationship."
+    },
+    "draftTitle": "A draft character",
+    "draftNote": "Sketched from your words. Nothing is saved until you save it; change anything first.",
+    "sketch": {
+      "label": "Describe someone new in a sentence",
+      "placeholder": "A ferryman who has never crossed the river himself",
+      "submit": "Sketch this character",
+      "busy": "Sketching…",
+      "waiting": "Sketching a card from your sentence. It opens for you to check."
+    }
+  },
   "ideate": {
     "part": "Part I",
     "subtitle": "Talk it through. I ask; you answer in your own words.",
@@ -94,7 +207,14 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "deleteConfirm": "Delete this conversation? This cannot be undone."
+    "deleteConfirm": "Delete this conversation? This cannot be undone.",
+    "capture": {
+      "add": "+ Add “{{name}}” to Cast",
+      "sketching": "Sketching…",
+      "added": "Now in Cast: {{names}}.",
+      "separator": ", ",
+      "openCast": "Open Cast"
+    }
   },
   "draft": {
     "heading": "A draft: {{type}}",
@@ -163,6 +283,7 @@
     "exitFocus": "Leave focus"
   },
   "companion": {
+    "brief": "Brief",
     "assist": "Assistant",
     "checks": "Checks",
     "scenes": "Scenes",
@@ -171,6 +292,7 @@
   "assist": {
     "what": "What should I do?",
     "modes": {
+      "scene": "Write a scene from my account",
       "continue": "Continue the chapter",
       "expand": "Expand the selection",
       "shorten": "Tighten the selection",
@@ -178,6 +300,7 @@
       "custom": "Follow my instruction"
     },
     "hints": {
+      "scene": "Tell what happens, plainly. I write it as a scene at the cursor, without changing what happens.",
       "continue": "Adds new text at the end of this chapter.",
       "expand": "Select a passage first. I add detail without changing what happens.",
       "shorten": "Select a passage first. I keep what matters and cut the rest.",
@@ -216,7 +339,13 @@
     "blocked": "Fix the contradiction first",
     "accepted": "Added to the chapter. The earlier text is kept in the chapter's history.",
     "unchanged": "Your text changes only when you add this.",
-    "noChange": "The suggestion is the same as your text, so there is nothing to change."
+    "noChange": "The suggestion is the same as your text, so there is nothing to change.",
+    "instructionLabel": "Anything to keep in mind (optional)",
+    "scenePlaceholder": "Kael catches up with her at the ferry. They argue. He has the warrant but he can't do it. He lets her go and tells her not to come back.",
+    "generateScene": "Write it as a scene",
+    "yourAccount": "What you told me",
+    "sceneResult": "The scene",
+    "sceneFaithful": "The events stay as you told them. Only the telling changes."
   },
   "checks": {
     "intro": "I read the chapter, compare it with what the story has established, and list new facts for you to confirm.",
@@ -453,6 +582,12 @@
     "CANON_FACT_ID_CONFLICT": "A new fact is missing a unique ID, or the ID already exists.",
     "CANON_FACT_NOT_ACTIVE": "The fact to change does not exist or is no longer active.",
     "FACT_FIELDS_REQUIRED": "Enter a name and content for the fact.",
+    "CANON_ITEM_NOT_FOUND": "This card, link or event no longer exists.",
+    "CANON_NAME_REQUIRED": "Give it a name or a short description first.",
+    "CANON_ENTITY_TYPE_UNSUPPORTED": "A card must be a character, place, faction, thing or rule, and its kind cannot be changed afterwards.",
+    "CANON_REFERENCE_NOT_FOUND": "Something this refers to no longer exists ({{field}}).",
+    "CANON_RELATION_SELF": "A relationship needs two different people or groups.",
+    "CANON_STORY_RANGE_INVALID": "The end of this period must come after its start.",
     "CONFLICT_NOT_FOUND": "Conflict not found.",
     "ADJUDICATION_REASON_REQUIRED": "Give a reason for marking this as a false alarm.",
     "REVIEW_BASIS_STALE": "The text or canon has changed. Review again.",
@@ -530,6 +665,56 @@
     "WORK_UPDATED_ELSEWHERE": "This story was updated in another window. Your unsaved content is kept.",
     "SCENE_NEEDS_RELOCATION": "This scene has to be placed in the text again before generating.",
     "BACKUP_HISTORY_INVALID": "A chapter history reference in the backup is not valid.",
-    "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel."
+    "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
+    "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
+    "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
+    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read."
+  },
+  "brief": {
+    "intro": "What I keep in mind while helping with this chapter. Untick anything that does not belong here.",
+    "goal": "This chapter should",
+    "noGoal": "No goal yet. Add one in Scenes, or in the chapter plan.",
+    "sections": {
+      "people": "Who is here",
+      "places": "Where",
+      "relations": "Between them",
+      "rules": "Rules in play",
+      "threads": "Threads to move along",
+      "others": "Also given to the assistant ({{count}})"
+    },
+    "reasons": {
+      "named": "named in this chapter",
+      "event": "takes part in an event here",
+      "between": "both are here",
+      "always": "a rule of the story",
+      "happens": "happens in this chapter",
+      "open": "planted earlier, not paid off yet",
+      "payoff": "to be paid off here",
+      "elsewhere": "elsewhere in the story"
+    },
+    "kept": "always kept",
+    "noCard": "no card details yet",
+    "empty": "Nobody and nothing from Cast is named in this chapter yet.",
+    "openCast": "Open Cast",
+    "othersHint": "Cards not named in this chapter. The assistant still sees them; untick what it does not need here."
+  },
+  "extract": {
+    "intro": "Already written some of the story? I can read it and list the people, relationships and events for you to keep.",
+    "start": "Find people and events in the manuscript",
+    "starting": "Starting…",
+    "reading": "Reading chapter {{done}} of {{total}}…",
+    "title": "Found in your manuscript",
+    "summary": "Read {{read}} of {{total}} chapters with text.",
+    "shortened_one": "{{count}} long chapter was read only in part.",
+    "shortened_other": "{{count}} long chapters were read only in part.",
+    "characters": "People not in Cast yet ({{count}})",
+    "noneNew": "Nobody new: everyone named is already in Cast.",
+    "relations": "Relationships ({{count}})",
+    "needsBoth": "Needs both people: tick them above, or add them to Cast first.",
+    "events": "Events ({{count}})",
+    "add": "Add the ticked ones",
+    "unchanged": "Nothing is added until you choose. You can change or delete anything later in Cast.",
+    "added": "Added {{characters}} people, {{relations}} relationships and {{events}} events.",
+    "partly": "So far, {{characters}} people, {{relations}} relationships and {{events}} events were added."
   }
 }
