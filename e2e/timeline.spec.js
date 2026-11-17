@@ -168,3 +168,43 @@ test("the chart shows who takes part in what, by person or by plot line, in the 
   expect(canon.threads.map((thread) => thread.name)).toEqual(["Finding the sister"]);
   expect(canon.events.find((item) => item.id === vanish.id).threadIds).toEqual([canon.threads[0].id]);
 });
+
+test("a setup is planted, waits as a reminder, shows on the chart, and is paid off", async ({ page, request }) => {
+  const work = await story(request);
+  const [one, two] = work.chapters;
+  await event(request, work.id, { title: "The map arrives", chapterId: one.id });
+  const meeting = await event(request, work.id, { title: "The mapmaker is found", chapterId: two.id });
+  await page.goto(`/app/works/${work.id}/timeline`);
+  await expect(page.getByTestId("timeline-event")).toHaveCount(2);
+
+  await page.getByTestId("setup-new").click();
+  await expect(page.getByTestId("setup-dialog")).toBeVisible();
+  await page.getByTestId("setup-description").fill("The mark in the corner of the map");
+  await page.getByTestId("setup-planted").selectOption(`chapter:${one.id}`);
+  await page.getByTestId("setup-save").click();
+  await expect(page.getByTestId("setup-dialog")).toBeHidden();
+
+  // Waiting: a reminder, and a line on the chart from chapter 1 to the end.
+  const waiting = page.getByTestId("setups-waiting").getByTestId("setup-item");
+  await expect(waiting).toHaveCount(1);
+  await expect(waiting).toContainText("The mark in the corner of the map");
+  const line = page.getByTestId("chart-setup");
+  await expect(line).toHaveAttribute("data-status", "open");
+  await expect(line.locator("td").nth(0)).toHaveAttribute("data-mark", "planted");
+  await expect(line.locator("td").nth(1)).toHaveAttribute("data-mark", "waiting");
+
+  // Paid off in the second event: it leaves the reminders.
+  await waiting.click();
+  await page.getByTestId("setup-payoff").selectOption(`event:${meeting.id}`);
+  await page.getByTestId("setup-status-paid").click();
+  await page.getByTestId("setup-save").click();
+  await expect(page.getByTestId("setups-waiting")).toHaveCount(0);
+  await expect(page.getByTestId("setups-settled").getByTestId("setup-item")).toHaveAttribute("data-status", "paid");
+  await expect(line).toHaveAttribute("data-status", "paid");
+  await expect(line.locator("td").nth(1)).toHaveAttribute("data-mark", "paid");
+
+  const { canon } = await (await request.get(`/api/works/${work.id}/canon`)).json();
+  expect(canon.setups.map((item) => [item.description, item.plantedIn, item.paidOffIn, item.status])).toEqual([
+    ["The mark in the corner of the map", { kind: "chapter", id: one.id }, { kind: "event", id: meeting.id }, "paid"]
+  ]);
+});

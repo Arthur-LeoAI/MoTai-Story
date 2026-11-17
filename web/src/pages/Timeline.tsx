@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText, type WorkSummary } from "../api";
-import { castApi, type Entity, type EventDraft, type StoryEvent, type Thread } from "../castApi";
+import { castApi, type Entity, type EventDraft, type Setup, type StoryEvent, type Thread } from "../castApi";
 import { writeApi } from "../writeApi";
 import { numeral } from "../sections";
 import { TimelineChart, type ChartColumn } from "../components/TimelineChart";
+import { SetupsPanel } from "../components/Setups";
 
 // Timeline (plan 5.7, mockup Timeline.dc.html): what happens, to whom, and in
 // what order the reader learns it. Two orders of the same events: as it
@@ -17,7 +18,7 @@ const ORDER_KEY = "novel-studio:timeline-order";
 type ChapterRef = { id: string; title: string };
 type Loaded =
   | { state: "loading" }
-  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; threads: Thread[]; chapters: ChapterRef[]; canonRevision: number }
+  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; threads: Thread[]; setups: Setup[]; chapters: ChapterRef[]; canonRevision: number }
   | { state: "failed"; message: string };
 type Editing = { mode: "new" } | { mode: "edit"; event: StoryEvent } | null;
 
@@ -291,6 +292,7 @@ export default function Timeline({ work }: { work: WorkSummary }) {
       events: canon.events ?? [],
       entities: canon.entities,
       threads: canon.threads ?? [],
+      setups: canon.setups ?? [],
       chapters: full.chapters.map((chapter) => ({ id: chapter.id, title: chapter.title })),
       canonRevision: canon.canonRevision
     };
@@ -444,9 +446,19 @@ export default function Timeline({ work }: { work: WorkSummary }) {
           columns={columns}
           entities={ready.entities}
           threads={ready.threads}
+          setups={ready.setups}
           language={work.language}
           orderLabel={t(`timeline.chart.orders.${order}`)}
           onOpen={(event) => setEditing({ mode: "edit", event })}
+        />
+        <SetupsPanel
+          workId={work.id}
+          language={work.language}
+          setups={ready.setups}
+          chapters={ready.chapters}
+          events={ready.events}
+          onChanged={() => void load()}
+          onReload={async () => (await load()).setups}
         />
         </div>
       ) : null}

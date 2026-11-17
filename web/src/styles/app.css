@@ -1586,6 +1586,80 @@ button.story-chip:hover {
   z-index: 1;
 }
 
+/* Timeline: setups and payoffs */
+.tl-setup-name {
+  font-weight: normal;
+  font-style: italic;
+  color: var(--color-accent);
+}
+.tl-setup-name:lang(zh) {
+  font-style: normal;
+}
+.tl-setup-cell.in::before,
+.tl-setup-cell.out::after {
+  border-top: 2px dashed var(--color-accent);
+}
+.tl-diamond {
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  transform: rotate(45deg);
+  background: var(--color-accent);
+  z-index: 1;
+}
+.tl-diamond.waiting {
+  background: var(--color-surface);
+  border: 2px solid var(--color-accent);
+}
+.setups {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.setups-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.setups-reminder {
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-accent-soft);
+}
+.setups-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.setup-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.setup-where {
+  font-size: var(--text-sm);
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

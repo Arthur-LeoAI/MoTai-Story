@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Entity, StoryEvent, Thread } from "../castApi";
+import type { Entity, Setup, SetupAnchor, StoryEvent, Thread } from "../castApi";
 import { numeral } from "../sections";
 
 // The chart of persons and events (plan 5.7 "swimlanes", mockup Fig. 2): one
@@ -34,10 +34,27 @@ interface Row {
   hits: boolean[];
 }
 
-export function TimelineChart({ columns, entities, threads, language, orderLabel, onOpen }: {
+// Where a setup sits on the chart: its event's column, or the first column
+// told in its chapter. -1 when there is no such column.
+function columnOf(columns: ChartColumn[], anchor: SetupAnchor | null): number {
+  if (!anchor) return -1;
+  return anchor.kind === "event"
+    ? columns.findIndex((column) => column.event.id === anchor.id)
+    : columns.findIndex((column) => column.event.chapterId === anchor.id);
+}
+
+interface SetupRow {
+  setup: Setup;
+  planted: number;
+  /** Paid off here, or planned to be; -1 if neither is on the chart. */
+  payoff: number;
+}
+
+export function TimelineChart({ columns, entities, threads, setups, language, orderLabel, onOpen }: {
   columns: ChartColumn[];
   entities: Entity[];
   threads: Thread[];
+  setups: Setup[];
   language: string;
   orderLabel: string;
   onOpen: (event: StoryEvent) => void;
@@ -68,6 +85,12 @@ export function TimelineChart({ columns, entities, threads, language, orderLabel
   const lanes: Row[] = sources[rows]
     .map((source) => ({ id: source.id, name: source.name, hits: columns.map((column) => takesPart[rows](column.event, source.id)) }))
     .filter((row) => row.hits.some(Boolean));
+  // Setup lines run under every kind of row (mockup Fig. 2).
+  const planted = setups.filter((setup) => setup.plantedIn && setup.status !== "dropped");
+  const setupRows: SetupRow[] = planted
+    .map((setup) => ({ setup, planted: columnOf(columns, setup.plantedIn), payoff: columnOf(columns, setup.paidOffIn) }))
+    .filter((row) => row.planted >= 0);
+  const offChart = planted.length - setupRows.length;
 
   return (
     <section className="card tl-chart-card" aria-label={t("timeline.chart.label")} data-testid="timeline-chart" data-rows={rows}>
@@ -85,9 +108,9 @@ export function TimelineChart({ columns, entities, threads, language, orderLabel
         </div>
       </div>
 
-      {columns.length === 0 || lanes.length === 0 ? (
-        <p className="muted tl-chart-empty" data-testid="chart-empty">{columns.length === 0 ? t("timeline.chart.noEvents") : t(`timeline.chart.empty.${rows}`)}</p>
-      ) : (
+      {columns.length && lanes.length === 0 ? <p className="muted tl-chart-empty" data-testid="chart-empty">{t(`timeline.chart.empty.${rows}`)}</p> : null}
+      {columns.length === 0 ? <p className="muted tl-chart-empty" data-testid="chart-empty">{t("timeline.chart.noEvents")}</p> : null}
+      {columns.length === 0 || (lanes.length === 0 && setupRows.length === 0) ? null : (
         <div className="tl-chart-scroll">
           <table className="tl-chart" style={{ minWidth: 140 + columns.length * 96 }}>
             <thead>
@@ -130,10 +153,38 @@ export function TimelineChart({ columns, entities, threads, language, orderLabel
                   </tr>
                 );
               })}
+              {setupRows.map(({ setup, planted: start, payoff }) => {
+                const paid = setup.status === "paid" && payoff >= 0;
+                // The line runs to the payoff, or, while it waits, to the end of the chart.
+                const end = payoff > start ? payoff : columns.length - 1;
+                const waitingAt = setup.status === "open" ? (payoff > start ? payoff : columns.length - 1) : -1;
+                return (
+                  <tr key={setup.id} className="tl-setup-row" data-testid="chart-setup" data-setup-id={setup.id} data-status={setup.status}>
+                    <th scope="row" className="tl-row-name tl-setup-name" lang={language}>{setup.description}</th>
+                    {columns.map((column, index) => {
+                      const classes = ["tl-cell", "tl-setup-cell"];
+                      if (index > start && index <= end) classes.push("in");
+                      if (index >= start && index < end) classes.push("out");
+                      const mark = index === start ? "planted" : paid && index === payoff ? "paid" : index === waitingAt ? "waiting" : "";
+                      return (
+                        <td key={column.event.id} className={classes.join(" ")} data-mark={mark || undefined}>
+                          {mark ? (
+                            <>
+                              <span className={`tl-diamond ${mark}`} aria-hidden="true" />
+                              <span className="visually-hidden">{t(`timeline.chart.setup.${mark}`)}</span>
+                            </>
+                          ) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+      {offChart > 0 ? <p className="muted assist-hint" data-testid="chart-setups-off">{t("timeline.chart.setupsOff", { count: offChart })}</p> : null}
     </section>
   );
 }

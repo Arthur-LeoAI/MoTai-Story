@@ -772,7 +772,48 @@
         "people": "还没有事件标注了人物页里的人物。请在事件里选择参与的人。",
         "threads": "还没有事件归入情节线。可以在事件里添加。",
         "places": "还没有事件标注地点。地点将随“世界”页加入。"
-      }
+      },
+      "setup": {
+        "planted": "埋下",
+        "paid": "回收",
+        "waiting": "尚未回收"
+      },
+      "setupsOff_other": "有 {{count}} 个伏笔没有显示在图上：埋下它的那一章里，图上没有事件。"
     }
+  },
+  "setups": {
+    "label": "伏笔与回收",
+    "new": "新伏笔",
+    "newTitle": "新伏笔",
+    "editTitle": "伏笔",
+    "description": "埋下了什么",
+    "descriptionHint": "地图角落里的那个记号",
+    "plantedIn": "埋在",
+    "paidOffIn": "回收于",
+    "notPlanted": "还没埋下",
+    "noPayoff": "未定",
+    "statusLabel": "状态",
+    "status": {
+      "open": "等待回收",
+      "paid": "已回收",
+      "dropped": "已放弃"
+    },
+    "chapters": "章节",
+    "events": "事件",
+    "inChapter": "第 {{number}} 章（{{title}}）",
+    "chapterTitle": "{{title}}",
+    "inEvent": "“{{title}}”",
+    "missing": "已删除的内容",
+    "planted": "埋在{{where}}",
+    "notPlantedYet": "还没埋下",
+    "paidIn": "回收于{{where}}",
+    "plannedIn": "计划回收于{{where}}",
+    "waiting_other": "已埋下、尚未回收（{{count}}）",
+    "waitingHint": "读者会记得埋下的东西。请回收它，或者有意放弃。",
+    "unplanted": "还没埋下的想法",
+    "settled_other": "已回收或已放弃（{{count}}）",
+    "empty": "还没有伏笔。现在埋下一点以后会起作用的东西吧。",
+    "delete": "删除伏笔",
+    "deleteConfirm": "删除这个伏笔？此操作无法撤销。"
   }
 }

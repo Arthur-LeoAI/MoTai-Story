@@ -97,7 +97,33 @@ export interface Canon {
   relations: Relation[];
   events: StoryEvent[];
   threads: Thread[];
+  setups: Setup[];
   canonRevision: number;
+}
+
+/** Where a setup is planted or paid off: a chapter, or an event. */
+export interface SetupAnchor {
+  kind: "chapter" | "event";
+  id: string;
+}
+
+/** Foreshadowing: something planted early that should pay off later. */
+export interface Setup {
+  id: string;
+  description: string;
+  plantedIn: SetupAnchor | null;
+  paidOffIn: SetupAnchor | null;
+  status: "open" | "paid" | "dropped";
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SetupDraft {
+  description: string;
+  plantedIn: SetupAnchor | null;
+  paidOffIn: SetupAnchor | null;
+  status: Setup["status"];
 }
 
 /** The fields a writer edits on a card. Empty strings clear a field. */
@@ -146,6 +172,12 @@ export const castApi = {
     request<{ item: StoryEvent; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("PATCH", { ...draft, baseRevision: event.revision })),
   removeEvent: (workId: string, event: StoryEvent) =>
     request<{ removed: { id: string }; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("DELETE", { baseRevision: event.revision })),
+  createSetup: (workId: string, draft: SetupDraft) =>
+    request<{ item: Setup; canonRevision: number }>(`${base(workId)}/setups`, send("POST", draft)),
+  updateSetup: (workId: string, setup: Setup, draft: SetupDraft) =>
+    request<{ item: Setup; canonRevision: number }>(`${base(workId)}/setups/${encodeURIComponent(setup.id)}`, send("PATCH", { ...draft, baseRevision: setup.revision })),
+  removeSetup: (workId: string, setup: Setup) =>
+    request<{ removed: { id: string }; canonRevision: number }>(`${base(workId)}/setups/${encodeURIComponent(setup.id)}`, send("DELETE", { baseRevision: setup.revision })),
   createThread: (workId: string, name: string) =>
     request<{ item: Thread; canonRevision: number }>(`${base(workId)}/threads`, send("POST", { name })),
   /** A new story order for all events, against the canon revision it was read at. */

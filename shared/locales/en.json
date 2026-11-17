@@ -784,7 +784,51 @@
         "people": "No event names anyone from Cast yet. Choose who takes part in an event.",
         "threads": "No event belongs to a plot line yet. Add one in an event.",
         "places": "No event has a place yet. Places come with the World page."
-      }
+      },
+      "setup": {
+        "planted": "planted",
+        "paid": "paid off",
+        "waiting": "not yet paid off"
+      },
+      "setupsOff_one": "{{count}} setup is not on the chart: no event shown here is in the chapter where it is planted.",
+      "setupsOff_other": "{{count}} setups are not on the chart: no event shown here is in the chapter where they are planted."
     }
+  },
+  "setups": {
+    "label": "Setups and payoffs",
+    "new": "New setup",
+    "newTitle": "A new setup",
+    "editTitle": "Setup",
+    "description": "What is planted",
+    "descriptionHint": "The mark in the corner of the map",
+    "plantedIn": "Planted in",
+    "paidOffIn": "Paid off in",
+    "notPlanted": "Not planted yet",
+    "noPayoff": "Not decided",
+    "statusLabel": "State",
+    "status": {
+      "open": "Waiting to pay off",
+      "paid": "Paid off",
+      "dropped": "Dropped"
+    },
+    "chapters": "Chapters",
+    "events": "Events",
+    "inChapter": "Chapter {{number}} ({{title}})",
+    "chapterTitle": "{{title}}",
+    "inEvent": "“{{title}}”",
+    "missing": "something since deleted",
+    "planted": "Planted in {{where}}",
+    "notPlantedYet": "Not planted yet",
+    "paidIn": "paid off in {{where}}",
+    "plannedIn": "to pay off in {{where}}",
+    "waiting_one": "Planted, not yet paid off ({{count}})",
+    "waiting_other": "Planted, not yet paid off ({{count}})",
+    "waitingHint": "Readers remember what was planted. Pay it off, or drop it on purpose.",
+    "unplanted": "Ideas not planted yet",
+    "settled_one": "Paid off or dropped ({{count}})",
+    "settled_other": "Paid off or dropped ({{count}})",
+    "empty": "No setups yet. Plant something now that should matter later.",
+    "delete": "Delete setup",
+    "deleteConfirm": "Delete this setup? This cannot be undone."
   }
 }
