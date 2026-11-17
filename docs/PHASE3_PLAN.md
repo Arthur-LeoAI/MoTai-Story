@@ -4,7 +4,7 @@ Plan reference: `docs/SUMITALE_PLAN.md`, sections 5.7, 5.8 and 8 (phase 3). Mock
 
 Done when: a writer can tell part of the story as a flashback and see a reminder for a setup that has not been paid off.
 
-Branch: `feat/sumitale-phase-3`, started from `feat/sumitale-phase-2` while PR #3 (phase 2) is open; brought up to date with `main` once #3 is merged.
+Branch: `feat/sumitale-phase-3`, on top of `main` after PR #3 (phase 2) was merged on 2026-11-17.
 
 | Step | Contents | Status |
 |---|---|---|
