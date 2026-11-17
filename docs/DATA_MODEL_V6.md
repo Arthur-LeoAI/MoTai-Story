@@ -73,6 +73,15 @@ Known limit, unchanged from v5: `selectTemporalFacts` treats any fact without a 
 | `PUT /api/works/:workId/spine` | `{ lines, baseRevision }`: changes the sentences sent; `REVISION_CONFLICT` when the spine changed since it was read |
 | `POST /api/works/:workId/spine/suggestions` | `{ line, index? }`: three AI suggestions for one sentence, read from the saved spine, the cast and the events; nothing is saved |
 
+### Timeline checks (phase 3)
+
+Nothing is stored (`src/timeline-checks.js`).
+
+| Route | Does |
+|---|---|
+| `GET /api/works/:workId/timeline/checks` | `{ problems }`: contradictions in the objects and stored facts, each `{ id, kind, eventIds, setupId?, params }`; `kind` is `twoPlaces`, `afterDeath` or `payoffBeforePlant` |
+| `POST /api/works/:workId/timeline/missing` | `{ gaps }`: up to five AI-found breaks in cause and effect, each `{ afterEventId, missing }`; `TIMELINE_TOO_SHORT` with fewer than two events |
+
 ## Not done in this step
 
 - Interface: the Cast page shows and edits character cards and their relationships (`web/src/pages/Cast.tsx`, `web/src/components/RelationsMap.tsx`). Relationships are created without a story-time range; the story-progress slider that sets one is phase 5. Capture from conversation and the cards of the other types (places, factions, things, rules) are still to come.

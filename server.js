@@ -80,6 +80,7 @@ const { createCanonRepository } = require("./src/canon-store");
 const { createCanonApi } = require("./src/canon-api");
 const canonDrafts = require("./src/canon-drafts");
 const plotSpine = require("./src/plot-spine");
+const timelineChecks = require("./src/timeline-checks");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -2976,8 +2977,30 @@ async function handleSpineApi(req, res, parts, db, work) {
   return false;
 }
 
+// Timeline checks (plan 5.7): contradictions found without AI, and "What's missing?".
+async function handleTimelineApi(req, res, parts, db, work) {
+  if (parts[3] !== "timeline" || parts.length !== 5) return false;
+  assertOwner(req.user, work);
+  // GET /api/works/:id/timeline/checks
+  if (req.method === "GET" && parts[4] === "checks") {
+    sendJson(res, 200, { problems: timelineChecks.checkTimeline(work) });
+    return true;
+  }
+  // POST /api/works/:id/timeline/missing → gaps in cause and effect; nothing is saved.
+  if (req.method === "POST" && parts[4] === "missing") {
+    await readBody(req, 16 * 1024);
+    const gaps = isTestAiEnabled()
+      ? timelineChecks.testMissing(work)
+      : timelineChecks.normalizeMissing(await callStructuredAi(work, timelineChecks.missingRequest(work)), work);
+    sendJson(res, 200, { gaps });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
   if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
+  if (await handleTimelineApi(req, res, parts, db, work)) return true;
   if (await handleSpineApi(req, res, parts, db, work)) return true;
   if (parts[3] === "chats") {
     const workspace = ensureAiWorkspace(work, { createChat: true });

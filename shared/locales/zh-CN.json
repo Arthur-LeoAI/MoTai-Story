@@ -658,6 +658,7 @@
     "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
     "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。",
     "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。",
+    "TIMELINE_TOO_SHORT": "至少要有两个事件，才能看出还缺什么。",
     "EVENT_ORDER_INVALID": "新的顺序必须把每个事件列出一次。"
   },
   "brief": {
@@ -779,6 +780,24 @@
         "waiting": "尚未回收"
       },
       "setupsOff_other": "有 {{count}} 个伏笔没有显示在图上：埋下它的那一章里，图上没有事件。"
+    },
+    "checks": {
+      "title": "时间线检查",
+      "none": "在目前记录的内容里没有发现矛盾。",
+      "flag": "有一条时间线检查与这个事件有关",
+      "open": "打开“{{title}}”",
+      "kinds": {
+        "twoPlaces": "{{name}}同时出现在两个地方（{{when}}）：“{{event1}}”在{{place1}}，“{{event2}}”在{{place2}}。",
+        "afterDeath": "{{name}}参与了“{{event}}”，但第 {{chapter}} 章的事实记录是：{{fact}}。如果这件事发生在那之前，就没有问题。",
+        "payoffBeforePlant": "伏笔“{{setup}}”在第 {{paid}} 章回收，却到第 {{planted}} 章才埋下。"
+      },
+      "ask": "还缺什么？",
+      "asking": "正在阅读时间线……",
+      "askHint": "有两个以上事件时，AI 可以找出事件之间的缺口。",
+      "missingTitle": "AI 找到的缺口",
+      "after": "在“{{title}}”之后",
+      "nothingMissing": "AI 没有在这些事件之间找到缺口。",
+      "missingHint": "这些只是提示，不会修改作品：没有任何内容被添加。"
     }
   },
   "setups": {

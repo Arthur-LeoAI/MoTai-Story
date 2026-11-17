@@ -107,7 +107,7 @@ test("the plot page has no sideways scroll on a phone", async ({ page, request }
 });
 
 const card = (page, chapterId) => page.locator(`[data-testid="board-card"][data-chapter-id="${chapterId}"]`);
-const columnOfCard = (page, chapterId) => card(page, chapterId).evaluate((node) => node.closest('[data-testid="board-column"]').dataset.column);
+const columnOfCard = (page, chapterId) => card(page, chapterId).evaluate((node) => node.closest('[data-testid="board-column"]')?.dataset.column ?? "");
 const chaptersOf = async (request, workId) => (await (await request.get(`/api/works/${workId}`)).json()).work.chapters;
 
 test("chapter cards say what each chapter must do, move between columns, and change the book's order", async ({ page, request }) => {

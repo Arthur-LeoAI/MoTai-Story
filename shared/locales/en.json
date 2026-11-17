@@ -669,6 +669,7 @@
     "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
     "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
     "MANUSCRIPT_EMPTY": "There is no text in this story yet to read.",
+    "TIMELINE_TOO_SHORT": "Add at least two events before asking what is missing.",
     "EVENT_ORDER_INVALID": "The new order must list every event once."
   },
   "brief": {
@@ -792,6 +793,24 @@
       },
       "setupsOff_one": "{{count}} setup is not on the chart: no event shown here is in the chapter where it is planted.",
       "setupsOff_other": "{{count}} setups are not on the chart: no event shown here is in the chapter where they are planted."
+    },
+    "checks": {
+      "title": "Timeline checks",
+      "none": "No contradictions found in what the story records so far.",
+      "flag": "A timeline check is about this event",
+      "open": "Open “{{title}}”",
+      "kinds": {
+        "twoPlaces": "{{name}} is in two places at once ({{when}}): in {{place1}} for “{{event1}}” and in {{place2}} for “{{event2}}”.",
+        "afterDeath": "{{name}} takes part in “{{event}}”, but a fact from chapter {{chapter}} says: {{fact}}. Fine if this happens earlier.",
+        "payoffBeforePlant": "The setup “{{setup}}” pays off in chapter {{paid}}, before it is planted in chapter {{planted}}."
+      },
+      "ask": "What's missing?",
+      "asking": "Reading the timeline…",
+      "askHint": "With two events or more, the AI can look for gaps between them.",
+      "missingTitle": "Gaps the AI found",
+      "after": "After “{{title}}”",
+      "nothingMissing": "The AI found no gap between these events.",
+      "missingHint": "These are pointers, not changes: nothing has been added to the story."
     }
   },
   "setups": {

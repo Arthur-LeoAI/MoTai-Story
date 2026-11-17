@@ -6,6 +6,7 @@ import { writeApi } from "../writeApi";
 import { numeral } from "../sections";
 import { TimelineChart, type ChartColumn } from "../components/TimelineChart";
 import { SetupsPanel } from "../components/Setups";
+import { TimelineChecks, timelineApi, type TimelineProblem } from "../components/TimelineChecks";
 
 // Timeline (plan 5.7, mockup Timeline.dc.html): what happens, to whom, and in
 // what order the reader learns it. Two orders of the same events: as it
@@ -18,7 +19,7 @@ const ORDER_KEY = "novel-studio:timeline-order";
 type ChapterRef = { id: string; title: string };
 type Loaded =
   | { state: "loading" }
-  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; threads: Thread[]; setups: Setup[]; chapters: ChapterRef[]; canonRevision: number }
+  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; threads: Thread[]; setups: Setup[]; problems: TimelineProblem[]; chapters: ChapterRef[]; canonRevision: number }
   | { state: "failed"; message: string };
 type Editing = { mode: "new" } | { mode: "edit"; event: StoryEvent } | null;
 
@@ -286,13 +287,14 @@ export default function Timeline({ work }: { work: WorkSummary }) {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [{ canon }, { work: full }] = await Promise.all([castApi.canon(work.id), writeApi.work(work.id)]);
+    const [{ canon }, { work: full }, { problems }] = await Promise.all([castApi.canon(work.id), writeApi.work(work.id), timelineApi.checks(work.id)]);
     const next = {
       state: "ready" as const,
       events: canon.events ?? [],
       entities: canon.entities,
       threads: canon.threads ?? [],
       setups: canon.setups ?? [],
+      problems,
       chapters: full.chapters.map((chapter) => ({ id: chapter.id, title: chapter.title })),
       canonRevision: canon.canonRevision
     };
@@ -363,6 +365,8 @@ export default function Timeline({ work }: { work: WorkSummary }) {
   const placed = ready ? placeEvents(ready.events, ready.chapters, order) : [];
   const names = new Map((ready?.entities ?? []).map((entity) => [entity.id, entity.name]));
   const chapterTitle = (index: number) => (ready && index >= 0 ? `${index + 1}. ${ready.chapters[index].title}` : t("timeline.notTold"));
+  // Events a timeline check is about: marked in the list.
+  const flagged = new Set(ready ? ready.problems.flatMap((problem) => problem.eventIds) : []);
   // The chart's columns: short labels, in the same order as the list.
   const columns: ChartColumn[] = placed.map((item) => ({
     event: item.event,
@@ -401,6 +405,7 @@ export default function Timeline({ work }: { work: WorkSummary }) {
 
       {ready ? (
         <div className="timeline-body">
+        <TimelineChecks workId={work.id} language={work.language} problems={ready.problems} events={ready.events} onOpen={(event) => setEditing({ mode: "edit", event })} />
         <section className="timeline-list" aria-label={t("timeline.listLabel")}>
           <div className="caps">{t(`timeline.listHeading.${order}`)}</div>
           {placed.length === 0 ? <p className="muted cast-empty" data-testid="timeline-empty">{t("timeline.empty")}</p> : null}
@@ -414,8 +419,13 @@ export default function Timeline({ work }: { work: WorkSummary }) {
                 ? (item.chapterIndex >= 0 ? t("timeline.toldIn", { chapter: chapterTitle(item.chapterIndex) }) : t("timeline.notTold"))
                 : item.flashback ? t("timeline.flashbackTo", { when: event.timeLabel || t("timeline.earlier") }) : event.timeLabel;
               return (
-                <li key={event.id} className="card timeline-event" data-testid="timeline-event" data-event-id={event.id} data-flashback={item.flashback} data-told={item.chapterIndex >= 0}>
+                <li key={event.id} className="card timeline-event" data-testid="timeline-event" data-event-id={event.id} data-flashback={item.flashback} data-told={item.chapterIndex >= 0} data-problem={flagged.has(event.id)}>
                   <span className="timeline-num" aria-hidden="true">{numeral(index)}</span>
+                  {flagged.has(event.id) ? (
+                    <span className="timeline-flag" title={t("timeline.checks.flag")} data-testid="timeline-flag">
+                      <span className="visually-hidden">{t("timeline.checks.flag")}</span>
+                    </span>
+                  ) : null}
                   <button type="button" className="timeline-open" onClick={() => setEditing({ mode: "edit", event })} data-testid="timeline-open">
                     <span className="caps" lang={work.language}>{head}</span>
                     <span className="timeline-title" lang={work.language} data-testid="timeline-title">{event.title}</span>

@@ -208,3 +208,43 @@ test("a setup is planted, waits as a reminder, shows on the chart, and is paid o
     ["The mark in the corner of the map", { kind: "chapter", id: one.id }, { kind: "event", id: meeting.id }, "paid"]
   ]);
 });
+
+test("timeline checks mark a contradiction until it is fixed, and the AI can say what is missing", async ({ page, request }) => {
+  const work = await story(request);
+  const entity = (data) => request.post(`/api/works/${work.id}/canon/entities`, { data }).then((response) => response.json()).then((body) => body.item);
+  const mira = await entity({ type: "character", name: "Mira" });
+  const vell = await entity({ type: "location", name: "Vell" });
+  const isle = await entity({ type: "location", name: "The Island" });
+  const inVell = await event(request, work.id, { title: "Mira hides in Vell", timeLabel: "Day 3", locationId: vell.id, participantIds: [mira.id] });
+  const onIsle = await event(request, work.id, { title: "Mira lands on the island", timeLabel: "Day 3", locationId: isle.id, participantIds: [mira.id] });
+  await page.goto(`/app/works/${work.id}/timeline`);
+  await expect(page.getByTestId("timeline-event")).toHaveCount(2);
+
+  // One person in two places on the same day: said, and both events marked.
+  const problem = page.getByTestId("check-problem");
+  await expect(problem).toHaveCount(1);
+  await expect(problem).toHaveAttribute("data-kind", "twoPlaces");
+  await expect(problem).toContainText("Mira hides in Vell");
+  await expect(page.locator('[data-testid="timeline-event"][data-problem="true"]')).toHaveCount(2);
+
+  // Fixed from the check itself: the event opens, its day changes, the check goes.
+  await problem.getByTestId("check-open").nth(1).click();
+  await expect(page.getByTestId("event-dialog")).toBeVisible();
+  await expect(page.getByTestId("event-title")).toHaveValue("Mira lands on the island");
+  await page.getByTestId("event-when").fill("Day 5");
+  await page.getByTestId("event-save").click();
+  await expect(page.getByTestId("check-none")).toBeVisible();
+  await expect(page.locator('[data-testid="timeline-event"][data-problem="true"]')).toHaveCount(0);
+
+  // What is missing: pointers after an event, nothing saved.
+  const before = (await (await request.get(`/api/works/${work.id}/canon`)).json()).canon.canonRevision;
+  await page.getByTestId("missing-ask").click();
+  const gap = page.getByTestId("missing-gap");
+  await expect(gap).toHaveCount(1);
+  await expect(gap).toHaveAttribute("data-after", inVell.id);
+  await gap.getByTestId("check-open").click();
+  await expect(page.getByTestId("event-title")).toHaveValue("Mira hides in Vell");
+  await page.getByTestId("event-cancel").click();
+  expect((await (await request.get(`/api/works/${work.id}/canon`)).json()).canon.canonRevision).toBe(before);
+  expect(onIsle.id).toBeTruthy();
+});
