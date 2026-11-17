@@ -1660,6 +1660,109 @@ button.story-chip:hover {
   font-size: var(--text-sm);
 }
 
+/* Plot: the story spine */
+.spine {
+  max-width: 860px;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.spine-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.spine-title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.spine-status {
+  font-size: var(--text-sm);
+}
+.spine-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.spine-line {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) 1fr;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.spine-opening {
+  padding-top: var(--space-2);
+  font-family: var(--font-fell);
+  font-style: italic;
+  font-size: var(--text-lg);
+  color: var(--color-accent);
+}
+.spine-opening:lang(zh),
+:lang(zh) .spine-opening {
+  font-style: normal;
+}
+.spine-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.spine-input {
+  width: 100%;
+  resize: vertical;
+  field-sizing: content;
+  min-height: 2lh;
+}
+.spine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.spine-suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent-soft);
+}
+.spine-suggestion {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.spine-suggestion:hover {
+  border-color: var(--color-accent);
+}
+.spine-add {
+  grid-column: 2;
+  justify-self: start;
+}
+@media (max-width: 640px) {
+  .spine-line {
+    grid-template-columns: 1fr;
+  }
+  .spine-opening {
+    padding-top: 0;
+  }
+  .spine-add {
+    grid-column: 1;
+  }
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

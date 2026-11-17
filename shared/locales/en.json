@@ -830,5 +830,37 @@
     "empty": "No setups yet. Plant something now that should matter later.",
     "delete": "Delete setup",
     "deleteConfirm": "Delete this setup? This cannot be undone."
+  },
+  "plot": {
+    "part": "Part V",
+    "subtitle": "The main line of the story, and what each chapter is for.",
+    "spine": {
+      "title": "The story spine",
+      "hint": "One plain sentence for each line is enough. Fill them in any order; ask for ideas when a line is empty.",
+      "count": "{{filled}} of {{total}} lines",
+      "saved": "Saved",
+      "lines": {
+        "once": "Once upon a time…",
+        "everyDay": "Every day…",
+        "oneDay": "Until one day…",
+        "because": "Because of that…",
+        "finally": "Until finally…",
+        "everSince": "And ever since then…"
+      },
+      "hints": {
+        "once": "who your hero is, and the world they live in",
+        "everyDay": "how things usually are for them",
+        "oneDay": "the thing that goes wrong",
+        "because": "what follows from it",
+        "finally": "the moment it is decided",
+        "everSince": "how things are now, and what has changed"
+      },
+      "suggest": "Suggest",
+      "asking": "Thinking…",
+      "suggestionsLabel": "Suggestions",
+      "dismiss": "None of these",
+      "add": "Add “because of that”",
+      "remove": "Remove"
+    }
   }
 }

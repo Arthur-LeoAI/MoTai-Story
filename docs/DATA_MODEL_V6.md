@@ -63,6 +63,16 @@ Known limit, unchanged from v5: `selectTemporalFacts` treats any fact without a 
 
 `:collection` is `entities`, `relations`, `events`, `threads` or `setups`. Requests are checked against the story's owner. Error codes: `CANON_ITEM_NOT_FOUND`, `CANON_NAME_REQUIRED`, `CANON_ENTITY_TYPE_UNSUPPORTED`, `CANON_REFERENCE_NOT_FOUND` (with `field`), `CANON_RELATION_SELF`, `CANON_STORY_RANGE_INVALID`.
 
+### The story spine (phase 3)
+
+`work.spine` holds the six sentences of the story spine (`src/plot-spine.js`): `once`, `everyDay`, `oneDay`, `because` (a list of up to 8 sentences), `finally`, `everSince`, plus `revision` and `updatedAt`. A story without one reads as empty; nothing is upgraded. It is not part of `canon` and is not turned into facts.
+
+| Route | Does |
+|---|---|
+| `GET /api/works/:workId/spine` | The spine |
+| `PUT /api/works/:workId/spine` | `{ lines, baseRevision }`: changes the sentences sent; `REVISION_CONFLICT` when the spine changed since it was read |
+| `POST /api/works/:workId/spine/suggestions` | `{ line, index? }`: three AI suggestions for one sentence, read from the saved spine, the cast and the events; nothing is saved |
+
 ## Not done in this step
 
 - Interface: the Cast page shows and edits character cards and their relationships (`web/src/pages/Cast.tsx`, `web/src/components/RelationsMap.tsx`). Relationships are created without a story-time range; the story-progress slider that sets one is phase 5. Capture from conversation and the cards of the other types (places, factions, things, rules) are still to come.

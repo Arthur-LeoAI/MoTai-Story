@@ -815,5 +815,37 @@
     "empty": "还没有伏笔。现在埋下一点以后会起作用的东西吧。",
     "delete": "删除伏笔",
     "deleteConfirm": "删除这个伏笔？此操作无法撤销。"
+  },
+  "plot": {
+    "part": "第五部分",
+    "subtitle": "故事的主线，以及每一章要做什么。",
+    "spine": {
+      "title": "故事骨架",
+      "hint": "每一格写一句平实的话就够了。顺序不限；某一格空着时，可以请 AI 出主意。",
+      "count": "已填 {{filled}} / {{total}} 句",
+      "saved": "已保存",
+      "lines": {
+        "once": "从前……",
+        "everyDay": "每一天……",
+        "oneDay": "直到有一天……",
+        "because": "因为这样……",
+        "finally": "直到最后……",
+        "everSince": "从那以后……"
+      },
+      "hints": {
+        "once": "主角是谁，生活在怎样的世界",
+        "everyDay": "TA 平常的日子是什么样",
+        "oneDay": "出了什么岔子",
+        "because": "接着发生了什么",
+        "finally": "事情在哪一刻见分晓",
+        "everSince": "之后的日子，以及什么改变了"
+      },
+      "suggest": "出主意",
+      "asking": "正在想……",
+      "suggestionsLabel": "建议",
+      "dismiss": "都不要",
+      "add": "再加一句“因为这样”",
+      "remove": "删除"
+    }
   }
 }

@@ -6,6 +6,7 @@ import { Notice, Ornament, PreferenceControls, Wordmark, useDocumentTitle } from
 import Ideate from "./Ideate";
 import Cast from "./Cast";
 import Timeline from "./Timeline";
+import Plot from "./Plot";
 import Write from "./Write";
 import Companion from "../components/Companion";
 import { StorySearch, StorySettingsDialog } from "../components/StoryTools";
@@ -140,6 +141,11 @@ export default function WorkFrame() {
       ) : section === "timeline" ? (
         <main id="main" className="frame-main frame-main-page">
           {loaded.state === "ready" ? <Timeline key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          <Notice />
+        </main>
+      ) : section === "plot" ? (
+        <main id="main" className="frame-main frame-main-page">
+          {loaded.state === "ready" ? <Plot key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
           <Notice />
         </main>
       ) : section === "cast" ? (
