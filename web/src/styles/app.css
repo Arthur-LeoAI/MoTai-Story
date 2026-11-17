@@ -1763,6 +1763,99 @@ button.story-chip:hover {
   }
 }
 
+/* Plot: chapter cards */
+.plot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.board-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.board-column {
+  min-height: 120px;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-surface-sunk);
+  border: 1px dashed transparent;
+}
+.board-column.over {
+  border-color: var(--color-accent);
+}
+.board-column-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.board-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.board-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: grab;
+}
+.board-card-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.board-card-empty,
+.board-card-hook {
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+:lang(zh) .board-card-empty,
+.board-card-empty:lang(zh),
+.board-card-hook:lang(zh) {
+  font-style: normal;
+}
+.board-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 var(--space-2) var(--space-2);
+}
+.board-card-actions .btn {
+  min-width: 32px;
+  padding-inline: var(--space-2);
+}
+@media (max-width: 1100px) {
+  .board-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .board-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

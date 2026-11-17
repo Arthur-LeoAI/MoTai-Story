@@ -1,5 +1,5 @@
 "use strict";
-const { createId, nowIso, normalizeStoryLanguage, STORY_FOCUSES } = require("./domain");
+const { createId, nowIso, normalizeStoryLanguage, normalizeChapterPlanning, STORY_FOCUSES } = require("./domain");
 const { plainTextToRichContent, normalizeRichContent, richContentToMarkdown } = require("./studio");
 const { upgradeWork, normalizeScene, ensureVersion, transformScenes, deltaLength, mergeHunks, fail } = require("./workspace");
 const { invalidateDependencies, normalizeTemporalFact, adjudicateConflict } = require("./temporal");
@@ -203,7 +203,8 @@ function createBetaApi({ store, service, tasks, readDb, readWork, ensureMigrated
           if (JSON.stringify(delta) !== JSON.stringify(before)) { await service.snapshot(w, c, "auto"); c.richContent = delta; c.content = richContentToMarkdown(delta); transformScenes(c, before, delta); invalidateDependencies(w, { chapterId: c.id, reason: "正文编辑" }); }
         }
         for (const key of ["title", "notes", "status"]) if (body[key] !== undefined) c[key] = String(body[key]).slice(0, key === "notes" ? 10000 : 150);
-        if (body.planning) c.planning = body.planning;
+        // Planning answers merge by key, so a chapter card can change one without the others.
+        if (body.planning && typeof body.planning === "object") c.planning = normalizeChapterPlanning({ ...(c.planning || {}), ...body.planning });
         // Brief items the writer unticked; the writing context leaves those facts out.
         if (body.briefExcluded !== undefined) c.briefExcluded = normalizeExcluded(body.briefExcluded);
       }));

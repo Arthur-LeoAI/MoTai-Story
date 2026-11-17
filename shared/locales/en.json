@@ -861,6 +861,37 @@
       "dismiss": "None of these",
       "add": "Add “because of that”",
       "remove": "Remove"
+    },
+    "board": {
+      "title": "Chapter cards",
+      "hint": "One card per chapter: what it must do, and what it leaves us with. Drag a card to another column, or use its arrows.",
+      "add": "New chapter",
+      "chapter": "Chapter {{number}}",
+      "cardTitle": "Chapter {{number}}",
+      "noGoal": "What must this chapter do?",
+      "leaves": "Leaves us with: {{hook}}",
+      "columns": {
+        "idea": "Idea",
+        "planned": "Planned",
+        "drafted": "Drafted",
+        "done": "Finished"
+      },
+      "fields": {
+        "title": "Title",
+        "goal": "What this chapter must do",
+        "conflict": "What stands in the way",
+        "hook": "What it leaves us with",
+        "status": "State"
+      },
+      "hints": {
+        "goal": "Mira learns the map is real",
+        "conflict": "Kael is watching the harbour",
+        "hook": "a light on the island where no one lives"
+      },
+      "earlier": "Move “{{title}}” earlier",
+      "later": "Move “{{title}}” later",
+      "back": "Move “{{title}}” to the previous column",
+      "forward": "Move “{{title}}” to the next column"
     }
   }
 }

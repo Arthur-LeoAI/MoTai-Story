@@ -846,6 +846,37 @@
       "dismiss": "都不要",
       "add": "再加一句“因为这样”",
       "remove": "删除"
+    },
+    "board": {
+      "title": "章节卡",
+      "hint": "每章一张卡：这一章要做成什么，结尾留给读者什么。把卡片拖到别的列，或者用卡片上的箭头。",
+      "add": "新章节",
+      "chapter": "第 {{number}} 章",
+      "cardTitle": "第 {{number}} 章",
+      "noGoal": "这一章要做成什么？",
+      "leaves": "留下：{{hook}}",
+      "columns": {
+        "idea": "想法",
+        "planned": "已规划",
+        "drafted": "已起草",
+        "done": "已完成"
+      },
+      "fields": {
+        "title": "标题",
+        "goal": "这一章要做成什么",
+        "conflict": "有什么在阻碍",
+        "hook": "结尾留给读者什么",
+        "status": "状态"
+      },
+      "hints": {
+        "goal": "林晚确认地图是真的",
+        "conflict": "老陈不肯开船",
+        "hook": "无人岛上亮起了一盏灯"
+      },
+      "earlier": "把“{{title}}”往前移",
+      "later": "把“{{title}}”往后移",
+      "back": "把“{{title}}”移到上一列",
+      "forward": "把“{{title}}”移到下一列"
     }
   }
 }

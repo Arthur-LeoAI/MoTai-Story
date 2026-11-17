@@ -105,3 +105,58 @@ test("the plot page has no sideways scroll on a phone", async ({ page, request }
   await expect(page.getByTestId("spine-line")).toHaveCount(6);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+const card = (page, chapterId) => page.locator(`[data-testid="board-card"][data-chapter-id="${chapterId}"]`);
+const columnOfCard = (page, chapterId) => card(page, chapterId).evaluate((node) => node.closest('[data-testid="board-column"]').dataset.column);
+const chaptersOf = async (request, workId) => (await (await request.get(`/api/works/${workId}`)).json()).work.chapters;
+
+test("chapter cards say what each chapter must do, move between columns, and change the book's order", async ({ page, request }) => {
+  const work = await story(request);
+  expect((await request.post(`/api/works/${work.id}/chapters`, { data: { title: "The Archive" } })).ok()).toBeTruthy();
+  const [one, two] = await chaptersOf(request, work.id);
+  await page.goto(`/app/works/${work.id}/plot`);
+  await expect(page.getByTestId("board-card")).toHaveCount(2);
+  // An empty chapter starts as an idea.
+  expect(await columnOfCard(page, one.id)).toBe("idea");
+
+  await card(page, one.id).getByTestId("board-card-open").click();
+  await expect(page.getByTestId("card-dialog")).toBeVisible();
+  await page.getByTestId("card-goal").fill("Mira learns the map is real");
+  await page.getByTestId("card-hook").fill("A light on the island where no one lives");
+  await page.getByTestId("card-status-planned").click();
+  await page.getByTestId("card-save").click();
+  await expect(page.getByTestId("card-dialog")).toBeHidden();
+  await expect(card(page, one.id)).toContainText("Mira learns the map is real");
+  await expect(card(page, one.id)).toContainText("A light on the island where no one lives");
+  await expect.poll(() => columnOfCard(page, one.id)).toBe("planned");
+
+  // Arrows move a card on, and later in the book.
+  await card(page, one.id).getByTestId("card-forward").click();
+  await expect.poll(() => columnOfCard(page, one.id)).toBe("drafted");
+  await card(page, one.id).getByTestId("card-later").click();
+  await expect.poll(async () => (await chaptersOf(request, work.id)).map((chapter) => chapter.id)).toEqual([two.id, one.id]);
+  await expect(card(page, one.id)).toContainText("Chapter 2");
+
+  // Dragging a card to another column.
+  await card(page, two.id).dragTo(page.locator('[data-testid="board-column"][data-column="done"]'));
+  await expect.poll(() => columnOfCard(page, two.id)).toBe("done");
+
+  await page.reload();
+  await expect(page.getByTestId("board-card")).toHaveCount(2);
+  expect(await columnOfCard(page, one.id)).toBe("drafted");
+  expect(await columnOfCard(page, two.id)).toBe("done");
+  const saved = (await chaptersOf(request, work.id)).find((chapter) => chapter.id === one.id);
+  expect([saved.status, saved.planning.goal, saved.planning.hook, saved.planning.conflict]).toEqual(["drafted", "Mira learns the map is real", "A light on the island where no one lives", ""]);
+});
+
+test("a new chapter starts as a card and opens to be planned", async ({ page, request }) => {
+  const work = await story(request);
+  await page.goto(`/app/works/${work.id}/plot`);
+  await expect(page.getByTestId("board-card")).toHaveCount(1);
+  await page.getByTestId("board-add").click();
+  await expect(page.getByTestId("card-dialog")).toBeVisible();
+  await page.getByTestId("card-title").fill("The Island");
+  await page.getByTestId("card-save").click();
+  await expect(page.getByTestId("board-card")).toHaveCount(2);
+  await expect(page.getByTestId("board-card").nth(1)).toContainText("The Island");
+});

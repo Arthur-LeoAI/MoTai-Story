@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText, type WorkSummary } from "../api";
+import { ChapterBoard } from "../components/ChapterBoard";
 import { MAX_BECAUSE, plotApi, SPINE_LINES, type Spine, type SpineLine, type SpineLines } from "../plotApi";
 
 // Plot page, part 1: the story spine (plan 5.8, mockup Plot). Six sentences,
@@ -209,6 +210,7 @@ export default function Plot({ work }: { work: WorkSummary }) {
           </ol>
         </section>
       ) : null}
+      <ChapterBoard workId={work.id} />
     </div>
   );
 }
