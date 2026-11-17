@@ -754,10 +754,37 @@
       "when": "When, in your words",
       "chapter": "Told in",
       "who": "Who takes part",
-      "where": "Where"
+      "where": "Where",
+      "threads": "Plot lines"
     },
     "noPlace": "No place",
     "delete": "Delete event",
-    "deleteConfirm": "Delete “{{title}}”? This cannot be undone."
+    "deleteConfirm": "Delete “{{title}}”? This cannot be undone.",
+    "newThread": "New plot line",
+    "newThreadHint": "Finding the sister",
+    "chart": {
+      "label": "Chart of persons and events",
+      "figure": "Fig. 2",
+      "caption": "A chart of persons and events, {{order}}.",
+      "orders": {
+        "happened": "in the order they happened",
+        "told": "in the order the reader meets them"
+      },
+      "rowsLabel": "Rows",
+      "rows": {
+        "people": "People",
+        "threads": "Plot lines",
+        "places": "Places"
+      },
+      "chapter": "Ch. {{number}}",
+      "flashback": "flashback",
+      "takesPart": "takes part",
+      "noEvents": "Add events to see who is in them.",
+      "empty": {
+        "people": "No event names anyone from Cast yet. Choose who takes part in an event.",
+        "threads": "No event belongs to a plot line yet. Add one in an event.",
+        "places": "No event has a place yet. Places come with the World page."
+      }
+    }
   }
 }

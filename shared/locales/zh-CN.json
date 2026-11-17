@@ -742,10 +742,37 @@
       "when": "时间（用你自己的话）",
       "chapter": "讲述于",
       "who": "参与的人",
-      "where": "地点"
+      "where": "地点",
+      "threads": "情节线"
     },
     "noPlace": "无地点",
     "delete": "删除事件",
-    "deleteConfirm": "删除“{{title}}”？此操作无法撤销。"
+    "deleteConfirm": "删除“{{title}}”？此操作无法撤销。",
+    "newThread": "新情节线",
+    "newThreadHint": "寻找妹妹",
+    "chart": {
+      "label": "人物与事件对照图",
+      "figure": "图二",
+      "caption": "人物与事件对照图，{{order}}。",
+      "orders": {
+        "happened": "按发生顺序",
+        "told": "按读者读到的顺序"
+      },
+      "rowsLabel": "分行方式",
+      "rows": {
+        "people": "人物",
+        "threads": "情节线",
+        "places": "地点"
+      },
+      "chapter": "第 {{number}} 章",
+      "flashback": "倒叙",
+      "takesPart": "参与",
+      "noEvents": "添加事件后，这里会显示谁参与了哪些事件。",
+      "empty": {
+        "people": "还没有事件标注了人物页里的人物。请在事件里选择参与的人。",
+        "threads": "还没有事件归入情节线。可以在事件里添加。",
+        "places": "还没有事件标注地点。地点将随“世界”页加入。"
+      }
+    }
   }
 }

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText, type WorkSummary } from "../api";
-import { castApi, type Entity, type EventDraft, type StoryEvent } from "../castApi";
+import { castApi, type Entity, type EventDraft, type StoryEvent, type Thread } from "../castApi";
 import { writeApi } from "../writeApi";
 import { numeral } from "../sections";
+import { TimelineChart, type ChartColumn } from "../components/TimelineChart";
 
 // Timeline (plan 5.7, mockup Timeline.dc.html): what happens, to whom, and in
 // what order the reader learns it. Two orders of the same events: as it
@@ -16,7 +17,7 @@ const ORDER_KEY = "novel-studio:timeline-order";
 type ChapterRef = { id: string; title: string };
 type Loaded =
   | { state: "loading" }
-  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; chapters: ChapterRef[]; canonRevision: number }
+  | { state: "ready"; events: StoryEvent[]; entities: Entity[]; threads: Thread[]; chapters: ChapterRef[]; canonRevision: number }
   | { state: "failed"; message: string };
 type Editing = { mode: "new" } | { mode: "edit"; event: StoryEvent } | null;
 
@@ -55,12 +56,14 @@ export function placeEvents(events: StoryEvent[], chapters: ChapterRef[], order:
   return order === "told" ? told : [...placed].sort(byStory);
 }
 
-function EventDialog({ workId, language, editing, characters, places, chapters, onClose, onSaved, onRemoved, onReload }: {
+function EventDialog({ workId, language, editing, characters, places, threads, chapters, onClose, onSaved, onRemoved, onReload, onThreadAdded }: {
   workId: string;
   language: string;
   editing: Editing;
   characters: Entity[];
   places: Entity[];
+  threads: Thread[];
+  onThreadAdded: () => void;
   chapters: ChapterRef[];
   onClose: () => void;
   onSaved: () => void;
@@ -69,7 +72,8 @@ function EventDialog({ workId, language, editing, characters, places, chapters, 
 }) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const empty: EventDraft = { title: "", summary: "", timeLabel: "", chapterId: "", participantIds: [], locationId: "" };
+  const empty: EventDraft = { title: "", summary: "", timeLabel: "", chapterId: "", participantIds: [], locationId: "", threadIds: [] };
+  const [newThread, setNewThread] = useState("");
   const [draft, setDraft] = useState<EventDraft>(empty);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -77,7 +81,7 @@ function EventDialog({ workId, language, editing, characters, places, chapters, 
   const event = editing?.mode === "edit" ? editing.event : null;
 
   const fill = (value: StoryEvent | null) => setDraft(value
-    ? { title: value.title, summary: value.summary, timeLabel: value.timeLabel, chapterId: value.chapterId, participantIds: value.participantIds, locationId: value.locationId }
+    ? { title: value.title, summary: value.summary, timeLabel: value.timeLabel, chapterId: value.chapterId, participantIds: value.participantIds, locationId: value.locationId, threadIds: value.threadIds }
     : empty);
 
   useLayoutEffect(() => {
@@ -85,6 +89,7 @@ function EventDialog({ workId, language, editing, characters, places, chapters, 
     if (!dialog) return;
     if (editing && !dialog.open) {
       fill(event);
+      setNewThread("");
       setError("");
       setConflict(false);
       dialog.showModal();
@@ -149,6 +154,29 @@ function EventDialog({ workId, language, editing, characters, places, chapters, 
     }
   }
 
+  const toggleThread = (id: string) => setDraft((current) => ({
+    ...current,
+    threadIds: current.threadIds.includes(id) ? current.threadIds.filter((item) => item !== id) : [...current.threadIds, id]
+  }));
+
+  // A new plot line is saved at once, so it can be chosen here and for other events.
+  async function addThread() {
+    const name = newThread.trim();
+    if (!name) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { item } = await castApi.createThread(workId, name);
+      setDraft((current) => ({ ...current, threadIds: [...current.threadIds, item.id] }));
+      setNewThread("");
+      onThreadAdded();
+    } catch (cause) {
+      setError(errorText(t, cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const toggleParticipant = (id: string) => setDraft((current) => ({
     ...current,
     participantIds: current.participantIds.includes(id) ? current.participantIds.filter((item) => item !== id) : [...current.participantIds, id]
@@ -188,6 +216,39 @@ function EventDialog({ workId, language, editing, characters, places, chapters, 
             </div>
           </fieldset>
         ) : null}
+        <fieldset className="dialog-fieldset">
+          <legend className="caps">{t("timeline.fields.threads")}</legend>
+          {threads.length ? (
+            <div className="event-people">
+              {threads.map((thread) => (
+                <label key={thread.id} className="scene-check">
+                  <input type="checkbox" checked={draft.threadIds.includes(thread.id)} onChange={() => toggleThread(thread.id)} data-testid="event-thread" data-thread-id={thread.id} />
+                  <span lang={language}>{thread.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+          <div className="dialog-row">
+            <label className="visually-hidden" htmlFor="event-new-thread">{t("timeline.newThread")}</label>
+            <input
+              id="event-new-thread"
+              className="field event-new-thread"
+              maxLength={160}
+              lang={language}
+              value={newThread}
+              placeholder={t("timeline.newThreadHint")}
+              onChange={(change) => setNewThread(change.target.value)}
+              onKeyDown={(key) => {
+                if (key.key === "Enter") {
+                  key.preventDefault();
+                  void addThread();
+                }
+              }}
+              data-testid="event-new-thread"
+            />
+            <button type="button" className="btn" disabled={busy || !newThread.trim()} onClick={() => void addThread()} data-testid="event-add-thread">{t("timeline.newThread")}</button>
+          </div>
+        </fieldset>
         {places.length ? (
           <>
             <label className="caps" htmlFor="event-place">{t("timeline.fields.where")}</label>
@@ -229,6 +290,7 @@ export default function Timeline({ work }: { work: WorkSummary }) {
       state: "ready" as const,
       events: canon.events ?? [],
       entities: canon.entities,
+      threads: canon.threads ?? [],
       chapters: full.chapters.map((chapter) => ({ id: chapter.id, title: chapter.title })),
       canonRevision: canon.canonRevision
     };
@@ -299,6 +361,17 @@ export default function Timeline({ work }: { work: WorkSummary }) {
   const placed = ready ? placeEvents(ready.events, ready.chapters, order) : [];
   const names = new Map((ready?.entities ?? []).map((entity) => [entity.id, entity.name]));
   const chapterTitle = (index: number) => (ready && index >= 0 ? `${index + 1}. ${ready.chapters[index].title}` : t("timeline.notTold"));
+  // The chart's columns: short labels, in the same order as the list.
+  const columns: ChartColumn[] = placed.map((item) => ({
+    event: item.event,
+    flashback: item.flashback,
+    head: order === "happened"
+      ? (item.event.timeLabel || t("timeline.notPlaced"))
+      : (item.chapterIndex >= 0 ? t("timeline.chart.chapter", { number: item.chapterIndex + 1 }) : t("timeline.notTold")),
+    sub: order === "happened"
+      ? (item.chapterIndex >= 0 ? t("timeline.chart.chapter", { number: item.chapterIndex + 1 }) : t("timeline.notTold"))
+      : (item.flashback ? t("timeline.chart.flashback") : item.event.timeLabel)
+  }));
 
   return (
     <div className="timeline" data-testid="timeline" data-order={order}>
@@ -325,6 +398,7 @@ export default function Timeline({ work }: { work: WorkSummary }) {
       {loaded.state === "failed" ? <p className="notice" role="alert">{loaded.message}</p> : null}
 
       {ready ? (
+        <div className="timeline-body">
         <section className="timeline-list" aria-label={t("timeline.listLabel")}>
           <div className="caps">{t(`timeline.listHeading.${order}`)}</div>
           {placed.length === 0 ? <p className="muted cast-empty" data-testid="timeline-empty">{t("timeline.empty")}</p> : null}
@@ -366,6 +440,15 @@ export default function Timeline({ work }: { work: WorkSummary }) {
           </form>
           {error ? <p className="notice" role="alert" data-testid="timeline-error">{error}</p> : null}
         </section>
+        <TimelineChart
+          columns={columns}
+          entities={ready.entities}
+          threads={ready.threads}
+          language={work.language}
+          orderLabel={t(`timeline.chart.orders.${order}`)}
+          onOpen={(event) => setEditing({ mode: "edit", event })}
+        />
+        </div>
       ) : null}
 
       {ready ? (
@@ -375,6 +458,8 @@ export default function Timeline({ work }: { work: WorkSummary }) {
           editing={editing}
           characters={ready.entities.filter((entity) => entity.type === "character")}
           places={ready.entities.filter((entity) => entity.type === "location")}
+          threads={ready.threads}
+          onThreadAdded={() => void load()}
           chapters={ready.chapters}
           onClose={() => setEditing(null)}
           onSaved={() => void load()}

@@ -79,12 +79,24 @@ export interface EventDraft {
   chapterId: string;
   participantIds: string[];
   locationId: string;
+  threadIds: string[];
+}
+
+/** A plot line events belong to ("Finding the sister", "The love story"). */
+export interface Thread {
+  id: string;
+  name: string;
+  color: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Canon {
   entities: Entity[];
   relations: Relation[];
   events: StoryEvent[];
+  threads: Thread[];
   canonRevision: number;
 }
 
@@ -134,6 +146,8 @@ export const castApi = {
     request<{ item: StoryEvent; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("PATCH", { ...draft, baseRevision: event.revision })),
   removeEvent: (workId: string, event: StoryEvent) =>
     request<{ removed: { id: string }; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("DELETE", { baseRevision: event.revision })),
+  createThread: (workId: string, name: string) =>
+    request<{ item: Thread; canonRevision: number }>(`${base(workId)}/threads`, send("POST", { name })),
   /** A new story order for all events, against the canon revision it was read at. */
   reorderEvents: (workId: string, eventIds: string[], canonRevision: number) =>
     request<{ events: StoryEvent[]; canonRevision: number }>(`${base(workId)}/events/order`, send("POST", { eventIds, canonRevision })),

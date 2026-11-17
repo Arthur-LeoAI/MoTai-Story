@@ -115,3 +115,56 @@ test("the timeline has no sideways scroll on a phone", async ({ page, request })
   await expect(page.getByTestId("timeline-event")).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+test("the chart shows who takes part in what, by person or by plot line, in the chosen order", async ({ page, request }) => {
+  const work = await story(request);
+  const [one, two] = work.chapters;
+  const person = async (name) => (await (await request.post(`/api/works/${work.id}/canon/entities`, { data: { type: "character", name } })).json()).item;
+  const mira = await person("Mira");
+  const kael = await person("Kael");
+  await person("Voss"); // in no event: no row
+  const vanish = await event(request, work.id, { title: "Lysa vanishes", timeLabel: "Three years ago", chapterId: two.id, participantIds: [kael.id] });
+  await event(request, work.id, { title: "The map arrives", timeLabel: "Day 1", chapterId: one.id, participantIds: [mira.id] });
+  await event(request, work.id, { title: "Kael finds her", timeLabel: "Day 5", participantIds: [mira.id, kael.id] });
+
+  await page.goto(`/app/works/${work.id}/timeline`);
+  await page.getByTestId("timeline-order-happened").click();
+  const chart = page.getByTestId("timeline-chart");
+  await page.getByTestId("chart-rows-people").click();
+  await expect(chart).toHaveAttribute("data-rows", "people");
+  await expect(chart.getByTestId("chart-column")).toHaveCount(3);
+  await expect(chart.getByTestId("chart-row")).toHaveCount(2);
+  const hits = async (id) => chart.locator(`[data-testid="chart-row"][data-row-id="${id}"] td`).evaluateAll((cells) => cells.map((cell) => cell.dataset.hit === "true"));
+  expect(await hits(mira.id)).toEqual([false, true, true]);
+  expect(await hits(kael.id)).toEqual([true, false, true]);
+
+  // As it is told, the columns follow the chapters, and the flashback is marked.
+  await page.getByTestId("timeline-order-told").click();
+  expect(await hits(kael.id)).toEqual([false, true, true]);
+  await expect(chart.getByTestId("chart-column").nth(1)).toContainText("flashback");
+
+  // A plot line: started from an event, then a row of its own.
+  await page.getByTestId("chart-rows-threads").click();
+  await expect(chart.getByTestId("chart-empty")).toBeVisible();
+  await page.locator(`[data-testid="timeline-event"][data-event-id="${vanish.id}"]`).getByTestId("timeline-open").click();
+  await page.getByTestId("event-new-thread").fill("Finding the sister");
+  await page.getByTestId("event-add-thread").click();
+  await expect(page.getByTestId("event-thread")).toHaveCount(1);
+  await expect(page.getByTestId("event-thread")).toBeChecked();
+  await page.getByTestId("event-save").click();
+  await expect(page.getByTestId("event-dialog")).toBeHidden();
+  await expect(chart.getByTestId("chart-row")).toHaveCount(1);
+  await expect(chart.getByTestId("chart-row")).toContainText("Finding the sister");
+
+  // The column opens its event.
+  await chart.getByTestId("chart-column").first().click();
+  await expect(page.getByTestId("event-title")).toHaveValue("The map arrives");
+  await page.getByTestId("event-cancel").click();
+
+  // The row choice is remembered.
+  await page.reload();
+  await expect(page.getByTestId("timeline-chart")).toHaveAttribute("data-rows", "threads");
+  const { canon } = await (await request.get(`/api/works/${work.id}/canon`)).json();
+  expect(canon.threads.map((thread) => thread.name)).toEqual(["Finding the sister"]);
+  expect(canon.events.find((item) => item.id === vanish.id).threadIds).toEqual([canon.threads[0].id]);
+});

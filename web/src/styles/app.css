@@ -1382,8 +1382,15 @@ button.story-chip:hover {
   flex-direction: column;
   gap: var(--space-6);
 }
+.timeline-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: flex-start;
+}
 .timeline-list {
-  max-width: 720px;
+  flex: 1 0 320px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -1455,6 +1462,128 @@ button.story-chip:hover {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
+}
+
+/* Timeline: the chart of persons and events (mockup Fig. 2) */
+.tl-chart-card {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.tl-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.tl-chart-caption,
+.tl-chart-empty {
+  font-style: italic;
+}
+:lang(zh) .tl-chart-caption,
+:lang(zh) .tl-chart-empty {
+  font-style: normal;
+}
+.tl-chart-scroll {
+  overflow-x: auto;
+}
+.tl-chart {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.tl-chart thead th {
+  border-top: 1px solid var(--color-border-strong);
+  border-bottom: 1px solid var(--color-border-strong);
+  border-left: 1px solid var(--color-border);
+  padding: 0;
+  font-weight: normal;
+}
+.tl-chart thead td {
+  width: 140px;
+  border-top: 1px solid var(--color-border-strong);
+  border-bottom: 1px solid var(--color-border-strong);
+}
+.tl-col {
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.tl-col:hover {
+  background: var(--color-surface-sunk);
+}
+.tl-col-num {
+  font-family: var(--font-fell);
+  font-style: italic;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+}
+.tl-col-head {
+  color: var(--color-text);
+}
+.tl-col-sub {
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+.tl-col-sub.flashback {
+  color: var(--color-accent);
+}
+.tl-row-name {
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  font-weight: 600;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.tl-chart tbody tr {
+  border-bottom: 1px solid var(--color-border);
+}
+.tl-cell {
+  position: relative;
+  height: 44px;
+  border-left: 1px solid var(--color-border);
+}
+.tl-cell.in::before,
+.tl-cell.out::after {
+  content: "";
+  position: absolute;
+  top: 21px;
+  border-top: 2px solid var(--color-text);
+}
+.tl-cell.in::before {
+  left: 0;
+  right: 50%;
+}
+.tl-cell.out::after {
+  left: 50%;
+  right: 0;
+}
+.tl-dot {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: 3px solid var(--color-surface);
+  z-index: 1;
 }
 
 /* Cast: people and events found in the manuscript */
