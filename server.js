@@ -79,6 +79,8 @@ const { continuityFacts, describeCanon } = require("./src/canon-model");
 const { createCanonRepository } = require("./src/canon-store");
 const { createCanonApi } = require("./src/canon-api");
 const canonDrafts = require("./src/canon-drafts");
+const plotSpine = require("./src/plot-spine");
+const timelineChecks = require("./src/timeline-checks");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -2945,8 +2947,61 @@ async function handleCanonDraftApi(req, res, parts, db, work) {
   return false;
 }
 
+// The story spine (plan 5.8): six sentences on the story, and AI suggestions for one of them.
+async function handleSpineApi(req, res, parts, db, work) {
+  if (parts[3] !== "spine") return false;
+  assertOwner(req.user, work);
+  // GET /api/works/:id/spine
+  if (req.method === "GET" && parts.length === 4) {
+    sendJson(res, 200, { spine: plotSpine.normalizeSpine(work.spine) });
+    return true;
+  }
+  // PUT /api/works/:id/spine { lines, baseRevision }
+  if (req.method === "PUT" && parts.length === 4) {
+    const body = await readBody(req, 64 * 1024);
+    const spine = plotSpine.updateSpine(work, body, nowIso());
+    work.updatedAt = spine.updatedAt;
+    await writeDb(db);
+    sendJson(res, 200, { spine });
+    return true;
+  }
+  // POST /api/works/:id/spine/suggestions { line, index? } → nothing is saved.
+  if (req.method === "POST" && parts.length === 5 && parts[4] === "suggestions") {
+    const body = await readBody(req, 16 * 1024);
+    const suggestions = isTestAiEnabled()
+      ? plotSpine.testSuggestions(work, body)
+      : plotSpine.normalizeSuggestions(await callStructuredAi(work, plotSpine.suggestionRequest(work, body)), body.line);
+    sendJson(res, 200, { suggestions });
+    return true;
+  }
+  return false;
+}
+
+// Timeline checks (plan 5.7): contradictions found without AI, and "What's missing?".
+async function handleTimelineApi(req, res, parts, db, work) {
+  if (parts[3] !== "timeline" || parts.length !== 5) return false;
+  assertOwner(req.user, work);
+  // GET /api/works/:id/timeline/checks
+  if (req.method === "GET" && parts[4] === "checks") {
+    sendJson(res, 200, { problems: timelineChecks.checkTimeline(work) });
+    return true;
+  }
+  // POST /api/works/:id/timeline/missing → gaps in cause and effect; nothing is saved.
+  if (req.method === "POST" && parts[4] === "missing") {
+    await readBody(req, 16 * 1024);
+    const gaps = isTestAiEnabled()
+      ? timelineChecks.testMissing(work)
+      : timelineChecks.normalizeMissing(await callStructuredAi(work, timelineChecks.missingRequest(work)), work);
+    sendJson(res, 200, { gaps });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
   if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
+  if (await handleTimelineApi(req, res, parts, db, work)) return true;
+  if (await handleSpineApi(req, res, parts, db, work)) return true;
   if (parts[3] === "chats") {
     const workspace = ensureAiWorkspace(work, { createChat: true });
     if (req.method === "GET" && parts.length === 4) {

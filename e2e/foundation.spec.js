@@ -108,11 +108,13 @@ test("a Shape story starts from one sentence and opens in Ideate", async ({ page
   await page.getByTestId("nav-cast").click();
   await expect(page.getByTestId("cast")).toBeVisible();
   await expect(page.getByTestId("nav-cast")).toHaveAttribute("aria-current", "page");
-  for (const section of ["world", "timeline", "plot"]) {
-    await page.getByTestId(`nav-${section}`).click();
-    await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", section);
-    await expect(page.getByTestId(`nav-${section}`)).toHaveAttribute("aria-current", "page");
-  }
+  await page.getByTestId("nav-timeline").click();
+  await expect(page.getByTestId("timeline")).toBeVisible();
+  await page.getByTestId("nav-plot").click();
+  await expect(page.getByTestId("plot")).toBeVisible();
+  await page.getByTestId("nav-world").click();
+  await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", "world");
+  await expect(page.getByTestId("nav-world")).toHaveAttribute("aria-current", "page");
   await page.getByTestId("nav-write").click();
   await expect(page.getByTestId("manuscript")).toBeVisible();
   await expect(page.getByTestId("nav-write")).toHaveAttribute("aria-current", "page");

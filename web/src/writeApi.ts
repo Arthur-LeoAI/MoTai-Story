@@ -13,10 +13,20 @@ export interface Chapter {
   content: string;
   richContent: RichContent;
   status: string;
+  /** The writer's plan for the chapter (chapter cards on the Plot page). */
+  planning?: ChapterPlanning;
   /** Optimistic-lock version: every save sends the revision it was based on. */
   revision: number;
   updatedAt: string;
   deletedAt?: string;
+}
+
+export interface ChapterPlanning {
+  goal: string;
+  scene: string;
+  characters: string;
+  conflict: string;
+  hook: string;
 }
 
 export interface Work {
@@ -37,7 +47,7 @@ const send = (method: string, data: unknown): RequestInit => ({ method, body: JS
 export const writeApi = {
   work: (workId: string) => request<{ work: Work }>(base(workId)),
   addChapter: (workId: string) => request<{ chapter: Chapter; work: Work }>(`${base(workId)}/chapters`, send("POST", {})),
-  saveChapter: (workId: string, chapterId: string, baseRevision: number, change: { title?: string; richContent?: RichContent }) =>
+  saveChapter: (workId: string, chapterId: string, baseRevision: number, change: { title?: string; richContent?: RichContent; status?: string; planning?: Partial<ChapterPlanning> }) =>
     request<{ chapter: Chapter; work: Work }>(chapterPath(workId, chapterId), send("PATCH", { ...change, baseRevision })),
   deleteChapter: (workId: string, chapter: Chapter) =>
     request<{ work: Work }>(chapterPath(workId, chapter.id), send("DELETE", { baseRevision: chapter.revision })),

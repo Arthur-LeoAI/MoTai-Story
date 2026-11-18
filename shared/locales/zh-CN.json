@@ -657,7 +657,9 @@
     "AI_DAILY_LIMIT_REACHED": "今日 AI 用量已达到上限，请在用量面板查看。",
     "PLAIN_ACCOUNT_REQUIRED": "请先用自己的话讲讲这场戏里发生了什么。",
     "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。",
-    "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。"
+    "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。",
+    "TIMELINE_TOO_SHORT": "至少要有两个事件，才能看出还缺什么。",
+    "EVENT_ORDER_INVALID": "新的顺序必须把每个事件列出一次。"
   },
   "brief": {
     "intro": "帮你写这一章时我会记着的内容。不属于这一章的，可以取消勾选。",
@@ -704,5 +706,196 @@
     "unchanged": "你确认前不会加入任何内容。之后也可以在人物页修改或删除。",
     "added": "已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。",
     "partly": "目前已加入 {{characters}} 个人物、{{relations}} 条关系、{{events}} 个事件。"
+  },
+  "timeline": {
+    "part": "第四部",
+    "subtitle": "发生了什么、发生在谁身上，读者又按什么顺序知道。",
+    "orderLabel": "顺序",
+    "orders": {
+      "happened": "按发生顺序",
+      "told": "按讲述顺序"
+    },
+    "listHeading": {
+      "happened": "事件，按发生的先后",
+      "told": "事件，按读者读到的先后"
+    },
+    "listLabel": "事件",
+    "new": "新事件",
+    "newTitle": "新事件",
+    "editTitle": "事件",
+    "empty": "还没有任何事件。从你最确定的第一件事写起。",
+    "addLabel": "接下来发生了什么？",
+    "addPlaceholder": "她独自在夜里渡河",
+    "add": "添加",
+    "notPlaced": "时间未定",
+    "notTold": "尚未写到",
+    "toldIn": "在 {{chapter}} 中讲述",
+    "flashbackTo": "倒叙：{{when}}",
+    "earlier": "更早",
+    "toldHint": "这个顺序跟随章节。要改变它，请修改事件由哪一章讲述。",
+    "listSeparator": "、",
+    "earlierAria": "把“{{title}}”往前移",
+    "laterAria": "把“{{title}}”往后移",
+    "whenHint": "三年前；第二天夜里",
+    "fields": {
+      "title": "发生了什么",
+      "summary": "用几句话说说",
+      "when": "时间（用你自己的话）",
+      "chapter": "讲述于",
+      "who": "参与的人",
+      "where": "地点",
+      "threads": "情节线"
+    },
+    "noPlace": "无地点",
+    "delete": "删除事件",
+    "deleteConfirm": "删除“{{title}}”？此操作无法撤销。",
+    "newThread": "新情节线",
+    "newThreadHint": "寻找妹妹",
+    "chart": {
+      "label": "人物与事件对照图",
+      "figure": "图二",
+      "caption": "人物与事件对照图，{{order}}。",
+      "orders": {
+        "happened": "按发生顺序",
+        "told": "按读者读到的顺序"
+      },
+      "rowsLabel": "分行方式",
+      "rows": {
+        "people": "人物",
+        "threads": "情节线",
+        "places": "地点"
+      },
+      "chapter": "第 {{number}} 章",
+      "flashback": "倒叙",
+      "takesPart": "参与",
+      "noEvents": "添加事件后，这里会显示谁参与了哪些事件。",
+      "empty": {
+        "people": "还没有事件标注了人物页里的人物。请在事件里选择参与的人。",
+        "threads": "还没有事件归入情节线。可以在事件里添加。",
+        "places": "还没有事件标注地点。地点将随“世界”页加入。"
+      },
+      "setup": {
+        "planted": "埋下",
+        "paid": "回收",
+        "waiting": "尚未回收"
+      },
+      "setupsOff_other": "有 {{count}} 个伏笔没有显示在图上：埋下它的那一章里，图上没有事件。"
+    },
+    "checks": {
+      "title": "时间线检查",
+      "none": "在目前记录的内容里没有发现矛盾。",
+      "flag": "有一条时间线检查与这个事件有关",
+      "open": "打开“{{title}}”",
+      "kinds": {
+        "twoPlaces": "{{name}}同时出现在两个地方（{{when}}）：“{{event1}}”在{{place1}}，“{{event2}}”在{{place2}}。",
+        "afterDeath": "{{name}}参与了“{{event}}”，但第 {{chapter}} 章的事实记录是：{{fact}}。如果这件事发生在那之前，就没有问题。",
+        "payoffBeforePlant": "伏笔“{{setup}}”在第 {{paid}} 章回收，却到第 {{planted}} 章才埋下。"
+      },
+      "ask": "还缺什么？",
+      "asking": "正在阅读时间线……",
+      "askHint": "有两个以上事件时，AI 可以找出事件之间的缺口。",
+      "missingTitle": "AI 找到的缺口",
+      "after": "在“{{title}}”之后",
+      "nothingMissing": "AI 没有在这些事件之间找到缺口。",
+      "missingHint": "这些只是提示，不会修改作品：没有任何内容被添加。"
+    }
+  },
+  "setups": {
+    "label": "伏笔与回收",
+    "new": "新伏笔",
+    "newTitle": "新伏笔",
+    "editTitle": "伏笔",
+    "description": "埋下了什么",
+    "descriptionHint": "地图角落里的那个记号",
+    "plantedIn": "埋在",
+    "paidOffIn": "回收于",
+    "notPlanted": "还没埋下",
+    "noPayoff": "未定",
+    "statusLabel": "状态",
+    "status": {
+      "open": "等待回收",
+      "paid": "已回收",
+      "dropped": "已放弃"
+    },
+    "chapters": "章节",
+    "events": "事件",
+    "inChapter": "第 {{number}} 章（{{title}}）",
+    "chapterTitle": "{{title}}",
+    "inEvent": "“{{title}}”",
+    "missing": "已删除的内容",
+    "planted": "埋在{{where}}",
+    "notPlantedYet": "还没埋下",
+    "paidIn": "回收于{{where}}",
+    "plannedIn": "计划回收于{{where}}",
+    "waiting_other": "已埋下、尚未回收（{{count}}）",
+    "waitingHint": "读者会记得埋下的东西。请回收它，或者有意放弃。",
+    "unplanted": "还没埋下的想法",
+    "settled_other": "已回收或已放弃（{{count}}）",
+    "empty": "还没有伏笔。现在埋下一点以后会起作用的东西吧。",
+    "delete": "删除伏笔",
+    "deleteConfirm": "删除这个伏笔？此操作无法撤销。"
+  },
+  "plot": {
+    "part": "第五部分",
+    "subtitle": "故事的主线，以及每一章要做什么。",
+    "spine": {
+      "title": "故事骨架",
+      "hint": "每一格写一句平实的话就够了。顺序不限；某一格空着时，可以请 AI 出主意。",
+      "count": "已填 {{filled}} / {{total}} 句",
+      "saved": "已保存",
+      "lines": {
+        "once": "从前……",
+        "everyDay": "每一天……",
+        "oneDay": "直到有一天……",
+        "because": "因为这样……",
+        "finally": "直到最后……",
+        "everSince": "从那以后……"
+      },
+      "hints": {
+        "once": "主角是谁，生活在怎样的世界",
+        "everyDay": "TA 平常的日子是什么样",
+        "oneDay": "出了什么岔子",
+        "because": "接着发生了什么",
+        "finally": "事情在哪一刻见分晓",
+        "everSince": "之后的日子，以及什么改变了"
+      },
+      "suggest": "出主意",
+      "asking": "正在想……",
+      "suggestionsLabel": "建议",
+      "dismiss": "都不要",
+      "add": "再加一句“因为这样”",
+      "remove": "删除"
+    },
+    "board": {
+      "title": "章节卡",
+      "hint": "每章一张卡：这一章要做成什么，结尾留给读者什么。把卡片拖到别的列，或者用卡片上的箭头。",
+      "add": "新章节",
+      "chapter": "第 {{number}} 章",
+      "cardTitle": "第 {{number}} 章",
+      "noGoal": "这一章要做成什么？",
+      "leaves": "留下：{{hook}}",
+      "columns": {
+        "idea": "想法",
+        "planned": "已规划",
+        "drafted": "已起草",
+        "done": "已完成"
+      },
+      "fields": {
+        "title": "标题",
+        "goal": "这一章要做成什么",
+        "conflict": "有什么在阻碍",
+        "hook": "结尾留给读者什么",
+        "status": "状态"
+      },
+      "hints": {
+        "goal": "林晚确认地图是真的",
+        "conflict": "老陈不肯开船",
+        "hook": "无人岛上亮起了一盏灯"
+      },
+      "earlier": "把“{{title}}”往前移",
+      "later": "把“{{title}}”往后移",
+      "back": "把“{{title}}”移到上一列",
+      "forward": "把“{{title}}”移到下一列"
+    }
   }
 }

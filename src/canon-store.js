@@ -234,7 +234,32 @@ function createCanonRepository(store, { now = nowIso, makeId = createId } = {}) 
     });
   }
 
-  return { read, create, update, remove };
+  // Puts the events in a new story order (the "as it happened" order of the
+  // Timeline). Names every event once, and the canon revision it was based on.
+  async function reorderEvents(workId, user, body) {
+    if (!isObject(body) || !Array.isArray(body.eventIds)) throw appError("BAD_REQUEST");
+    if (!Number.isInteger(body.canonRevision)) throw appError("BASE_REVISION_REQUIRED");
+    return mutate(workId, user, (work) => {
+      if (body.canonRevision !== work.canonRevision) throw appError("REVISION_CONFLICT");
+      const events = work.canon.events;
+      const ids = body.eventIds;
+      if (ids.length !== events.length || new Set(ids).size !== ids.length || ids.some((id) => !events.some((event) => event.id === id))) {
+        throw appError("EVENT_ORDER_INVALID");
+      }
+      const timestamp = now();
+      ids.forEach((id, index) => {
+        const event = events.find((candidate) => candidate.id === id);
+        if (event.storyOrder === index + 1) return;
+        event.storyOrder = index + 1;
+        event.revision += 1;
+        event.updatedAt = timestamp;
+      });
+      // Story order is not part of any derived fact, so nothing else is invalidated.
+      return { events: [...events].sort((a, b) => a.storyOrder - b.storyOrder) };
+    });
+  }
+
+  return { read, create, update, remove, reorderEvents };
 }
 
 module.exports = { createCanonRepository, REASON_CHANGED, REASON_REMOVED };

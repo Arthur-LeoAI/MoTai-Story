@@ -54,10 +54,76 @@ export interface RelationDraft {
   tension: string;
 }
 
+/** Something that happens: its place in story time (storyOrder) and the chapter that tells it (reader order). */
+export interface StoryEvent {
+  id: string;
+  title: string;
+  summary: string;
+  storyOrder: number;
+  /** The writer's own words for when it happens ("three years earlier"). */
+  timeLabel: string;
+  /** The chapter that tells it; empty while it is not told yet. */
+  chapterId: string;
+  participantIds: string[];
+  locationId: string;
+  threadIds: string[];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventDraft {
+  title: string;
+  summary: string;
+  timeLabel: string;
+  chapterId: string;
+  participantIds: string[];
+  locationId: string;
+  threadIds: string[];
+}
+
+/** A plot line events belong to ("Finding the sister", "The love story"). */
+export interface Thread {
+  id: string;
+  name: string;
+  color: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Canon {
   entities: Entity[];
   relations: Relation[];
+  events: StoryEvent[];
+  threads: Thread[];
+  setups: Setup[];
   canonRevision: number;
+}
+
+/** Where a setup is planted or paid off: a chapter, or an event. */
+export interface SetupAnchor {
+  kind: "chapter" | "event";
+  id: string;
+}
+
+/** Foreshadowing: something planted early that should pay off later. */
+export interface Setup {
+  id: string;
+  description: string;
+  plantedIn: SetupAnchor | null;
+  paidOffIn: SetupAnchor | null;
+  status: "open" | "paid" | "dropped";
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SetupDraft {
+  description: string;
+  plantedIn: SetupAnchor | null;
+  paidOffIn: SetupAnchor | null;
+  status: Setup["status"];
 }
 
 /** The fields a writer edits on a card. Empty strings clear a field. */
@@ -100,8 +166,23 @@ export const castApi = {
     request<{ task: ExtractTask }>(`${base(workId)}/drafts/manuscript`, send("POST", { requestId: crypto.randomUUID() })),
   task: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}`),
   cancelTask: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, send("POST", {})),
-  createEvent: (workId: string, event: { title: string; summary: string; chapterId: string; participantIds: string[]; locationId: string }) =>
-    request<{ item: { id: string } }>(`${base(workId)}/events`, send("POST", event)),
+  createEvent: (workId: string, event: Partial<EventDraft> & { title: string }) =>
+    request<{ item: StoryEvent; canonRevision: number }>(`${base(workId)}/events`, send("POST", event)),
+  updateEvent: (workId: string, event: StoryEvent, draft: EventDraft) =>
+    request<{ item: StoryEvent; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("PATCH", { ...draft, baseRevision: event.revision })),
+  removeEvent: (workId: string, event: StoryEvent) =>
+    request<{ removed: { id: string }; canonRevision: number }>(`${base(workId)}/events/${encodeURIComponent(event.id)}`, send("DELETE", { baseRevision: event.revision })),
+  createSetup: (workId: string, draft: SetupDraft) =>
+    request<{ item: Setup; canonRevision: number }>(`${base(workId)}/setups`, send("POST", draft)),
+  updateSetup: (workId: string, setup: Setup, draft: SetupDraft) =>
+    request<{ item: Setup; canonRevision: number }>(`${base(workId)}/setups/${encodeURIComponent(setup.id)}`, send("PATCH", { ...draft, baseRevision: setup.revision })),
+  removeSetup: (workId: string, setup: Setup) =>
+    request<{ removed: { id: string }; canonRevision: number }>(`${base(workId)}/setups/${encodeURIComponent(setup.id)}`, send("DELETE", { baseRevision: setup.revision })),
+  createThread: (workId: string, name: string) =>
+    request<{ item: Thread; canonRevision: number }>(`${base(workId)}/threads`, send("POST", { name })),
+  /** A new story order for all events, against the canon revision it was read at. */
+  reorderEvents: (workId: string, eventIds: string[], canonRevision: number) =>
+    request<{ events: StoryEvent[]; canonRevision: number }>(`${base(workId)}/events/order`, send("POST", { eventIds, canonRevision })),
   removeRelation: (workId: string, relation: Relation) =>
     request<{ removed: { id: string }; canonRevision: number }>(relationPath(workId, relation.id), send("DELETE", { baseRevision: relation.revision }))
 };

@@ -668,7 +668,9 @@
     "AI_DAILY_LIMIT_REACHED": "Today's AI usage limit has been reached. See the usage panel.",
     "PLAIN_ACCOUNT_REQUIRED": "Tell me what happens in the scene first, in your own words.",
     "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
-    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read."
+    "MANUSCRIPT_EMPTY": "There is no text in this story yet to read.",
+    "TIMELINE_TOO_SHORT": "Add at least two events before asking what is missing.",
+    "EVENT_ORDER_INVALID": "The new order must list every event once."
   },
   "brief": {
     "intro": "What I keep in mind while helping with this chapter. Untick anything that does not belong here.",
@@ -716,5 +718,199 @@
     "unchanged": "Nothing is added until you choose. You can change or delete anything later in Cast.",
     "added": "Added {{characters}} people, {{relations}} relationships and {{events}} events.",
     "partly": "So far, {{characters}} people, {{relations}} relationships and {{events}} events were added."
+  },
+  "timeline": {
+    "part": "Part IV",
+    "subtitle": "What happens, to whom, and in what order the reader learns it.",
+    "orderLabel": "Order",
+    "orders": {
+      "happened": "As it happened",
+      "told": "As it is told"
+    },
+    "listHeading": {
+      "happened": "Events, in the order they happened",
+      "told": "Events, in the order the reader meets them"
+    },
+    "listLabel": "Events",
+    "new": "New event",
+    "newTitle": "A new event",
+    "editTitle": "Event",
+    "empty": "Nothing has happened yet. Start with the first thing you know.",
+    "addLabel": "And then what happened?",
+    "addPlaceholder": "She crosses the river at night, alone",
+    "add": "Add",
+    "notPlaced": "Not placed",
+    "notTold": "Not told yet",
+    "toldIn": "Told in {{chapter}}",
+    "flashbackTo": "A flashback to {{when}}",
+    "earlier": "earlier",
+    "toldHint": "This order follows the chapters. To change it, change which chapter tells an event.",
+    "listSeparator": ", ",
+    "earlierAria": "Move “{{title}}” earlier",
+    "laterAria": "Move “{{title}}” later",
+    "whenHint": "Three years earlier; the next night",
+    "fields": {
+      "title": "What happens",
+      "summary": "In a few sentences",
+      "when": "When, in your words",
+      "chapter": "Told in",
+      "who": "Who takes part",
+      "where": "Where",
+      "threads": "Plot lines"
+    },
+    "noPlace": "No place",
+    "delete": "Delete event",
+    "deleteConfirm": "Delete “{{title}}”? This cannot be undone.",
+    "newThread": "New plot line",
+    "newThreadHint": "Finding the sister",
+    "chart": {
+      "label": "Chart of persons and events",
+      "figure": "Fig. 2",
+      "caption": "A chart of persons and events, {{order}}.",
+      "orders": {
+        "happened": "in the order they happened",
+        "told": "in the order the reader meets them"
+      },
+      "rowsLabel": "Rows",
+      "rows": {
+        "people": "People",
+        "threads": "Plot lines",
+        "places": "Places"
+      },
+      "chapter": "Ch. {{number}}",
+      "flashback": "flashback",
+      "takesPart": "takes part",
+      "noEvents": "Add events to see who is in them.",
+      "empty": {
+        "people": "No event names anyone from Cast yet. Choose who takes part in an event.",
+        "threads": "No event belongs to a plot line yet. Add one in an event.",
+        "places": "No event has a place yet. Places come with the World page."
+      },
+      "setup": {
+        "planted": "planted",
+        "paid": "paid off",
+        "waiting": "not yet paid off"
+      },
+      "setupsOff_one": "{{count}} setup is not on the chart: no event shown here is in the chapter where it is planted.",
+      "setupsOff_other": "{{count}} setups are not on the chart: no event shown here is in the chapter where they are planted."
+    },
+    "checks": {
+      "title": "Timeline checks",
+      "none": "No contradictions found in what the story records so far.",
+      "flag": "A timeline check is about this event",
+      "open": "Open “{{title}}”",
+      "kinds": {
+        "twoPlaces": "{{name}} is in two places at once ({{when}}): in {{place1}} for “{{event1}}” and in {{place2}} for “{{event2}}”.",
+        "afterDeath": "{{name}} takes part in “{{event}}”, but a fact from chapter {{chapter}} says: {{fact}}. Fine if this happens earlier.",
+        "payoffBeforePlant": "The setup “{{setup}}” pays off in chapter {{paid}}, before it is planted in chapter {{planted}}."
+      },
+      "ask": "What's missing?",
+      "asking": "Reading the timeline…",
+      "askHint": "With two events or more, the AI can look for gaps between them.",
+      "missingTitle": "Gaps the AI found",
+      "after": "After “{{title}}”",
+      "nothingMissing": "The AI found no gap between these events.",
+      "missingHint": "These are pointers, not changes: nothing has been added to the story."
+    }
+  },
+  "setups": {
+    "label": "Setups and payoffs",
+    "new": "New setup",
+    "newTitle": "A new setup",
+    "editTitle": "Setup",
+    "description": "What is planted",
+    "descriptionHint": "The mark in the corner of the map",
+    "plantedIn": "Planted in",
+    "paidOffIn": "Paid off in",
+    "notPlanted": "Not planted yet",
+    "noPayoff": "Not decided",
+    "statusLabel": "State",
+    "status": {
+      "open": "Waiting to pay off",
+      "paid": "Paid off",
+      "dropped": "Dropped"
+    },
+    "chapters": "Chapters",
+    "events": "Events",
+    "inChapter": "Chapter {{number}} ({{title}})",
+    "chapterTitle": "{{title}}",
+    "inEvent": "“{{title}}”",
+    "missing": "something since deleted",
+    "planted": "Planted in {{where}}",
+    "notPlantedYet": "Not planted yet",
+    "paidIn": "paid off in {{where}}",
+    "plannedIn": "to pay off in {{where}}",
+    "waiting_one": "Planted, not yet paid off ({{count}})",
+    "waiting_other": "Planted, not yet paid off ({{count}})",
+    "waitingHint": "Readers remember what was planted. Pay it off, or drop it on purpose.",
+    "unplanted": "Ideas not planted yet",
+    "settled_one": "Paid off or dropped ({{count}})",
+    "settled_other": "Paid off or dropped ({{count}})",
+    "empty": "No setups yet. Plant something now that should matter later.",
+    "delete": "Delete setup",
+    "deleteConfirm": "Delete this setup? This cannot be undone."
+  },
+  "plot": {
+    "part": "Part V",
+    "subtitle": "The main line of the story, and what each chapter is for.",
+    "spine": {
+      "title": "The story spine",
+      "hint": "One plain sentence for each line is enough. Fill them in any order; ask for ideas when a line is empty.",
+      "count": "{{filled}} of {{total}} lines",
+      "saved": "Saved",
+      "lines": {
+        "once": "Once upon a time…",
+        "everyDay": "Every day…",
+        "oneDay": "Until one day…",
+        "because": "Because of that…",
+        "finally": "Until finally…",
+        "everSince": "And ever since then…"
+      },
+      "hints": {
+        "once": "who your hero is, and the world they live in",
+        "everyDay": "how things usually are for them",
+        "oneDay": "the thing that goes wrong",
+        "because": "what follows from it",
+        "finally": "the moment it is decided",
+        "everSince": "how things are now, and what has changed"
+      },
+      "suggest": "Suggest",
+      "asking": "Thinking…",
+      "suggestionsLabel": "Suggestions",
+      "dismiss": "None of these",
+      "add": "Add “because of that”",
+      "remove": "Remove"
+    },
+    "board": {
+      "title": "Chapter cards",
+      "hint": "One card per chapter: what it must do, and what it leaves us with. Drag a card to another column, or use its arrows.",
+      "add": "New chapter",
+      "chapter": "Chapter {{number}}",
+      "cardTitle": "Chapter {{number}}",
+      "noGoal": "What must this chapter do?",
+      "leaves": "Leaves us with: {{hook}}",
+      "columns": {
+        "idea": "Idea",
+        "planned": "Planned",
+        "drafted": "Drafted",
+        "done": "Finished"
+      },
+      "fields": {
+        "title": "Title",
+        "goal": "What this chapter must do",
+        "conflict": "What stands in the way",
+        "hook": "What it leaves us with",
+        "status": "State"
+      },
+      "hints": {
+        "goal": "Mira learns the map is real",
+        "conflict": "Kael is watching the harbour",
+        "hook": "a light on the island where no one lives"
+      },
+      "earlier": "Move “{{title}}” earlier",
+      "later": "Move “{{title}}” later",
+      "back": "Move “{{title}}” to the previous column",
+      "forward": "Move “{{title}}” to the next column"
+    }
   }
 }
