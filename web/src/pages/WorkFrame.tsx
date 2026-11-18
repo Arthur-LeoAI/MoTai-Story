@@ -7,6 +7,7 @@ import Ideate from "./Ideate";
 import Cast from "./Cast";
 import Timeline from "./Timeline";
 import Plot from "./Plot";
+import World from "./World";
 import Write from "./Write";
 import Companion from "../components/Companion";
 import { StorySearch, StorySettingsDialog } from "../components/StoryTools";
@@ -141,6 +142,11 @@ export default function WorkFrame() {
       ) : section === "timeline" ? (
         <main id="main" className="frame-main frame-main-page">
           {loaded.state === "ready" ? <Timeline key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
+          <Notice />
+        </main>
+      ) : section === "world" ? (
+        <main id="main" className="frame-main frame-main-page">
+          {loaded.state === "ready" ? <World key={loaded.work.id} work={loaded.work} /> : <p className="muted frame-loading">{t("app.loading")}</p>}
           <Notice />
         </main>
       ) : section === "plot" ? (

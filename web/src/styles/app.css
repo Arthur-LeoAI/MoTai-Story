@@ -1933,6 +1933,83 @@ button.story-chip:hover {
   background: var(--color-accent);
 }
 
+/* World: the world in a sentence, and rules */
+.world {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.world-sentence {
+  max-width: 860px;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.world-sentence-line {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+  line-height: 1.6;
+}
+.world-blank {
+  flex: 1 1 240px;
+  min-width: 0;
+  font: inherit;
+  font-style: italic;
+  color: var(--color-accent);
+}
+.world-blank:lang(zh) {
+  font-style: normal;
+}
+.world-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.rule-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+.rule-card {
+  width: 100%;
+  height: 100%;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.rule-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+.rule-missing {
+  font-style: italic;
+}
+.rule-missing:lang(zh),
+:lang(zh) .rule-missing {
+  font-style: normal;
+}
+@media (max-width: 640px) {
+  .rule-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

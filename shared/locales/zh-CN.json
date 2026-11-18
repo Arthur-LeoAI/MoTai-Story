@@ -440,6 +440,10 @@
       "replaceNote": "恢复会用备份内容替换整个作品库。",
       "confirm_other": "这个备份包含 {{count}} 部作品，将替换你的整个作品库。继续吗？",
       "restored_other": "已恢复 {{count}} 部作品。"
+    },
+    "classic": {
+      "heading": "旧版工作台",
+      "intro": "有几项工具还没有搬到新界面：手动编辑事实、写作偏好、分卷和封面。它们仍在旧版工作台里。"
     }
   },
   "import": {
@@ -896,6 +900,50 @@
       "later": "把“{{title}}”往后移",
       "back": "把“{{title}}”移到上一列",
       "forward": "把“{{title}}”移到下一列"
+    }
+  },
+  "world": {
+    "part": "第三部分",
+    "subtitle": "这个世界和我们的世界有什么不同，又要付出什么代价。",
+    "sentence": {
+      "title": "一句话世界",
+      "before": "一个",
+      "middle": "的世界，在这里",
+      "after": "。",
+      "whatLabel": "怎样的世界",
+      "whatHint": "海水淹没了旧日道路",
+      "hereLabel": "这里有什么不同",
+      "hereHint": "一张好地图比黄金还值钱"
+    },
+    "rules": {
+      "title": "世界规则",
+      "hint": "每条规则回答三个问题：规则是什么、代价或限制是什么、有没有例外。AI 写作时会遵守每一条规则。",
+      "new": "新规则",
+      "newTitle": "新规则",
+      "editTitle": "规则",
+      "empty": "还没有规则。在这里，有什么事是我们的世界里不可能发生的？",
+      "fields": {
+        "rule": "规则",
+        "cost": "代价或限制",
+        "exception": "例外",
+        "detail": "更多说明"
+      },
+      "short": {
+        "cost": "代价",
+        "exception": "例外"
+      },
+      "hints": {
+        "rule": "说出真名就能支配对方",
+        "cost": "说的人会忘记自己的一段记忆",
+        "exception": "对从未被命名的人无效",
+        "detail": "关于这条规则，AI 还应该知道什么"
+      },
+      "noCost": "还没有代价。没有代价的规则很难产生张力。",
+      "noException": "无",
+      "more": "更多",
+      "ruleRequired": "请先写下规则。",
+      "delete": "删除规则",
+      "deleteConfirm": "删除这条规则？此操作无法撤销。"
     }
   }
 }

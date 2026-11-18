@@ -81,6 +81,7 @@ const { createCanonApi } = require("./src/canon-api");
 const canonDrafts = require("./src/canon-drafts");
 const plotSpine = require("./src/plot-spine");
 const timelineChecks = require("./src/timeline-checks");
+const storyWorld = require("./src/world");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -2998,7 +2999,29 @@ async function handleTimelineApi(req, res, parts, db, work) {
   return false;
 }
 
+// The world in a sentence (plan 5.6).
+async function handleWorldApi(req, res, parts, db, work) {
+  if (parts[3] !== "world" || parts.length !== 4) return false;
+  assertOwner(req.user, work);
+  // GET /api/works/:id/world
+  if (req.method === "GET") {
+    sendJson(res, 200, { world: storyWorld.normalizeWorld(work.world) });
+    return true;
+  }
+  // PUT /api/works/:id/world { lines: { what?, here? }, baseRevision }
+  if (req.method === "PUT") {
+    const body = await readBody(req, 16 * 1024);
+    const world = storyWorld.updateWorld(work, body, nowIso());
+    work.updatedAt = world.updatedAt;
+    await writeDb(db);
+    sendJson(res, 200, { world });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
+  if (await handleWorldApi(req, res, parts, db, work)) return true;
   if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
   if (await handleTimelineApi(req, res, parts, db, work)) return true;
   if (await handleSpineApi(req, res, parts, db, work)) return true;

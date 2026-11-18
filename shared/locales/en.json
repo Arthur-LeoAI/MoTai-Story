@@ -450,6 +450,10 @@
       "confirm_other": "This backup holds {{count}} stories. It will replace your whole library. Continue?",
       "restored_one": "Restored {{count}} story.",
       "restored_other": "Restored {{count}} stories."
+    },
+    "classic": {
+      "heading": "Previous workspace",
+      "intro": "A few tools are not in the new design yet: editing facts by hand, writing preferences, volumes, and covers. They are still in the previous workspace."
     }
   },
   "import": {
@@ -911,6 +915,50 @@
       "later": "Move “{{title}}” later",
       "back": "Move “{{title}}” to the previous column",
       "forward": "Move “{{title}}” to the next column"
+    }
+  },
+  "world": {
+    "part": "Part III",
+    "subtitle": "What makes this world different from ours, and what it costs.",
+    "sentence": {
+      "title": "The world in a sentence",
+      "before": "A world",
+      "middle": ", in which",
+      "after": ".",
+      "whatLabel": "What kind of world",
+      "whatHint": "where the sea has swallowed the old roads",
+      "hereLabel": "What is true here",
+      "hereHint": "a good map is worth more than gold"
+    },
+    "rules": {
+      "title": "Rules of the world",
+      "hint": "Each rule answers three questions: what it is, what it costs, and when it does not hold. The AI keeps to every rule when it writes.",
+      "new": "New rule",
+      "newTitle": "A new rule",
+      "editTitle": "Rule",
+      "empty": "No rules yet. What can happen here that could not happen in our world?",
+      "fields": {
+        "rule": "The rule",
+        "cost": "What it costs, or what limits it",
+        "exception": "Exceptions",
+        "detail": "In more detail"
+      },
+      "short": {
+        "cost": "Cost",
+        "exception": "Exception"
+      },
+      "hints": {
+        "rule": "Speaking someone's true name gives power over them",
+        "cost": "The speaker forgets a memory of their own",
+        "exception": "It has no hold on someone who was never named",
+        "detail": "Anything else the AI should know about this rule"
+      },
+      "noCost": "No cost yet. A rule that costs nothing makes little drama.",
+      "noException": "None",
+      "more": "More",
+      "ruleRequired": "Write the rule first.",
+      "delete": "Delete rule",
+      "deleteConfirm": "Delete this rule? This cannot be undone."
     }
   }
 }

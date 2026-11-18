@@ -375,7 +375,8 @@ function deriveCanonFacts(work) {
   const facts = [];
 
   for (const entity of canon.entities) {
-    const value = entityDescription(entity, labels);
+    // A rule is often only its statement; it is still a constraint.
+    const value = entityDescription(entity, labels) || (entity.type === "rule" ? entity.name : "");
     if (!value && !entity.aliases.length) continue;
     facts.push({
       ...base,

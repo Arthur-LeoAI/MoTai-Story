@@ -102,10 +102,8 @@ test("the sample story is offered in the interface language from the library", a
   expect(work).toMatchObject({ language: "zh-CN", sample: true, focus: "write" });
 });
 
-test("pages not rebuilt yet point to the previous workspace at /classic/", async ({ page, request }) => {
-  const created = await request.post("/api/works", { data: { title: "Classic", language: "en" } });
-  const workId = (await created.json()).work.id;
-  await page.goto(`/app/works/${workId}/world`);
+test("tools not rebuilt yet are reached from Settings, in the previous workspace at /classic/", async ({ page, request }) => {
+  await page.goto("/app/settings");
   await expect(page.getByTestId("legacy-link")).toHaveAttribute("href", "/classic/");
   const classic = await request.get("/classic/");
   expect(classic.ok()).toBeTruthy();
