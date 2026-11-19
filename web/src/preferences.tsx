@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, errorText } from "./api";
 import { isUiLocale, rememberLocale, type UiLocale } from "./i18n";
@@ -24,6 +24,9 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
   const [notice, setNotice] = useState("");
   const [welcomedAt, setWelcomedAt] = useState<string | null | undefined>(undefined);
   const locale: UiLocale = isUiLocale(i18n.resolvedLanguage) ? i18n.resolvedLanguage : "en";
+  // What the writer has already chosen on this page: a slower answer from the
+  // server must not undo it.
+  const chosen = useRef({ locale: false, theme: false });
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -31,7 +34,8 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
 
   useEffect(() => applyTheme(theme), [theme]);
 
-  // Preferences saved on the server win over this device's copy once they arrive.
+  // Preferences saved on the server win over this device's copy once they
+  // arrive, unless the writer has chosen again in the meantime.
   useEffect(() => {
     let active = true;
     api.session()
@@ -39,11 +43,11 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
         if (!active) return;
         setWelcomedAt(preferences.welcomedAt ?? null);
         if (!preferences.updatedAt) return;
-        if (isUiLocale(preferences.uiLocale) && preferences.uiLocale !== i18n.resolvedLanguage) {
+        if (!chosen.current.locale && isUiLocale(preferences.uiLocale) && preferences.uiLocale !== i18n.resolvedLanguage) {
           rememberLocale(preferences.uiLocale);
           void i18n.changeLanguage(preferences.uiLocale);
         }
-        if (isTheme(preferences.theme)) setTheme(preferences.theme);
+        if (!chosen.current.theme && isTheme(preferences.theme)) setTheme(preferences.theme);
       })
       .catch((error) => active && setNotice(errorText(t, error)));
     return () => {
@@ -67,12 +71,14 @@ export function PreferencesProvider({ initialTheme, children }: { initialTheme: 
       save({ welcomed: true });
     },
     setLocale: (next) => {
+      chosen.current.locale = true;
       rememberLocale(next);
       void i18n.changeLanguage(next);
       save({ uiLocale: next });
     },
     toggleTheme: () => {
       const next: Theme = theme === "paper" ? "candle" : "paper";
+      chosen.current.theme = true;
       setTheme(next);
       save({ theme: next });
     }
