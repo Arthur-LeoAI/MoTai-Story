@@ -9,7 +9,7 @@ Plan reference: `docs/SUMITALE_PLAN.md`, section 4. Code: `src/canon-model.js` (
 | Collection | Fields (besides `id`, `ownerId`, `revision`, `createdAt`, `updatedAt`) |
 |---|---|
 | `entities` | `type` (character, location, faction, item, rule), `name`, `aliases`, `summary`, `card`, `notes`, `image`, `color`, `parentId` (places only: the place this one is inside; phase 4) |
-| `relations` | `fromId`, `toId`, `kind` (family, friend, lover, mentor, rival, enemy, ally, custom), `label`, `tension`, `storyFrom`, `storyUntil` |
+| `relations` | `fromId`, `toId`, `kind` (family, friend, lover, mentor, rival, enemy, ally, custom), `label`, `tension`, `storyFrom`, `storyUntil`, `fromChapterId`, `untilChapterId` (phase 5: the first and last chapter in which it holds) |
 | `events` | `title`, `summary`, `storyOrder`, `timeLabel`, `chapterId`, `participantIds`, `locationId`, `threadIds` |
 | `threads` | `name`, `color` |
 | `setups` | `description`, `plantedIn`, `paidOffIn` (each `{ kind: "chapter" \| "event", id }` or null), `status` (open, paid, dropped) |

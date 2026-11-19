@@ -2165,6 +2165,110 @@ button.story-chip:hover {
   text-decoration: underline;
 }
 
+/* Write: writing style */
+.style-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.style-manage {
+  align-self: flex-start;
+  padding-inline: 0;
+  text-decoration: underline;
+}
+.style-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.style-item {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.style-item-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+.style-new,
+.style-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.style-new > .btn,
+.style-form .draft-actions {
+  align-self: flex-start;
+}
+.style-form > .dialog-field {
+  flex: none;
+}
+
+/* Write: three ways */
+.three-ways {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.three-ways > .btn {
+  align-self: flex-start;
+}
+.ways-styles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.ways-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.way {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.way-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.way-why {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+.way-why:lang(zh) {
+  font-style: normal;
+}
+
+/* Cast: the relationship map over the story */
+.relmap-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.relmap-progress input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

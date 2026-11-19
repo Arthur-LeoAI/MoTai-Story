@@ -345,3 +345,43 @@ test("people and events found in the manuscript are added only when ticked", asy
   expect(canon.events[0].chapterId).toBe(chapter.id);
   await expect(page.getByTestId("relations-node")).toHaveCount(2);
 });
+
+test("relationships hold between chapters, and the map shows how things stand as of each chapter", async ({ page, request }) => {
+  // The last save is refused on purpose (it would end before it begins).
+  expectedFailures.get(page).push(400);
+  const workId = await newStory(request);
+  for (const title of ["The Archive", "The Island"]) await request.post(`/api/works/${workId}/chapters`, { data: { title } });
+  const chapters = (await (await request.get(`/api/works/${workId}`)).json()).work.chapters;
+  const mira = await character(request, workId, "Mira");
+  const kael = await character(request, workId, "Kael");
+  // Friends through chapter 1, set in the dialog; enemies from chapter 2.
+  await request.post(`/api/works/${workId}/canon/relations`, { data: { fromId: mira.id, toId: kael.id, kind: "friend" } });
+  await request.post(`/api/works/${workId}/canon/relations`, { data: { fromId: mira.id, toId: kael.id, kind: "enemy", fromChapterId: chapters[1].id } });
+  await page.goto(`/app/works/${workId}/cast`);
+  await page.getByTestId("cast-view-relations").click();
+  const labels = page.getByTestId("relation-label");
+  await expect(labels).toHaveCount(2);
+
+  await labels.filter({ hasText: "Friends" }).click();
+  await page.getByTestId("relation-until-chapter").selectOption(chapters[0].id);
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-dialog")).toBeHidden();
+
+  // The whole story shows both; chapter 1 only the friendship; chapter 3 only the enmity.
+  const slider = page.getByTestId("relmap-progress");
+  await slider.fill("1");
+  await expect(page.getByTestId("relmap-as-of")).toContainText("chapter 1");
+  await expect(labels).toHaveCount(1);
+  await expect(labels).toContainText("Friends");
+  await slider.fill("3");
+  await expect(labels).toHaveCount(1);
+  await expect(labels).toContainText("Enemies");
+  await slider.fill("0");
+  await expect(labels).toHaveCount(2);
+
+  // A relationship cannot end before it begins.
+  await labels.filter({ hasText: "Enemies" }).click();
+  await page.getByTestId("relation-until-chapter").selectOption(chapters[0].id);
+  await page.getByTestId("relation-save").click();
+  await expect(page.getByTestId("relation-error")).toBeVisible();
+});

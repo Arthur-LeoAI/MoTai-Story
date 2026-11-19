@@ -151,6 +151,10 @@ function normalizeRelation(value) {
     // as temporal facts and `scene.storyTime`. null = not placed in time.
     storyFrom: numberOrNull(source.storyFrom),
     storyUntil: numberOrNull(source.storyUntil),
+    // In reader terms (phase 5): the first and the last chapter in which the
+    // relationship holds; empty = from the start / to the end.
+    fromChapterId: id(source.fromChapterId),
+    untilChapterId: id(source.untilChapterId),
     revision: revisionValue(source.revision),
     createdAt: dateValue(source.createdAt),
     updatedAt: dateValue(source.updatedAt)
@@ -299,6 +303,7 @@ const PROMPT_LABELS = Object.freeze({
     aliases: "also called",
     inside: "Part of",
     world: "The world",
+    untilChapter: (number) => `(until chapter ${number})`,
     worldSentence: (what, here) => [what && `A world ${what}`, here && `in which ${here}`].filter(Boolean).join(", ") + ".",
     tension: "Tension",
     time: "When",
@@ -318,6 +323,7 @@ const PROMPT_LABELS = Object.freeze({
     aliases: "又称",
     inside: "位于",
     world: "世界",
+    untilChapter: (number) => `（持续到第 ${number} 章）`,
     worldSentence: (what, here) => [what && `一个${what}的世界`, here && `在这里${here}`].filter(Boolean).join("，") + "。",
     tension: "张力",
     time: "时间",
@@ -416,9 +422,10 @@ function deriveCanonFacts(work) {
       subjectId: relation.fromId,
       objectId: relation.toId,
       predicate: `${names.get(relation.fromId)} → ${names.get(relation.toId)}`,
-      value: relationDescription(relation, labels),
+      value: [relationDescription(relation, labels), chapterOrder.has(relation.untilChapterId) ? labels.untilChapter(chapterOrder.get(relation.untilChapterId) + 1) : ""].filter(Boolean).join(" "),
       storyFrom: relation.storyFrom,
       storyUntil: relation.storyUntil,
+      ...(chapterOrder.has(relation.fromChapterId) ? { readerOrder: chapterOrder.get(relation.fromChapterId), sourceChapterId: relation.fromChapterId } : {}),
       sourceRevision: relation.revision,
       derivedFrom: { kind: "relation", id: relation.id }
     });
@@ -540,6 +547,9 @@ function chapterDerivedFactIds(canonValue, chapterIds) {
   for (const setup of canon.setups) {
     const anchored = [setup.plantedIn, setup.paidOffIn].some((anchor) => anchor && (anchor.kind === "chapter" ? chapters.has(anchor.id) : eventIds.has(anchor.id)));
     if (anchored) ids.add(derivedFactId("setup", setup.id));
+  }
+  for (const relation of canon.relations) {
+    if (chapters.has(relation.fromChapterId) || chapters.has(relation.untilChapterId)) ids.add(derivedFactId("relation", relation.id));
   }
   return [...ids];
 }

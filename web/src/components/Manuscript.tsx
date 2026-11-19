@@ -15,6 +15,8 @@ export interface ManuscriptHandle {
   length: () => number;
   /** The element holding the text (for names linked in the manuscript). */
   root: () => HTMLElement | null;
+  /** Replaces a range with plain text as an ordinary edit: saved like typing, undone with Ctrl+Z. */
+  replace: (range: { index: number; length: number }, text: string) => void;
 }
 
 interface ManuscriptProps {
@@ -93,7 +95,14 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
     selection: () => selectionRef.current,
     textIn: (range) => quillRef.current?.getText(range.index, range.length) ?? "",
     length: () => quillRef.current?.getLength() ?? 1,
-    root: () => quillRef.current?.root ?? null
+    root: () => quillRef.current?.root ?? null,
+    replace: (range, text) => {
+      const quill = quillRef.current;
+      if (!quill) return;
+      quill.deleteText(range.index, range.length, "user");
+      quill.insertText(range.index, text, "user");
+      quill.setSelection(range.index, text.length, "user");
+    }
   }), []);
 
   return <div className="manuscript-host" ref={hostRef} />;

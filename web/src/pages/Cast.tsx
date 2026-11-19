@@ -3,12 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { errorText, type WorkSummary } from "../api";
 import { castApi, type Entity, type Relation } from "../castApi";
+import { writeApi } from "../writeApi";
 import { CharacterDialog, type CharacterEditing } from "../components/CharacterDialog";
 import { SketchCharacter } from "../components/SketchCharacter";
 import { ManuscriptExtract } from "../components/ManuscriptExtract";
 import { RelationDialog, RelationsMap, initial, relationText, type RelationEditing } from "../components/RelationsMap";
 
-type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[]; relations: Relation[]; entities: Entity[] } | { state: "failed"; message: string };
+type Loaded = { state: "loading" } | { state: "ready"; characters: Entity[]; relations: Relation[]; entities: Entity[]; chapters: ChapterRef[] } | { state: "failed"; message: string };
+type ChapterRef = { id: string; title: string };
 type Editing = CharacterEditing;
 
 /** One character on the grid: who they are in a sentence, and what they want and fear. */
@@ -131,7 +133,8 @@ export default function Cast({ work }: { work: WorkSummary }) {
     const characters = canon.entities.filter((entity) => entity.type === "character");
     const ids = new Set(characters.map((entity) => entity.id));
     const relations = (canon.relations ?? []).filter((relation) => ids.has(relation.fromId) && ids.has(relation.toId));
-    setLoaded({ state: "ready", characters, relations, entities: canon.entities });
+    const { work: full } = await writeApi.work(work.id);
+    setLoaded({ state: "ready", characters, relations, entities: canon.entities, chapters: full.chapters.map((chapter) => ({ id: chapter.id, title: chapter.title })) });
     return { characters, relations };
   }, [work.id]);
 
@@ -252,6 +255,7 @@ export default function Cast({ work }: { work: WorkSummary }) {
               <RelationsMap
                 characters={characters}
                 relations={relations}
+                chapters={loaded.chapters}
                 selectedId={selected.id}
                 language={work.language}
                 onSelect={setSelectedId}
@@ -314,6 +318,7 @@ export default function Cast({ work }: { work: WorkSummary }) {
         workId={work.id}
         language={work.language}
         characters={characters}
+        chapters={loaded.state === "ready" ? loaded.chapters : []}
         editing={relationEditing}
         onClose={() => setRelationEditing(null)}
         onSaved={relationSaved}

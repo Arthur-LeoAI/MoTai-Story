@@ -130,7 +130,10 @@
       "figure": "Fig. 1",
       "hint": "Draw from one portrait to another to join them. Choose a line's words to change it.",
       "needsTwo": "Add a second character to draw what lies between them.",
-      "nodeLabel": "{{name}}. Choose to see their card; drag to another portrait to join them."
+      "nodeLabel": "{{name}}. Choose to see their card; drag to another portrait to join them.",
+      "progress": "Story so far",
+      "wholeStory": "The whole story",
+      "asOf": "As of chapter {{number}} ({{title}})"
     },
     "panel": {
       "label": "Selected character",
@@ -166,7 +169,11 @@
       "tensionHint": "He owes her his life, and the warrant has her name on it",
       "delete": "Delete relationship",
       "deleteConfirm": "Delete the relationship between {{from}} and {{to}}? This cannot be undone.",
-      "lineLabel": "{{from}} and {{to}}: {{kind}}. Open this relationship."
+      "lineLabel": "{{from}} and {{to}}: {{kind}}. Open this relationship.",
+      "fromChapter": "Holds from",
+      "untilChapter": "Holds through",
+      "fromStart": "The start",
+      "toEnd": "The end"
     },
     "draftTitle": "A draft character",
     "draftNote": "Sketched from your words. Nothing is saved until you save it; change anything first.",
@@ -686,6 +693,12 @@
     "MANUSCRIPT_EMPTY": "There is no text in this story yet to read.",
     "TIMELINE_TOO_SHORT": "Add at least two events before asking what is missing.",
     "RULE_ANSWERS_REQUIRED": "Answer at least one question first.",
+    "STYLE_NOT_FOUND": "That writing style no longer exists.",
+    "STYLE_NAME_REQUIRED": "Give the style a name.",
+    "STYLE_GUIDANCE_REQUIRED": "Say how to write in this style.",
+    "STYLE_SOURCE_REQUIRED": "Describe the style, or paste a passage you like.",
+    "STYLE_LIMIT_REACHED": "You can keep up to {{limit}} styles. Delete one to add another.",
+    "VARIANT_PASSAGE_REQUIRED": "Select the passage you want to try other ways first.",
     "EVENT_ORDER_INVALID": "The new order must list every event once."
   },
   "brief": {
@@ -1050,5 +1063,75 @@
       "delete": "Delete faction",
       "deleteConfirm": "Delete this faction? Its stances go with it. This cannot be undone."
     }
+  },
+  "styles": {
+    "label": "Writing style",
+    "none": "No particular style",
+    "noneHint": "The AI writes in a neutral voice that follows the story so far.",
+    "builtin": "Built-in",
+    "own": "Your styles",
+    "manage": {
+      "open": "Your styles…",
+      "title": "Your styles",
+      "intro": "Style cards of your own, for stories in this language. Only you can see them.",
+      "empty": "No styles of your own yet.",
+      "edit": "Edit",
+      "export": "Export",
+      "delete": "Delete",
+      "deleteConfirm": "Delete the style “{{name}}”? Stories that use it go back to no particular style.",
+      "importedTag": "imported",
+      "newTitle": "A new style",
+      "howLabel": "Start from",
+      "start": {
+        "describe": "Describe it",
+        "passage": "From a passage",
+        "hand": "By hand"
+      },
+      "sourceLabel": {
+        "describe": "The style, in a few words",
+        "passage": "A passage you like"
+      },
+      "sourceHint": {
+        "describe": "Quiet and close to one person; short scenes that end before the reader expects",
+        "passage": "Paste a paragraph or two whose writing you would like to borrow."
+      },
+      "passageNote": "The AI describes how the passage is written. The passage itself is not kept, and the card never quotes it.",
+      "draft": "Draft the card",
+      "drafting": "Drafting…",
+      "blank": "Start a blank card",
+      "draftTitle": "Your new style",
+      "draftNote": "A draft: change anything, then save it.",
+      "editTitle": "Edit style",
+      "fields": {
+        "name": "Name",
+        "description": "In one sentence",
+        "guidance": "How to write in this style",
+        "sample": "Sample {{number}}"
+      },
+      "guidanceHint": "Word choice, sentence length and rhythm, point of view, dialogue, imagery, what to avoid",
+      "saved": "Style saved.",
+      "import": "Import a style…",
+      "imported": "Imported “{{name}}”.",
+      "importedOther": "Imported “{{name}}”. It is for stories in another language, so it shows there.",
+      "importInvalid": "That file is not a Sumitale style.",
+      "close": "Close"
+    }
+  },
+  "ways": {
+    "title": "Three ways",
+    "hint": "Select a passage you are not happy with and see it written three ways. Pick one, or keep yours; Ctrl+Z undoes it.",
+    "byLabel": "Compare",
+    "by": {
+      "angles": "Tenser, richer, leaner",
+      "styles": "Three styles"
+    },
+    "styleLabel": "Style {{number}}",
+    "explain": "Explain why each version works",
+    "ask": "Try three ways",
+    "asking": "Writing three versions…",
+    "use": "Use this one",
+    "keep": "Keep mine",
+    "used": "Used the {{label}} version. Ctrl+Z brings yours back.",
+    "changed": "The passage has changed since you asked. Select it again and try once more."
   }
 }

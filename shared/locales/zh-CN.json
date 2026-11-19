@@ -127,7 +127,10 @@
       "figure": "图一",
       "hint": "从一个头像拖到另一个头像，把两人连起来。点连线上的文字可以修改。",
       "needsTwo": "再添加一个人物，就可以画出他们之间的关系。",
-      "nodeLabel": "{{name}}。点击查看人物卡；拖到另一个头像上可建立关系。"
+      "nodeLabel": "{{name}}。点击查看人物卡；拖到另一个头像上可建立关系。",
+      "progress": "故事进度",
+      "wholeStory": "整个故事",
+      "asOf": "截至第 {{number}} 章（{{title}}）"
     },
     "panel": {
       "label": "当前人物",
@@ -163,7 +166,11 @@
       "tensionHint": "他欠她一条命，而通缉令上写着她的名字",
       "delete": "删除关系",
       "deleteConfirm": "删除{{from}}与{{to}}之间的关系？此操作无法撤销。",
-      "lineLabel": "{{from}}与{{to}}：{{kind}}。打开这条关系。"
+      "lineLabel": "{{from}}与{{to}}：{{kind}}。打开这条关系。",
+      "fromChapter": "从哪一章开始",
+      "untilChapter": "持续到哪一章",
+      "fromStart": "开头",
+      "toEnd": "结尾"
     },
     "draftTitle": "人物草稿",
     "draftNote": "根据你的话起草的。保存前不会写入，可以先改任何地方。",
@@ -675,6 +682,12 @@
     "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。",
     "TIMELINE_TOO_SHORT": "至少要有两个事件，才能看出还缺什么。",
     "RULE_ANSWERS_REQUIRED": "请至少回答一个问题。",
+    "STYLE_NOT_FOUND": "这个写作风格已不存在。",
+    "STYLE_NAME_REQUIRED": "请给风格起个名字。",
+    "STYLE_GUIDANCE_REQUIRED": "请写下这种风格的写法要点。",
+    "STYLE_SOURCE_REQUIRED": "请描述这种风格，或者粘贴一段你喜欢的文字。",
+    "STYLE_LIMIT_REACHED": "最多可以保存 {{limit}} 个风格。删除一个才能再添加。",
+    "VARIANT_PASSAGE_REQUIRED": "请先选中想换种写法的段落。",
     "EVENT_ORDER_INVALID": "新的顺序必须把每个事件列出一次。"
   },
   "brief": {
@@ -1035,5 +1048,75 @@
       "delete": "删除势力",
       "deleteConfirm": "删除这个势力？它的立场也会一并删除。此操作无法撤销。"
     }
+  },
+  "styles": {
+    "label": "写作风格",
+    "none": "不指定风格",
+    "noneHint": "AI 会用中性的文笔，延续已有的正文。",
+    "builtin": "内置",
+    "own": "我的风格",
+    "manage": {
+      "open": "我的风格……",
+      "title": "我的风格",
+      "intro": "你自己的风格卡，用于这种语言的作品。只有你能看到。",
+      "empty": "还没有自己的风格。",
+      "edit": "编辑",
+      "export": "导出",
+      "delete": "删除",
+      "deleteConfirm": "删除风格“{{name}}”？使用它的作品会改回不指定风格。",
+      "importedTag": "导入",
+      "newTitle": "新风格",
+      "howLabel": "从哪里开始",
+      "start": {
+        "describe": "用几句话描述",
+        "passage": "从一段文字",
+        "hand": "手动填写"
+      },
+      "sourceLabel": {
+        "describe": "用几句话描述这种风格",
+        "passage": "一段你喜欢的文字"
+      },
+      "sourceHint": {
+        "describe": "安静、贴近一个人物；场景短，结束得比读者预想的早",
+        "passage": "粘贴一两段你想借鉴写法的文字。"
+      },
+      "passageNote": "AI 会描述这段文字的写法。原文不会被保存，风格卡也不会引用它。",
+      "draft": "起草风格卡",
+      "drafting": "正在起草……",
+      "blank": "新建空白风格卡",
+      "draftTitle": "你的新风格",
+      "draftNote": "这是草稿：可以随意修改，然后保存。",
+      "editTitle": "编辑风格",
+      "fields": {
+        "name": "名称",
+        "description": "一句话说明",
+        "guidance": "写法要点",
+        "sample": "示范 {{number}}"
+      },
+      "guidanceHint": "用词、句子长短与节奏、叙述视角、对白、意象、要避免的写法",
+      "saved": "风格已保存。",
+      "import": "导入风格……",
+      "imported": "已导入“{{name}}”。",
+      "importedOther": "已导入“{{name}}”。它适用于另一种语言的作品，会在那里显示。",
+      "importInvalid": "这个文件不是墨台的风格文件。",
+      "close": "关闭"
+    }
+  },
+  "ways": {
+    "title": "三种写法",
+    "hint": "选中一段不满意的文字，看看它的三种写法。选用其中一种，或者保留原文；按 Ctrl+Z 可以撤销。",
+    "byLabel": "比较方式",
+    "by": {
+      "angles": "更紧张、更细腻、更简洁",
+      "styles": "三种风格"
+    },
+    "styleLabel": "风格 {{number}}",
+    "explain": "说明每一版为什么这样写",
+    "ask": "换三种写法",
+    "asking": "正在写三个版本……",
+    "use": "用这一版",
+    "keep": "保留原文",
+    "used": "已换成“{{label}}”版。按 Ctrl+Z 可以恢复原文。",
+    "changed": "这段文字在等待期间被改动了。请重新选中再试一次。"
   }
 }

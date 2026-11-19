@@ -116,3 +116,34 @@ test("HTTP: a stance between two factions is a relation of kind ally or enemy", 
   const facts = deriveCanonFacts({ language: "en", chapters: [], canon: (await call(`/api/works/${work.id}/canon`)).body.canon });
   assert.ok(facts.some((fact) => fact.category === "relationship" && fact.subjectId === wardens.id && fact.objectId === guild.id && fact.value === "enemies"));
 });
+
+test("HTTP: a relationship can hold from one chapter through another, and the writing learns of it from its first chapter", async () => {
+  const { body: { work } } = await call("/api/works", "POST", { title: "Bounds", language: "en", focus: "shape" });
+  for (const title of ["Two", "Three", "Four"]) await call(`/api/works/${work.id}/chapters`, "POST", { title });
+  const chapters = (await call(`/api/works/${work.id}`)).body.work.chapters;
+  const person = async (name) => (await call(`/api/works/${work.id}/canon/entities`, "POST", { type: "character", name })).body.item;
+  const mira = await person("Mira");
+  const kael = await person("Kael");
+  const relation = (kind, from, until) => call(`/api/works/${work.id}/canon/relations`, "POST", { fromId: mira.id, toId: kael.id, kind, fromChapterId: from, untilChapterId: until });
+
+  const friends = await relation("friend", "", chapters[1].id);
+  assert.equal(friends.status, 201);
+  const enemies = await relation("enemy", chapters[2].id, "");
+  assert.equal(enemies.body.item.fromChapterId, chapters[2].id);
+  assert.equal((await relation("ally", chapters[3].id, chapters[1].id)).body.error.code, "CANON_STORY_RANGE_INVALID");
+  assert.equal((await relation("ally", "missing", "")).body.error.code, "CANON_REFERENCE_NOT_FOUND");
+
+  const full = (await call(`/api/works/${work.id}`)).body.work;
+  const canon = (await call(`/api/works/${work.id}/canon`)).body.canon;
+  const facts = deriveCanonFacts({ language: "en", chapters: full.chapters, canon });
+  const fact = (id) => facts.find((item) => item.id === `derived:relation:${id}`);
+  assert.equal(fact(friends.body.item.id).value, "friends (until chapter 2)");
+  assert.equal(fact(friends.body.item.id).readerOrder, null);
+  assert.equal(fact(enemies.body.item.id).readerOrder, 2);
+  assert.equal(fact(enemies.body.item.id).sourceChapterId, chapters[2].id);
+  // Writing chapter 2 does not know yet that they become enemies in chapter 3.
+  const { selectTemporalFacts } = require("../src/temporal");
+  const known = (chapterIndex) => selectTemporalFacts(facts, { readerOrder: chapterIndex }).map((item) => item.id);
+  assert.ok(!known(1).includes(`derived:relation:${enemies.body.item.id}`));
+  assert.ok(known(2).includes(`derived:relation:${enemies.body.item.id}`));
+});

@@ -68,7 +68,7 @@ const READERS = {
     }
   },
   relations(body, next) {
-    for (const key of ["fromId", "toId", "label", "tension"]) if (has(body, key)) next[key] = stringField(body, key);
+    for (const key of ["fromId", "toId", "label", "tension", "fromChapterId", "untilChapterId"]) if (has(body, key)) next[key] = stringField(body, key);
     if (has(body, "kind")) {
       if (!RELATION_KINDS.includes(body.kind)) throw appError("BAD_REQUEST");
       next.kind = body.kind;
@@ -122,6 +122,10 @@ function checkReferences(collection, item, work) {
     if (!entity(item.toId)) throw missing("toId");
     if (item.fromId === item.toId) throw appError("CANON_RELATION_SELF");
     if (item.storyFrom !== null && item.storyUntil !== null && item.storyUntil <= item.storyFrom) throw appError("CANON_STORY_RANGE_INVALID");
+    const chapterAt = (chapterId) => work.chapters.findIndex((chapter) => chapter.id === chapterId);
+    if (item.fromChapterId && chapterAt(item.fromChapterId) < 0) throw missing("fromChapterId");
+    if (item.untilChapterId && chapterAt(item.untilChapterId) < 0) throw missing("untilChapterId");
+    if (item.fromChapterId && item.untilChapterId && chapterAt(item.untilChapterId) < chapterAt(item.fromChapterId)) throw appError("CANON_STORY_RANGE_INVALID");
   }
   if (collection === "events") {
     if (!item.title) throw appError("CANON_NAME_REQUIRED");

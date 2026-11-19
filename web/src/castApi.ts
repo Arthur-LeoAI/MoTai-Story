@@ -43,6 +43,9 @@ export interface Relation {
   /** Story time, half-open [storyFrom, storyUntil); null = not placed in time. */
   storyFrom: number | null;
   storyUntil: number | null;
+  /** The first and the last chapter in which it holds; "" = from the start / to the end. */
+  fromChapterId?: string;
+  untilChapterId?: string;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +57,8 @@ export interface RelationDraft {
   kind: RelationKind;
   label: string;
   tension: string;
+  fromChapterId?: string;
+  untilChapterId?: string;
 }
 
 /** Something that happens: its place in story time (storyOrder) and the chapter that tells it (reader order). */
