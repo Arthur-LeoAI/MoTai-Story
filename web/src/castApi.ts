@@ -21,6 +21,8 @@ export interface Entity {
   notes: string;
   image: string;
   color: string;
+  /** A place inside another place (region › city › place); empty for the rest. */
+  parentId?: string;
   /** Optimistic-lock version of this card: every change sends the revision it was based on. */
   revision: number;
   createdAt: string;
@@ -41,6 +43,9 @@ export interface Relation {
   /** Story time, half-open [storyFrom, storyUntil); null = not placed in time. */
   storyFrom: number | null;
   storyUntil: number | null;
+  /** The first and the last chapter in which it holds; "" = from the start / to the end. */
+  fromChapterId?: string;
+  untilChapterId?: string;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -52,6 +57,8 @@ export interface RelationDraft {
   kind: RelationKind;
   label: string;
   tension: string;
+  fromChapterId?: string;
+  untilChapterId?: string;
 }
 
 /** Something that happens: its place in story time (storyOrder) and the chapter that tells it (reader order). */
@@ -133,6 +140,8 @@ export interface EntityDraft {
   summary: string;
   card: Record<string, string>;
   notes: string;
+  /** Places only: the place this one is inside ("" for none). */
+  parentId?: string;
 }
 
 const base = (workId: string) => `/api/works/${encodeURIComponent(workId)}/canon`;
@@ -166,6 +175,12 @@ export const castApi = {
     request<{ task: ExtractTask }>(`${base(workId)}/drafts/manuscript`, send("POST", { requestId: crypto.randomUUID() })),
   task: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}`),
   cancelTask: (taskId: string) => request<{ task: ExtractTask }>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, send("POST", {})),
+  /** Pointed questions about a rule (AI); nothing is saved. */
+  ruleQuestions: (workId: string, ruleId: string) =>
+    request<{ questions: string[] }>(`${base(workId)}/drafts/rule-questions`, send("POST", { ruleId })),
+  /** The writer's answers folded into the rule's card (AI): a draft of cost, exception and detail. */
+  foldRuleAnswers: (workId: string, ruleId: string, answers: Array<{ question: string; answer: string }>) =>
+    request<{ draft: { cost: string; exception: string; detail: string } }>(`${base(workId)}/drafts/rule-answers`, send("POST", { ruleId, answers })),
   createEvent: (workId: string, event: Partial<EventDraft> & { title: string }) =>
     request<{ item: StoryEvent; canonRevision: number }>(`${base(workId)}/events`, send("POST", event)),
   updateEvent: (workId: string, event: StoryEvent, draft: EventDraft) =>

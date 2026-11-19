@@ -38,9 +38,17 @@ export function relationText(t: (key: string) => string, relation: Pick<Relation
   return t(`cast.relation.kinds.${relation.kind}`);
 }
 
-export function RelationsMap({ characters, relations, selectedId, language, onSelect, onOpenRelation, onConnect }: {
+/** Whether a relationship holds in the chapter at `index` (0-based). */
+export function holdsAt(relation: Relation, chapters: Array<{ id: string }>, index: number): boolean {
+  const from = relation.fromChapterId ? chapters.findIndex((chapter) => chapter.id === relation.fromChapterId) : -1;
+  const until = relation.untilChapterId ? chapters.findIndex((chapter) => chapter.id === relation.untilChapterId) : -1;
+  return (from < 0 || index >= from) && (until < 0 || index <= until);
+}
+
+export function RelationsMap({ characters, relations: allRelations, chapters, selectedId, language, onSelect, onOpenRelation, onConnect }: {
   characters: Entity[];
   relations: Relation[];
+  chapters: Array<{ id: string; title: string }>;
   selectedId: string;
   language: string;
   onSelect: (id: string) => void;
@@ -52,6 +60,9 @@ export function RelationsMap({ characters, relations, selectedId, language, onSe
   const dragRef = useRef<{ fromId: string; pointerId: number; start: Point; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const [drawing, setDrawing] = useState<{ fromId: string; to: Point } | null>(null);
+  // 0 = the whole story; n = as of chapter n.
+  const [asOf, setAsOf] = useState(0);
+  const relations = asOf > 0 ? allRelations.filter((relation) => holdsAt(relation, chapters, asOf - 1)) : allRelations;
 
   const points = layout(characters.length);
   const position = new Map(characters.map((entity, index) => [entity.id, points[index]]));
@@ -123,6 +134,13 @@ export function RelationsMap({ characters, relations, selectedId, language, onSe
       <div className="relmap-caption">
         <div className="caps">{t("cast.map.figure")}</div>
         <p className="muted">{characters.length > 1 ? t("cast.map.hint") : t("cast.map.needsTwo")}</p>
+        {chapters.length > 1 && allRelations.length ? (
+          <div className="relmap-progress">
+            <label className="caps" htmlFor="relmap-as-of">{t("cast.map.progress")}</label>
+            <input id="relmap-as-of" type="range" min={0} max={chapters.length} step={1} value={asOf} onChange={(event) => setAsOf(Number(event.target.value))} aria-valuetext={asOf ? t("cast.map.asOf", { number: asOf, title: chapters[asOf - 1].title }) : t("cast.map.wholeStory")} data-testid="relmap-progress" />
+            <span className="muted" lang={asOf ? language : undefined} data-testid="relmap-as-of">{asOf ? t("cast.map.asOf", { number: asOf, title: chapters[asOf - 1].title }) : t("cast.map.wholeStory")}</span>
+          </div>
+        ) : null}
       </div>
       <div className="relmap-area" ref={areaRef}>
         <svg className="relmap-lines" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true">
@@ -187,10 +205,11 @@ export function RelationsMap({ characters, relations, selectedId, language, onSe
 export type RelationEditing = { mode: "new"; fromId: string; toId: string } | { mode: "edit"; relation: Relation } | null;
 
 /** Create or edit one relationship: who, which way, what kind, and the tension between them. */
-export function RelationDialog({ workId, language, characters, editing, onClose, onSaved, onRemoved, onReload }: {
+export function RelationDialog({ workId, language, characters, chapters, editing, onClose, onSaved, onRemoved, onReload }: {
   workId: string;
   language: string;
   characters: Entity[];
+  chapters: Array<{ id: string; title: string }>;
   editing: RelationEditing;
   onClose: () => void;
   onSaved: (relation: Relation) => void;
@@ -199,14 +218,14 @@ export function RelationDialog({ workId, language, characters, editing, onClose,
 }) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const [draft, setDraft] = useState<RelationDraft>({ fromId: "", toId: "", kind: "friend", label: "", tension: "" });
+  const [draft, setDraft] = useState<RelationDraft>({ fromId: "", toId: "", kind: "friend", label: "", tension: "", fromChapterId: "", untilChapterId: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const relation = editing?.mode === "edit" ? editing.relation : null;
   const nameOf = (id: string) => characters.find((entity) => entity.id === id)?.name ?? "";
 
-  const fill = (value: Relation) => setDraft({ fromId: value.fromId, toId: value.toId, kind: value.kind, label: value.label, tension: value.tension });
+  const fill = (value: Relation) => setDraft({ fromId: value.fromId, toId: value.toId, kind: value.kind, label: value.label, tension: value.tension, fromChapterId: value.fromChapterId ?? "", untilChapterId: value.untilChapterId ?? "" });
 
   // A layout effect, so the form is filled before the dialog is first painted.
   useLayoutEffect(() => {
@@ -214,7 +233,7 @@ export function RelationDialog({ workId, language, characters, editing, onClose,
     if (!dialog) return;
     if (editing && !dialog.open) {
       if (editing.mode === "edit") fill(editing.relation);
-      else setDraft({ fromId: editing.fromId, toId: editing.toId, kind: "friend", label: "", tension: "" });
+      else setDraft({ fromId: editing.fromId, toId: editing.toId, kind: "friend", label: "", tension: "", fromChapterId: "", untilChapterId: "" });
       setError("");
       setConflict(false);
       dialog.showModal();
@@ -302,6 +321,25 @@ export function RelationDialog({ workId, language, characters, editing, onClose,
 
         <label className="caps" htmlFor="relation-tension">{t("cast.relation.tension")}</label>
         <textarea id="relation-tension" className="field scene-text" rows={3} maxLength={1000} lang={language} value={draft.tension} placeholder={t("cast.relation.tensionHint")} onChange={(event) => setDraft({ ...draft, tension: event.target.value })} data-testid="relation-tension" />
+
+        {chapters.length ? (
+          <div className="dialog-row">
+            <div className="dialog-field">
+              <label className="caps" htmlFor="relation-from-chapter">{t("cast.relation.fromChapter")}</label>
+              <select id="relation-from-chapter" className="field" value={draft.fromChapterId ?? ""} onChange={(event) => setDraft({ ...draft, fromChapterId: event.target.value })} data-testid="relation-from-chapter">
+                <option value="">{t("cast.relation.fromStart")}</option>
+                {chapters.map((chapter, index) => <option key={chapter.id} value={chapter.id} lang={language}>{index + 1}. {chapter.title}</option>)}
+              </select>
+            </div>
+            <div className="dialog-field">
+              <label className="caps" htmlFor="relation-until-chapter">{t("cast.relation.untilChapter")}</label>
+              <select id="relation-until-chapter" className="field" value={draft.untilChapterId ?? ""} onChange={(event) => setDraft({ ...draft, untilChapterId: event.target.value })} data-testid="relation-until-chapter">
+                <option value="">{t("cast.relation.toEnd")}</option>
+                {chapters.map((chapter, index) => <option key={chapter.id} value={chapter.id} lang={language}>{index + 1}. {chapter.title}</option>)}
+              </select>
+            </div>
+          </div>
+        ) : null}
 
         {error ? (
           <div className="notice cast-error" role="alert" data-testid="relation-error">

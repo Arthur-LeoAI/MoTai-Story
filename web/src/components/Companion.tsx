@@ -1,3 +1,5 @@
+import { ThreeWays } from "./ThreeWays";
+import { StylePicker } from "./StylePicker";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../api";
@@ -153,6 +155,7 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
 
   return (
     <div className="assist" data-testid="assistant">
+      <StylePicker workId={work.id} language={work.language} />
       <label className="caps" htmlFor="assist-mode">{t("assist.what")}</label>
       <select id="assist-mode" className="field" value={mode} onChange={(event) => setMode(event.target.value as WriteMode)} disabled={generating} data-testid="assist-mode">
         {WRITE_MODES.map((item) => <option key={item} value={item}>{t(`assist.modes.${item}`)}</option>)}
@@ -181,6 +184,7 @@ function Assistant({ context, onReviewQueued }: { context: WriteContext; onRevie
       </div>
       {error ? <p className="notice" role="alert" data-testid="assist-error">{error}</p> : null}
       {notice ? <p className="assist-done" role="status" data-testid="assist-notice">{notice}</p> : null}
+      <ThreeWays workId={work.id} language={work.language} getEditor={context.getEditor} disabled={generating || context.busy} />
 
       {run ? (
         <section className="card assist-result" data-testid="assist-result" data-can-accept={run.result.canAccept} data-rewrites={run.result.generation.rewriteCount}>

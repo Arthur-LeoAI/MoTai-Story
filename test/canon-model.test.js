@@ -67,7 +67,7 @@ test("v5 data upgrades to v6 by gaining defaults; story material text is kept as
   assert.deepEqual(work.storyBible, { characters: "林舟：维修学徒", relationships: "林舟与梅是旧友" });
   assert.deepEqual(work.canon.entities[0], {
     id: "entity_lin", ownerId: "local", type: "character", name: "林舟", aliases: ["小舟"],
-    summary: "", card: {}, notes: "", image: "", color: "", revision: 1, createdAt: at, updatedAt: at
+    summary: "", card: {}, notes: "", image: "", color: "", parentId: "", revision: 1, createdAt: at, updatedAt: at
   });
   for (const collection of ["relations", "events", "threads", "setups"]) assert.deepEqual(work.canon[collection], []);
   // The old relationship fact stays a fact; nothing is converted or dropped.

@@ -1,0 +1,40 @@
+# Phase 4 (world): steps and status
+
+Plan reference: `docs/SUMITALE_PLAN.md`, sections 5.6 and 8 (phase 4).
+
+Done when: a world rule is used by the AI when it writes, and text that breaks the rule is flagged by the checks. **Reached 2026-11-19** (step 6).
+
+Branch: `feat/sumitale-phase-4`, on top of `main` after PR #4 (phase 3) was merged on 2026-11-18.
+
+## What is there already
+
+- Card types `location`, `faction` and `rule` exist in data model v6 (`src/canon-model.js`), with card questions: a place has `atmosphere` and `occupants`; a faction has `want`, `assets` and `fear`; a rule has `cost` and `exception`.
+- Every rule card already becomes a hard `world_rule` fact (`deriveCanonFacts`), so it reaches the writing context and the chapter review. This has not been checked with the real AI.
+- Relations have the kinds `ally` and `enemy`, which a stance between factions can use.
+- The World page is still a placeholder. Places can be chosen on an event, but there is nowhere to make them, so the Timeline's "places" rows stay empty.
+
+## Steps
+
+| # | Step | Status |
+|---|---|---|
+| 1 | World page: the world in a sentence ("A world where ___, in which ___"), and rule cards with three questions: the rule, what it costs or limits, and its exceptions | Done |
+| 2 | "Stress-test this rule" (AI): two or three "if so, why can't…?" questions about a rule; the writer's answers are added to the rule as a draft to confirm | Done |
+| 3 | Places: cards (what it looks like, atmosphere, who is there), arranged in a simple hierarchy of region › city › place, shown by indenting. Needs a parent on place cards (data model change) | Done |
+| 4 | Factions: cards (what they want, what they have, what they fear), and a stance matrix where each pair of factions is ally, neutral or enemy; a click on a cell changes it. Stored as relations | Done |
+| 5 | Names linked in the manuscript: names, aliases and terms from cards are lightly underlined in the Write editor; hovering shows the card's summary and a click opens the card. The text itself (Quill Delta) is not changed | Done |
+| 6 | Rules in AI writing: check with the real AI that rules reach the writing context as hard constraints and that text breaking a rule is flagged; fill any gap found | Done |
+
+Steps 1 and 2 belong together, and so do 3 and 4. Step 5 does not depend on the others. Step 6 checks the whole and comes last.
+
+## Testing
+
+- Unit tests and E2E (Playwright, `data-testid`) run with the built-in test AI.
+- Every AI feature (steps 2 and 6) is also checked with real API requests and real replies, in English and Chinese, on test data only.
+
+## Progress
+
+- 2026-11-19, step 6: rules in AI writing, checked with real DeepSeek replies (deepseek-flash) on test stories, English first. **Writing:** asked to continue a chapter with "Mira gets out of Vell by boat tonight" while a rule says no ship leaves Vell between dusk and dawn, the AI built the scene around the rule ("You waited for first light. That was the Rule.") and found a loophole (a coracle through a culvert); the check flagged that loophole as a soft world-rule issue and suggested writing the loophole into the rule. **Checks:** text that plainly breaks the rule (a ship sailing out at midnight) was flagged as a hard world-rule conflict three times out of three, in English, in about 10 seconds; text that keeps the rule got no rule conflict (only two soft craft notes); the same in Chinese. Gaps found and filled: (1) the continuity check's instructions were Chinese only, even for English stories; English stories now get English instructions and English facts. (2) The first real check failed with "the AI review did not return a valid report"; a malformed report is now asked for once more before giving up (no failure in the runs after the change). (3) The world in a sentence now reaches the writing and the checks as a soft world fact (`derived:world:sentence`), marked for review when it changes.
+- 2026-11-19, step 5: names linked in the manuscript (`web/src/components/NameLinks.tsx`). Names and aliases of characters, places and factions get a light dotted underline in the Write editor. Resting the pointer on one, or putting the cursor in it, shows a small card (type, name, other names, summary) with "Open card", which saves the chapter and opens the card on the Cast or World page (`?card=<id>`, also new). The underline is a CSS Custom Highlight over the editor's text, so the chapter's text, undo history and saves are untouched (an E2E test checks the chapter is not re-saved). English matching: whole words in their own case, so "Mira" and "Mira's" match but "Miracles" does not; a leading "The", "A" or "An" matches in either case ("The Archive" is found as "the Archive"); longer names win. Chinese names match anywhere. Rules are not linked (their names are sentences). Not yet: a keyboard way to open the card from the editor (the cards stay reachable from Cast and World); names split by formatting (half in italics) are not found. Browsers without CSS highlights (older Firefox) show no underline; nothing else changes.
+- 2026-11-19, steps 3 and 4: places and factions on the World page (`web/src/components/WorldCards.tsx`). A place card has what it looks like, what it feels like and who is there, and may sit inside another place (`parentId`, data model change): the list is a tree, indented by depth, with "Add inside" on each place. The server refuses a parent that is missing or not a place, and a loop (`CANON_PLACE_CYCLE`); deleting a place moves the places inside it up one level. A place's fact for the AI now says what it is part of ("Part of: Vell"). A faction card has who they are, what they want, hold and fear. With two factions or more, a stance matrix shows each pair as neutral, allies or enemies; a click cycles it. A stance is a relation of kind `ally` or `enemy` between the two factions (neutral is none), so it reaches the AI as a relationship fact. Places now also appear on the Timeline's "places" rows and in the event dialog. No AI involved.
+- 2026-11-19, step 2: "Stress-test this rule" in the rule dialog (`src/rule-stress.js`). The AI asks three pointed questions about the saved rule ("If that is true, why can't…?", "What stops…?"), using the world sentence, the other rules and the people; the writer answers in their own words (empty answers are skipped), and the AI folds the answers into the rule's cost, exceptions and "more". That fills the dialog only; nothing is saved until the writer saves the rule. Unsaved changes must be saved first, so the questions are about the rule as it stands. Routes: `POST /api/works/:id/canon/drafts/rule-questions` and `/rule-answers` (`RULE_ANSWERS_REQUIRED` with no answer). Checked with real DeepSeek replies, English first: the questions are concrete and story-specific (they use Mira, Kael, Vell and the Governor). The first real runs showed the folding repeating one point in several fields and copying the prompt's "(none yet)" placeholder; the prompt now puts each point in one field, and the server treats the placeholder as empty and keeps a point that appears in two fields only in the first. An empty field from the AI never wipes what the card says. Also fixed: dialog fields stacked in a column took 200px of height each (rule and chapter card dialogs).
+- 2026-11-18, step 1: the World page (`web/src/pages/World.tsx`) replaces the placeholder. At the top, the world in a sentence, with two blanks ("A world ___, in which ___" / "一个____的世界，在这里____"), saved when a blank is left, against the revision it was read at (`work.world`, `src/world.js`, `GET/PUT /api/works/:id/world`). Below, rule cards with three questions: the rule (the card's name, so it reads as in the mockup), what it costs or limits, and exceptions; "More" holds a longer explanation. A rule without a cost says that a rule that costs nothing makes little drama. A rule that is only its statement now still becomes a hard world-rule fact (`deriveCanonFacts`); before, a card needed a description to count. No AI involved. Not yet: the world sentence in the AI's context (step 6).
