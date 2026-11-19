@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText } from "../api";
 import { castApi, type Entity, type EntityDraft, type Relation } from "../castApi";
@@ -211,8 +211,14 @@ function CardDialog({ workId, language, kind, editing, places, onClose, onChange
 }
 
 /** The open dialog, and "load the saved version" for a change saved elsewhere. */
-function useEditing(onReload: () => Promise<Entity[]>) {
+function useEditing(onReload: () => Promise<Entity[]>, cards: Entity[], openId: string) {
   const [editing, setEditing] = useState<Editing>(null);
+  // A card asked for by the address opens once it is here.
+  useEffect(() => {
+    const entity = openId ? cards.find((candidate) => candidate.id === openId) : undefined;
+    if (entity) setEditing({ mode: "edit", entity });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
   const reload = async () => {
     const fresh = await onReload();
     const id = editing?.mode === "edit" ? editing.entity.id : "";
@@ -223,15 +229,16 @@ function useEditing(onReload: () => Promise<Entity[]>) {
   return { editing, setEditing, reload };
 }
 
-export function PlacesSection({ workId, language, places, onChanged, onReload }: {
+export function PlacesSection({ workId, language, openId, places, onChanged, onReload }: {
   workId: string;
   language: string;
+  openId: string;
   places: Entity[];
   onChanged: () => void;
   onReload: () => Promise<Entity[]>;
 }) {
   const { t } = useTranslation();
-  const { editing, setEditing, reload } = useEditing(onReload);
+  const { editing, setEditing, reload } = useEditing(onReload, places, openId);
   const rows = placeTree(places);
   return (
     <section className="world-section" aria-labelledby="places-title" data-testid="places">
@@ -268,16 +275,17 @@ function stanceBetween(relations: Relation[], a: string, b: string): Relation | 
   return relations.find((relation) => (relation.kind === "ally" || relation.kind === "enemy") && ((relation.fromId === a && relation.toId === b) || (relation.fromId === b && relation.toId === a))) ?? null;
 }
 
-export function FactionsSection({ workId, language, factions, relations, onChanged, onReload }: {
+export function FactionsSection({ workId, language, openId, factions, relations, onChanged, onReload }: {
   workId: string;
   language: string;
+  openId: string;
   factions: Entity[];
   relations: Relation[];
   onChanged: () => void;
   onReload: () => Promise<Entity[]>;
 }) {
   const { t } = useTranslation();
-  const { editing, setEditing, reload } = useEditing(onReload);
+  const { editing, setEditing, reload } = useEditing(onReload, factions, openId);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 

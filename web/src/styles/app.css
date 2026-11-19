@@ -2136,6 +2136,35 @@ button.story-chip:hover {
   background: var(--color-surface-sunk);
 }
 
+/* Write: names from the cards, linked in the manuscript */
+::highlight(sumitale-names) {
+  text-decoration: underline dotted var(--color-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.name-card {
+  position: fixed;
+  z-index: 20;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  overflow-wrap: anywhere;
+}
+.name-card-aliases {
+  font-size: var(--text-sm);
+}
+.name-card-open {
+  padding-inline: 0;
+  text-decoration: underline;
+}
+
 /* Cast: people and events found in the manuscript */
 .extract {
   display: flex;

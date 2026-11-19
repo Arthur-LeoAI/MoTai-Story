@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, errorText, type WorkSummary } from "../api";
 import { Ornament } from "../components/common";
 import Manuscript, { type ManuscriptHandle } from "../components/Manuscript";
+import { NameLinks } from "../components/NameLinks";
+import { castApi, type Entity } from "../castApi";
+import { workPath } from "../sections";
 import { formatCount } from "../format";
 import { usePreferences } from "../preferences";
 import { manuscriptLength, writeApi, type Chapter, type Work } from "../writeApi";
@@ -37,6 +40,13 @@ export default function Write({ summary, companion }: WriteProps) {
   const { t } = useTranslation();
   const { locale } = usePreferences();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  // Cards whose names are linked in the manuscript.
+  const [cards, setCards] = useState<Entity[]>([]);
+  useEffect(() => {
+    castApi.canon(summary.id).then(({ canon }) => setCards(canon.entities)).catch(() => setCards([]));
+  }, [summary.id]);
+  const getRoot = useCallback(() => editorRef.current?.root() ?? null, []);
   const [work, setWork] = useState<Work | null>(null);
   const [loadError, setLoadError] = useState("");
   const [title, setTitle] = useState("");
@@ -405,6 +415,16 @@ export default function Write({ summary, companion }: WriteProps) {
               placeholder={t("write.placeholder")}
               label={t("write.manuscript")}
               onChange={onEdit}
+            />
+            <NameLinks
+              key={contentKey}
+              getRoot={getRoot}
+              entities={cards}
+              language={language}
+              onOpen={(entity) => {
+                // Save first; the card opens on its own page.
+                void flush().catch(() => undefined).then(() => navigate(`${workPath(summary.id, entity.type === "character" ? "cast" : "world")}?card=${encodeURIComponent(entity.id)}`));
+              }}
             />
           </article>
         ) : null}

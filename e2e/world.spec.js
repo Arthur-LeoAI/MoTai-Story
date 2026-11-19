@@ -178,3 +178,42 @@ test("factions have cards, and their stances change with a click", async ({ page
   await expect(cells.first()).toHaveAttribute("data-stance", "neutral");
   await expect.poll(async () => (await (await request.get(`/api/works/${work.id}/canon`)).json()).canon.relations.length).toBe(0);
 });
+
+test("names from the cards are underlined in the manuscript, show their card, and open it", async ({ page, request }) => {
+  const work = await story(request);
+  const entity = (data) => request.post(`/api/works/${work.id}/canon/entities`, { data }).then((response) => response.json()).then((body) => body.item);
+  await entity({ type: "character", name: "Mira", aliases: ["the cartographer"], summary: "A mapmaker who draws routes for smugglers" });
+  const archive = await entity({ type: "location", name: "The Archive", summary: "Old charts, older dust" });
+  const full = (await (await request.get(`/api/works/${work.id}`)).json()).work;
+  const chapter = full.chapters[0];
+  const text = "Mira reached the Archive before dawn. Miracles were rare, but the cartographer did not need one.";
+  expect((await request.patch(`/api/works/${work.id}/chapters/${chapter.id}`, { data: { baseRevision: chapter.revision, content: text } })).ok()).toBeTruthy();
+
+  await page.goto(`/app/works/${work.id}/write?chapter=${chapter.id}`);
+  await expect(page.getByTestId("manuscript-editor")).toContainText("Miracles");
+  // Whole names only, a leading "The" in either case, aliases too; never inside "Miracles".
+  await expect.poll(() => page.evaluate(() => [...(CSS.highlights.get("sumitale-names") ?? [])].map((range) => range.toString()))).toEqual(["Mira", "the Archive", "the cartographer"]);
+
+  // Resting the pointer on a name shows its card.
+  const box = await page.evaluate(() => {
+    const range = [...CSS.highlights.get("sumitale-names")].find((item) => item.toString() === "the Archive");
+    const rect = range.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  await page.mouse.move(box.x, box.y);
+  const card = page.getByTestId("name-card");
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("data-entity-id", archive.id);
+  await expect(card).toContainText("Old charts, older dust");
+
+  // The text itself is not changed by any of this.
+  const saved = (await (await request.get(`/api/works/${work.id}`)).json()).work.chapters[0];
+  expect(saved.content.trim()).toBe(text);
+  expect(saved.revision).toBe(chapter.revision + 1);
+
+  // "Open card" opens the place on the World page.
+  await card.getByTestId("name-card-open").click();
+  await expect(page).toHaveURL(new RegExp(`/works/${work.id}/world$`));
+  await expect(page.getByTestId("place-dialog")).toBeVisible();
+  await expect(page.getByTestId("place-name")).toHaveValue("The Archive");
+});

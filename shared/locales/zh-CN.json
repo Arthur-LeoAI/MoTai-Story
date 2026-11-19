@@ -275,7 +275,17 @@
     "keepMine": "保留当前版本",
     "useSaved": "载入已保存的版本",
     "focus": "专注",
-    "exitFocus": "退出专注"
+    "exitFocus": "退出专注",
+    "names": {
+      "types": {
+        "character": "人物",
+        "location": "地点",
+        "faction": "势力"
+      },
+      "alsoCalled": "又称{{names}}",
+      "noSummary": "还没有描述。",
+      "open": "打开卡片"
+    }
   },
   "companion": {
     "brief": "简报",

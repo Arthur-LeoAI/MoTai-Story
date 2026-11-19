@@ -280,7 +280,17 @@
     "keepMine": "Keep this version",
     "useSaved": "Load the saved version",
     "focus": "Focus",
-    "exitFocus": "Leave focus"
+    "exitFocus": "Leave focus",
+    "names": {
+      "types": {
+        "character": "Character",
+        "location": "Place",
+        "faction": "Faction"
+      },
+      "alsoCalled": "Also called {{names}}",
+      "noSummary": "No description yet.",
+      "open": "Open card"
+    }
   },
   "companion": {
     "brief": "Brief",

@@ -13,6 +13,8 @@ export interface ManuscriptHandle {
   textIn: (range: { index: number; length: number }) => string;
   /** Length of the document, including Quill's final newline. */
   length: () => number;
+  /** The element holding the text (for names linked in the manuscript). */
+  root: () => HTMLElement | null;
 }
 
 interface ManuscriptProps {
@@ -90,7 +92,8 @@ const Manuscript = forwardRef<ManuscriptHandle, ManuscriptProps>(function Manusc
     focus: () => quillRef.current?.focus(),
     selection: () => selectionRef.current,
     textIn: (range) => quillRef.current?.getText(range.index, range.length) ?? "",
-    length: () => quillRef.current?.getLength() ?? 1
+    length: () => quillRef.current?.getLength() ?? 1,
+    root: () => quillRef.current?.root ?? null
   }), []);
 
   return <div className="manuscript-host" ref={hostRef} />;

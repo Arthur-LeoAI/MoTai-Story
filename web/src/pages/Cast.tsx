@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { errorText, type WorkSummary } from "../api";
 import { castApi, type Entity, type Relation } from "../castApi";
@@ -123,6 +124,7 @@ export default function Cast({ work }: { work: WorkSummary }) {
   const [selectedId, setSelectedId] = useState("");
   const [view, setView] = useState<View>(storedView);
   const [extractNotice, setExtractNotice] = useState("");
+  const [params, setParams] = useSearchParams();
 
   const load = useCallback(async () => {
     const { canon } = await castApi.canon(work.id);
@@ -137,6 +139,22 @@ export default function Cast({ work }: { work: WorkSummary }) {
     load().catch((cause) => setLoaded({ state: "failed", message: errorText(t, cause) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
+
+  // ?card=<id> (a name linked in the manuscript) opens that card once.
+  const cardId = params.get("card");
+  useEffect(() => {
+    if (!cardId || loaded.state !== "ready") return;
+    const entity = loaded.characters.find((candidate) => candidate.id === cardId);
+    if (entity) {
+      setSelectedId(entity.id);
+      setEditing({ mode: "edit", entity });
+    }
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("card");
+      return next;
+    }, { replace: true });
+  }, [cardId, loaded, setParams]);
 
   const characters = loaded.state === "ready" ? loaded.characters : [];
   const relations = loaded.state === "ready" ? loaded.relations : [];

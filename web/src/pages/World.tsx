@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText, request, type WorkSummary } from "../api";
 import { castApi, type Entity, type EntityDraft, type Relation } from "../castApi";
@@ -334,6 +335,22 @@ export default function World({ work }: { work: WorkSummary }) {
   const ofType = (entities: Entity[], type: Entity["type"]) => entities.filter((entity) => entity.type === type);
   const rules = cards ? ofType(cards.entities, "rule") : null;
 
+  // ?card=<id> (a name linked in the manuscript) opens that card once.
+  const [params, setParams] = useSearchParams();
+  const [openId, setOpenId] = useState("");
+  const cardId = params.get("card");
+  useEffect(() => {
+    if (!cardId || !cards) return;
+    const entity = cards.entities.find((candidate) => candidate.id === cardId);
+    if (entity?.type === "rule") setEditing({ mode: "edit", rule: entity });
+    else if (entity) setOpenId(entity.id);
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("card");
+      return next;
+    }, { replace: true });
+  }, [cardId, cards, setParams]);
+
   useEffect(() => {
     load().catch((cause) => setFailed(errorText(t, cause)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,8 +406,8 @@ export default function World({ work }: { work: WorkSummary }) {
 
       {cards ? (
         <>
-          <PlacesSection workId={work.id} language={work.language} places={ofType(cards.entities, "location")} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "location")} />
-          <FactionsSection workId={work.id} language={work.language} factions={ofType(cards.entities, "faction")} relations={cards.relations} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "faction")} />
+          <PlacesSection workId={work.id} language={work.language} openId={openId} places={ofType(cards.entities, "location")} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "location")} />
+          <FactionsSection workId={work.id} language={work.language} openId={openId} factions={ofType(cards.entities, "faction")} relations={cards.relations} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "faction")} />
         </>
       ) : null}
 
