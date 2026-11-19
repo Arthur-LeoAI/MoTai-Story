@@ -82,6 +82,7 @@ const canonDrafts = require("./src/canon-drafts");
 const plotSpine = require("./src/plot-spine");
 const timelineChecks = require("./src/timeline-checks");
 const storyWorld = require("./src/world");
+const ruleStress = require("./src/rule-stress");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -2912,6 +2913,29 @@ async function handleCanonDraftApi(req, res, parts, db, work) {
     const draft = isTestAiEnabled()
       ? canonDrafts.testCharacterDraft(work, description)
       : canonDrafts.normalizeCharacterDraft(await callStructuredAi(work, canonDrafts.characterDraftRequest(work, { description, conversation })));
+    sendJson(res, 200, { draft });
+    return true;
+  }
+  // POST /api/works/:id/canon/drafts/rule-questions { ruleId } → pointed questions about a rule.
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "rule-questions") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 16 * 1024);
+    const ruleId = normalizeText(body.ruleId);
+    const questions = isTestAiEnabled()
+      ? ruleStress.testQuestions(work, ruleId)
+      : ruleStress.normalizeQuestions(await callStructuredAi(work, ruleStress.questionsRequest(work, ruleId)));
+    sendJson(res, 200, { questions });
+    return true;
+  }
+  // POST /api/works/:id/canon/drafts/rule-answers { ruleId, answers: [{ question, answer }] }
+  // → a draft of the rule's cost, exception and detail with the answers folded in.
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "rule-answers") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 64 * 1024);
+    const ruleId = normalizeText(body.ruleId);
+    const draft = isTestAiEnabled()
+      ? ruleStress.testFold(work, ruleId, body)
+      : ruleStress.normalizeFold(await callStructuredAi(work, ruleStress.foldRequest(work, ruleId, body)), work, ruleId);
     sendJson(res, 200, { draft });
     return true;
   }

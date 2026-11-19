@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText, request, type WorkSummary } from "../api";
-import { castApi, type Entity, type EntityDraft } from "../castApi";
+import { castApi, type Entity, type EntityDraft, type Relation } from "../castApi";
+import { FactionsSection, PlacesSection } from "../components/WorldCards";
 
 // World page (plan 5.6): what makes this world different from ours. At the
 // top, the world in a sentence; then the rules, each with three questions:
@@ -24,6 +25,7 @@ export const worldApi = {
 type Status = "idle" | "saving" | "saved" | "error" | "conflict";
 type RuleDraft = { rule: string; cost: string; exception: string; detail: string };
 type Editing = { mode: "new" } | { mode: "edit"; rule: Entity } | null;
+type Stress = { state: "idle" } | { state: "asking" } | { state: "questions"; questions: string[]; answers: string[] } | { state: "folding"; questions: string[]; answers: string[] } | { state: "folded" };
 
 function Sentence({ workId, language }: { workId: string; language: string }) {
   const { t } = useTranslation();
@@ -130,7 +132,12 @@ function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [stress, setStress] = useState<Stress>({ state: "idle" });
+  const [stressError, setStressError] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
   const rule = editing?.mode === "edit" ? editing.rule : null;
+  // The questions are about the rule as saved, so unsaved changes come first.
+  const unsaved = rule ? draft.rule.trim() !== rule.name || draft.cost.trim() !== (rule.card.cost ?? "") || draft.exception.trim() !== (rule.card.exception ?? "") || draft.detail.trim() !== rule.summary : false;
   const fill = (value: Entity | null) => setDraft(value ? { rule: value.name, cost: value.card.cost ?? "", exception: value.card.exception ?? "", detail: value.summary } : empty);
 
   useLayoutEffect(() => {
@@ -140,6 +147,9 @@ function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }:
       fill(rule);
       setError("");
       setConflict(false);
+      setStress({ state: "idle" });
+      setStressError("");
+      setMoreOpen(Boolean(rule?.summary));
       dialog.showModal();
     } else if (!editing && dialog.open) dialog.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,6 +217,35 @@ function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }:
     }
   }
 
+  async function ask() {
+    if (!rule) return;
+    setStress({ state: "asking" });
+    setStressError("");
+    try {
+      const { questions } = await castApi.ruleQuestions(workId, rule.id);
+      setStress({ state: "questions", questions, answers: questions.map(() => "") });
+    } catch (cause) {
+      setStress({ state: "idle" });
+      setStressError(errorText(t, cause));
+    }
+  }
+
+  async function fold() {
+    if (!rule || stress.state !== "questions") return;
+    const { questions, answers } = stress;
+    setStress({ state: "folding", questions, answers });
+    setStressError("");
+    try {
+      const { draft: folded } = await castApi.foldRuleAnswers(workId, rule.id, questions.map((question, index) => ({ question, answer: answers[index] })));
+      setDraft((current) => ({ ...current, cost: folded.cost, exception: folded.exception, detail: folded.detail }));
+      if (folded.detail) setMoreOpen(true);
+      setStress({ state: "folded" });
+    } catch (cause) {
+      setStress({ state: "questions", questions, answers });
+      setStressError(errorText(t, cause));
+    }
+  }
+
   const field = (key: keyof RuleDraft, rows: number, limit: number) => (
     <div className="dialog-field">
       <label className="caps" htmlFor={`rule-${key}`}>{t(`world.rules.fields.${key}`)}</label>
@@ -221,10 +260,49 @@ function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }:
         {field("rule", 2, 160)}
         {field("cost", 2, 2000)}
         {field("exception", 2, 2000)}
-        <details className="cast-more">
+        <details className="cast-more" open={moreOpen} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
           <summary className="caps">{t("world.rules.more")}</summary>
           {field("detail", 3, 600)}
         </details>
+        {rule ? (
+          <section className="rule-stress" aria-labelledby="rule-stress-title" data-testid="rule-stress">
+            <div className="spine-head">
+              <h3 id="rule-stress-title" className="caps spine-title">{t("world.stress.title")}</h3>
+              {stress.state === "idle" || stress.state === "asking" || stress.state === "folded" ? (
+                <button type="button" className="btn" onClick={() => void ask()} disabled={busy || unsaved || stress.state === "asking"} data-testid="rule-stress-ask">
+                  {stress.state === "asking" ? t("world.stress.asking") : stress.state === "folded" ? t("world.stress.again") : t("world.stress.ask")}
+                </button>
+              ) : null}
+            </div>
+            {stress.state === "idle" ? <p className="muted assist-hint">{unsaved ? t("world.stress.saveFirst") : t("world.stress.hint")}</p> : null}
+            {stress.state === "questions" || stress.state === "folding" ? (
+              <>
+                <ol className="rule-stress-list">
+                  {stress.questions.map((question, index) => (
+                    <li key={question} className="rule-stress-item" data-testid="rule-stress-question">
+                      <label htmlFor={`rule-answer-${index}`} lang={language}>{question}</label>
+                      <textarea id={`rule-answer-${index}`} className="field" rows={2} maxLength={2000} lang={language} value={stress.answers[index]} placeholder={t("world.stress.answerHint")} disabled={stress.state === "folding"} onChange={(change) => {
+                        if (stress.state !== "questions") return;
+                        const answers = [...stress.answers];
+                        answers[index] = change.target.value;
+                        setStress({ ...stress, answers });
+                      }} data-testid="rule-stress-answer" />
+                    </li>
+                  ))}
+                </ol>
+                <p className="muted assist-hint">{t("world.stress.answerNote")}</p>
+                <div className="draft-actions">
+                  <button type="button" className="btn primary" onClick={() => void fold()} disabled={stress.state === "folding" || !stress.answers.some((answer) => answer.trim())} data-testid="rule-stress-fold">
+                    {stress.state === "folding" ? t("world.stress.folding") : t("world.stress.fold")}
+                  </button>
+                  <button type="button" className="btn quiet" onClick={() => setStress({ state: "idle" })} disabled={stress.state === "folding"} data-testid="rule-stress-close">{t("world.stress.close")}</button>
+                </div>
+              </>
+            ) : null}
+            {stress.state === "folded" ? <p className="assist-done" role="status" data-testid="rule-stress-folded">{t("world.stress.folded")}</p> : null}
+            {stressError ? <p className="notice" role="alert" data-testid="rule-stress-error">{stressError}</p> : null}
+          </section>
+        ) : null}
         {error ? (
           <div className="notice cast-error" role="alert" data-testid="rule-error">
             <span>{error}</span>
@@ -243,16 +321,18 @@ function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }:
 
 export default function World({ work }: { work: WorkSummary }) {
   const { t } = useTranslation();
-  const [rules, setRules] = useState<Entity[] | null>(null);
+  const [cards, setCards] = useState<{ entities: Entity[]; relations: Relation[] } | null>(null);
   const [failed, setFailed] = useState("");
   const [editing, setEditing] = useState<Editing>(null);
 
   const load = useCallback(async () => {
     const { canon } = await castApi.canon(work.id);
-    const next = canon.entities.filter((entity) => entity.type === "rule");
-    setRules(next);
+    const next = { entities: canon.entities, relations: canon.relations };
+    setCards(next);
     return next;
   }, [work.id]);
+  const ofType = (entities: Entity[], type: Entity["type"]) => entities.filter((entity) => entity.type === type);
+  const rules = cards ? ofType(cards.entities, "rule") : null;
 
   useEffect(() => {
     load().catch((cause) => setFailed(errorText(t, cause)));
@@ -307,6 +387,13 @@ export default function World({ work }: { work: WorkSummary }) {
         ) : null}
       </section>
 
+      {cards ? (
+        <>
+          <PlacesSection workId={work.id} language={work.language} places={ofType(cards.entities, "location")} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "location")} />
+          <FactionsSection workId={work.id} language={work.language} factions={ofType(cards.entities, "faction")} relations={cards.relations} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "faction")} />
+        </>
+      ) : null}
+
       <RuleDialog
         workId={work.id}
         language={work.language}
@@ -314,7 +401,7 @@ export default function World({ work }: { work: WorkSummary }) {
         onClose={() => setEditing(null)}
         onChanged={() => void load()}
         onReload={async () => {
-          const fresh = await load();
+          const fresh = ofType((await load()).entities, "rule");
           const id = editing?.mode === "edit" ? editing.rule.id : "";
           const rule = fresh.find((candidate) => candidate.id === id) ?? null;
           if (rule) setEditing({ mode: "edit", rule });

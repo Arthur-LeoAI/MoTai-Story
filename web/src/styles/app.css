@@ -1258,6 +1258,12 @@
   flex-direction: column;
   gap: var(--space-1);
 }
+/* Side by side in a row a field wants 200px of width; stacked in the
+   dialog's column, that would become 200px of height. */
+.dialog-body > .dialog-field,
+.cast-more > .dialog-field {
+  flex: none;
+}
 .dialog-fieldset {
   border: 0;
   margin: var(--space-2) 0;
@@ -2008,6 +2014,126 @@ button.story-chip:hover {
   .rule-cards {
     grid-template-columns: 1fr;
   }
+}
+
+/* World: stress-testing a rule */
+.rule-stress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent-soft);
+}
+.rule-stress-list {
+  margin: 0;
+  padding-inline-start: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.rule-stress-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* World: places and factions */
+.world-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.place-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+}
+.place-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-2) calc(var(--depth, 0) * var(--space-6));
+  border-top: 1px solid var(--color-border);
+}
+.place-row[data-depth]:not([data-depth="0"]) .place-open::before {
+  content: "›";
+  margin-inline-end: var(--space-2);
+  color: var(--color-accent);
+}
+.place-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.place-add-inside {
+  flex: none;
+  font-size: var(--text-sm);
+}
+.stance-wrap {
+  overflow-x: auto;
+}
+.stance {
+  border-collapse: collapse;
+}
+.stance caption {
+  text-align: start;
+  padding-bottom: var(--space-2);
+}
+.stance th {
+  padding: var(--space-2);
+  font-weight: 600;
+  text-align: start;
+  max-width: 160px;
+  overflow-wrap: anywhere;
+}
+.stance thead th {
+  text-align: center;
+  font-weight: normal;
+  font-size: var(--text-sm);
+}
+.stance td {
+  border: 1px solid var(--color-border);
+  padding: 0;
+  text-align: center;
+}
+.stance-self {
+  color: var(--color-text-muted);
+  min-width: 96px;
+}
+.stance-cell {
+  width: 100%;
+  min-width: 96px;
+  padding: var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.stance-cell.ally {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.stance-cell.enemy {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.stance-cell:hover {
+  background: var(--color-surface-sunk);
 }
 
 /* Cast: people and events found in the manuscript */

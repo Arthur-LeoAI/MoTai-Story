@@ -8,7 +8,7 @@ Plan reference: `docs/SUMITALE_PLAN.md`, section 4. Code: `src/canon-model.js` (
 
 | Collection | Fields (besides `id`, `ownerId`, `revision`, `createdAt`, `updatedAt`) |
 |---|---|
-| `entities` | `type` (character, location, faction, item, rule), `name`, `aliases`, `summary`, `card`, `notes`, `image`, `color` |
+| `entities` | `type` (character, location, faction, item, rule), `name`, `aliases`, `summary`, `card`, `notes`, `image`, `color`, `parentId` (places only: the place this one is inside; phase 4) |
 | `relations` | `fromId`, `toId`, `kind` (family, friend, lover, mentor, rival, enemy, ally, custom), `label`, `tension`, `storyFrom`, `storyUntil` |
 | `events` | `title`, `summary`, `storyOrder`, `timeLabel`, `chapterId`, `participantIds`, `locationId`, `threadIds` |
 | `threads` | `name`, `color` |
@@ -16,6 +16,8 @@ Plan reference: `docs/SUMITALE_PLAN.md`, section 4. Code: `src/canon-model.js` (
 | `facts` | unchanged from v5 |
 
 - **Cards.** `card` holds the few key questions of the entity's type (`CARD_FIELDS`): for a character `want`, `obstacle`, `change`, `appearance`, `voice`, `secret`, `background`; for a rule `cost`, `exception`; and so on. Only keys are stored; the interface translates them. A card's type cannot be changed after creation.
+- **Places** form a hierarchy through `parentId` (region › city › place). A parent must be a place, and never the place itself or one inside it (`CANON_PLACE_CYCLE`). Deleting a place moves the places inside it up one level. The derived fact of a place names its parent.
+- **Stances between factions** are relations of kind `ally` or `enemy` (neutral is no relation).
 - **Colours** are palette keys the interface maps to design tokens, never colour values.
 - **Story time.** A relation's `storyFrom` / `storyUntil` use the same half-open interval and the same scale as temporal facts and `scene.storyTime`. An event's `storyOrder` is only an order; `chapterId` is the chapter that tells it (reader order), empty when it is not told yet.
 - **`work.storyBible` stays** as free-text notes (decision 2026-11-13). The legacy workspace and the Ideate drafts keep reading and writing it. Nothing is converted.

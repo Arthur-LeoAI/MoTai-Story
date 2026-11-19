@@ -580,6 +580,7 @@
     "CANON_ENTITY_TYPE_UNSUPPORTED": "卡片只能是人物、地点、势力、物品或规则，创建后不能更改类别。",
     "CANON_REFERENCE_NOT_FOUND": "它引用的内容已经不存在（{{field}}）。",
     "CANON_RELATION_SELF": "一条关系需要两个不同的人物或势力。",
+    "CANON_PLACE_CYCLE": "地点不能位于它自己里面，也不能位于它所包含的地点里。",
     "CANON_STORY_RANGE_INVALID": "这段时间的结束必须晚于开始。",
     "CONFLICT_NOT_FOUND": "未找到冲突。",
     "ADJUDICATION_REASON_REQUIRED": "请填写误判依据。",
@@ -663,6 +664,7 @@
     "DRAFT_DESCRIPTION_REQUIRED": "请先用一句话描述这个人物。",
     "MANUSCRIPT_EMPTY": "这部作品还没有可以读取的正文。",
     "TIMELINE_TOO_SHORT": "至少要有两个事件，才能看出还缺什么。",
+    "RULE_ANSWERS_REQUIRED": "请至少回答一个问题。",
     "EVENT_ORDER_INVALID": "新的顺序必须把每个事件列出一次。"
   },
   "brief": {
@@ -944,6 +946,84 @@
       "ruleRequired": "请先写下规则。",
       "delete": "删除规则",
       "deleteConfirm": "删除这条规则？此操作无法撤销。"
+    },
+    "stress": {
+      "title": "压力测试",
+      "hint": "AI 会像挑剔的读者一样追问。你的回答能让这条规则站得住。",
+      "saveFirst": "请先保存修改，这样追问针对的是规则当前的样子。",
+      "ask": "向我追问",
+      "asking": "正在想问题……",
+      "again": "再问一次",
+      "answerHint": "用一两句话回答。留空则跳过。",
+      "answerNote": "你的回答会整理进上面的代价、例外和更多说明。保存规则之前不会保存任何内容。",
+      "fold": "把回答补进规则",
+      "folding": "正在整理你的回答……",
+      "close": "先不",
+      "folded": "你的回答已整理进上面的字段。检查后再保存规则。"
+    },
+    "places": {
+      "title": "地点",
+      "hint": "故事发生的地方。把一个地点放进另一个地点里（区域 › 城市 › 具体场所），保持条理。",
+      "new": "新地点",
+      "newTitle": "新地点",
+      "editTitle": "地点",
+      "empty": "还没有地点。你的故事从哪里开始？",
+      "fields": {
+        "name": "名称",
+        "parent": "位于",
+        "summary": "样子",
+        "atmosphere": "氛围",
+        "occupants": "谁在这里"
+      },
+      "hints": {
+        "name": "雾港",
+        "summary": "台阶层叠、石头总是湿漉漉的港城",
+        "atmosphere": "清晨起雾，人人都盯着潮水",
+        "occupants": "走私客、守卫、制图师"
+      },
+      "noParent": "不属于其他地点",
+      "addInside": "在里面添加",
+      "addInsideLabel": "在{{name}}里添加地点",
+      "delete": "删除地点",
+      "deleteConfirm": "删除这个地点？位于它里面的地点会上移一层。此操作无法撤销。"
+    },
+    "factions": {
+      "title": "势力",
+      "hint": "有各自目标的群体。想要什么、手里有什么、怕什么，决定了他们之间的冲突。",
+      "new": "新势力",
+      "newTitle": "新势力",
+      "editTitle": "势力",
+      "empty": "还没有势力。这里谁掌握权力，谁又想夺走它？",
+      "fields": {
+        "name": "名称",
+        "summary": "他们是谁",
+        "want": "想要什么",
+        "assets": "手里有什么",
+        "fear": "害怕什么"
+      },
+      "hints": {
+        "name": "总督卫队",
+        "summary": "港口的执法者，只听命于总督",
+        "want": "把海岸的每一张海图都攥在手里",
+        "assets": "港口铁链和监狱",
+        "fear": "一张不是他们画的地图"
+      },
+      "short": {
+        "want": "想要",
+        "assets": "拥有",
+        "fear": "害怕"
+      },
+      "unknown": "尚不清楚",
+      "matrix": "立场",
+      "matrixHint": "点击格子切换：中立、盟友、敌对。",
+      "stances": {
+        "neutral": "中立",
+        "ally": "盟友",
+        "enemy": "敌对"
+      },
+      "cellLabel": "{{a}}与{{b}}：{{stance}}",
+      "delete": "删除势力",
+      "deleteConfirm": "删除这个势力？它的立场也会一并删除。此操作无法撤销。"
     }
   }
 }

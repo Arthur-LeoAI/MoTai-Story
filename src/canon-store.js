@@ -59,6 +59,7 @@ const READERS = {
     }
     for (const key of ["name", "summary", "notes", "image", "color"]) if (has(body, key)) next[key] = stringField(body, key);
     if (has(body, "aliases")) next.aliases = idArrayField(body, "aliases");
+    if (has(body, "parentId")) next.parentId = stringField(body, "parentId");
     if (has(body, "card")) {
       if (!isObject(body.card)) throw appError("BAD_REQUEST");
       const card = { ...next.card };
@@ -106,6 +107,15 @@ function checkReferences(collection, item, work) {
   const missing = (field) => appError("CANON_REFERENCE_NOT_FOUND", { field });
   if (collection === "entities" || collection === "threads") {
     if (!item.name) throw appError("CANON_NAME_REQUIRED");
+  }
+  if (collection === "entities" && item.parentId) {
+    if (entity(item.parentId)?.type !== "location") throw missing("parentId");
+    // Walking up from the new parent must never reach the place itself.
+    const seen = new Set();
+    for (let at = item.parentId; at; at = entity(at)?.parentId || "") {
+      if (at === item.id || seen.has(at)) throw appError("CANON_PLACE_CYCLE");
+      seen.add(at);
+    }
   }
   if (collection === "relations") {
     if (!entity(item.fromId)) throw missing("fromId");
@@ -225,6 +235,14 @@ function createCanonRepository(store, { now = nowIso, makeId = createId } = {}) 
       const orphaned = collection === "entities"
         ? work.canon.facts.filter((fact) => fact.subjectId === itemId || fact.objectId === itemId).map((fact) => fact.id)
         : [];
+      // Places inside a removed place move up one level.
+      if (collection === "entities" && before.type === "location") {
+        for (const child of work.canon.entities) {
+          if (child.parentId !== itemId) continue;
+          child.parentId = before.parentId || "";
+          child.revision += 1;
+        }
+      }
       work.canon[collection] = work.canon[collection].filter((candidate) => candidate.id !== itemId);
       const relationsBefore = work.canon.relations.map((relation) => relation.id);
       repairCanonReferences(work.canon);

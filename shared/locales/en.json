@@ -591,6 +591,7 @@
     "CANON_ENTITY_TYPE_UNSUPPORTED": "A card must be a character, place, faction, thing or rule, and its kind cannot be changed afterwards.",
     "CANON_REFERENCE_NOT_FOUND": "Something this refers to no longer exists ({{field}}).",
     "CANON_RELATION_SELF": "A relationship needs two different people or groups.",
+    "CANON_PLACE_CYCLE": "A place cannot be inside itself, or inside a place within it.",
     "CANON_STORY_RANGE_INVALID": "The end of this period must come after its start.",
     "CONFLICT_NOT_FOUND": "Conflict not found.",
     "ADJUDICATION_REASON_REQUIRED": "Give a reason for marking this as a false alarm.",
@@ -674,6 +675,7 @@
     "DRAFT_DESCRIPTION_REQUIRED": "Describe the character in a sentence first.",
     "MANUSCRIPT_EMPTY": "There is no text in this story yet to read.",
     "TIMELINE_TOO_SHORT": "Add at least two events before asking what is missing.",
+    "RULE_ANSWERS_REQUIRED": "Answer at least one question first.",
     "EVENT_ORDER_INVALID": "The new order must list every event once."
   },
   "brief": {
@@ -959,6 +961,84 @@
       "ruleRequired": "Write the rule first.",
       "delete": "Delete rule",
       "deleteConfirm": "Delete this rule? This cannot be undone."
+    },
+    "stress": {
+      "title": "Stress-test this rule",
+      "hint": "The AI asks the questions a sharp reader would ask. Your answers make the rule hold together.",
+      "saveFirst": "Save your changes first, so the questions are about the rule as it stands.",
+      "ask": "Ask me the hard questions",
+      "asking": "Thinking of questions…",
+      "again": "Ask again",
+      "answerHint": "Your answer, in a sentence or two. Leave it empty to skip.",
+      "answerNote": "Your answers go into the cost, exceptions and details above. Nothing is saved until you save the rule.",
+      "fold": "Add my answers to the rule",
+      "folding": "Adding your answers…",
+      "close": "Not now",
+      "folded": "Your answers are in the fields above. Check them, then save the rule."
+    },
+    "places": {
+      "title": "Places",
+      "hint": "Where the story happens. Put a place inside another (region › city › street) to keep them in order.",
+      "new": "New place",
+      "newTitle": "A new place",
+      "editTitle": "Place",
+      "empty": "No places yet. Where does your story begin?",
+      "fields": {
+        "name": "Name",
+        "parent": "Inside",
+        "summary": "What it looks like",
+        "atmosphere": "What it feels like",
+        "occupants": "Who is there"
+      },
+      "hints": {
+        "name": "Vell",
+        "summary": "A harbour city of stairs and wet stone",
+        "atmosphere": "Fog at dawn; everyone watches the tide",
+        "occupants": "Smugglers, wardens, mapmakers"
+      },
+      "noParent": "Nowhere: it stands on its own",
+      "addInside": "Add inside",
+      "addInsideLabel": "Add a place inside {{name}}",
+      "delete": "Delete place",
+      "deleteConfirm": "Delete this place? Places inside it move up one level. This cannot be undone."
+    },
+    "factions": {
+      "title": "Factions",
+      "hint": "Groups with their own aims. What they want, what they hold and what they fear is what puts them in each other's way.",
+      "new": "New faction",
+      "newTitle": "A new faction",
+      "editTitle": "Faction",
+      "empty": "No factions yet. Who holds power here, and who wants it?",
+      "fields": {
+        "name": "Name",
+        "summary": "Who they are",
+        "want": "What they want",
+        "assets": "What they hold",
+        "fear": "What they fear"
+      },
+      "hints": {
+        "name": "The Governor's Wardens",
+        "summary": "The harbour's police, answering to the Governor alone",
+        "want": "Every chart of the coast in their own hands",
+        "assets": "The harbour chain and the gaol",
+        "fear": "A map they did not draw"
+      },
+      "short": {
+        "want": "Wants",
+        "assets": "Holds",
+        "fear": "Fears"
+      },
+      "unknown": "Not known yet",
+      "matrix": "Who stands where",
+      "matrixHint": "Click a square to change it: neutral, allies, enemies.",
+      "stances": {
+        "neutral": "Neutral",
+        "ally": "Allies",
+        "enemy": "Enemies"
+      },
+      "cellLabel": "{{a}} and {{b}}: {{stance}}",
+      "delete": "Delete faction",
+      "deleteConfirm": "Delete this faction? Its stances go with it. This cannot be undone."
     }
   }
 }

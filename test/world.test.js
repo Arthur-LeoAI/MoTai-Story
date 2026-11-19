@@ -65,3 +65,44 @@ test("HTTP: the world in a sentence is saved on the story, and a stale save is r
   assert.equal(stale.body.error.code, "REVISION_CONFLICT");
   assert.equal((await call(`/api/works/${work.id}/world`)).body.world.here, "maps are worth more than gold");
 });
+
+test("HTTP: places sit inside places, never inside themselves, and move up when their parent goes", async () => {
+  const { body: { work } } = await call("/api/works", "POST", { title: "Places", language: "en", focus: "shape" });
+  const place = async (data) => call(`/api/works/${work.id}/canon/entities`, "POST", { type: "location", ...data });
+  const coast = (await place({ name: "The Drowned Coast" })).body.item;
+  const vell = (await place({ name: "Vell", parentId: coast.id })).body.item;
+  const archive = (await place({ name: "The Archive", parentId: vell.id })).body.item;
+  assert.equal(vell.parentId, coast.id);
+
+  // A missing parent, a parent that is not a place, and a loop are refused.
+  assert.equal((await place({ name: "Nowhere", parentId: "missing" })).body.error.code, "CANON_REFERENCE_NOT_FOUND");
+  const mira = (await call(`/api/works/${work.id}/canon/entities`, "POST", { type: "character", name: "Mira" })).body.item;
+  assert.equal((await place({ name: "Inside Mira", parentId: mira.id })).body.error.code, "CANON_REFERENCE_NOT_FOUND");
+  const loop = await call(`/api/works/${work.id}/canon/entities/${coast.id}`, "PATCH", { parentId: archive.id, baseRevision: coast.revision });
+  assert.equal(loop.status, 400);
+  assert.equal(loop.body.error.code, "CANON_PLACE_CYCLE");
+  const self = await call(`/api/works/${work.id}/canon/entities/${vell.id}`, "PATCH", { parentId: vell.id, baseRevision: vell.revision });
+  assert.equal(self.body.error.code, "CANON_PLACE_CYCLE");
+
+  // The writing knows where a place is.
+  const facts = deriveCanonFacts({ language: "en", chapters: [], canon: (await call(`/api/works/${work.id}/canon`)).body.canon });
+  assert.equal(facts.find((fact) => fact.subjectId === archive.id).value, "Part of: Vell");
+
+  // Deleting Vell moves the Archive up to the coast.
+  await call(`/api/works/${work.id}/canon/entities/${vell.id}`, "DELETE", { baseRevision: vell.revision });
+  const after = (await call(`/api/works/${work.id}/canon`)).body.canon.entities.find((entity) => entity.id === archive.id);
+  assert.equal(after.parentId, coast.id);
+  assert.equal(after.revision, archive.revision + 1);
+});
+
+test("HTTP: a stance between two factions is a relation of kind ally or enemy", async () => {
+  const { body: { work } } = await call("/api/works", "POST", { title: "Factions", language: "en", focus: "shape" });
+  const faction = async (name) => (await call(`/api/works/${work.id}/canon/entities`, "POST", { type: "faction", name, card: { want: "The coast", fear: "A map they did not draw" } })).body.item;
+  const wardens = await faction("The Governor's Wardens");
+  const guild = await faction("The Smugglers' Guild");
+  assert.equal(wardens.parentId, "");
+  const stance = await call(`/api/works/${work.id}/canon/relations`, "POST", { fromId: wardens.id, toId: guild.id, kind: "enemy" });
+  assert.equal(stance.status, 201);
+  const facts = deriveCanonFacts({ language: "en", chapters: [], canon: (await call(`/api/works/${work.id}/canon`)).body.canon });
+  assert.ok(facts.some((fact) => fact.category === "relationship" && fact.subjectId === wardens.id && fact.objectId === guild.id && fact.value === "enemies"));
+});
