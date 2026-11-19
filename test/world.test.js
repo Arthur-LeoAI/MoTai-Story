@@ -54,6 +54,16 @@ test("a rule that is only its statement is still a hard world rule for the writi
   ]);
 });
 
+test("the world in a sentence reaches the writing as a fact, in the story's language", () => {
+  const facts = (language, world) => deriveCanonFacts({ language, chapters: [], world, canon: normalizeCanon({}) });
+  assert.deepEqual(facts("en", { what: "where the sea has swallowed the old roads", here: "a good map is worth more than gold" }).map((fact) => [fact.id, fact.category, fact.strength, fact.predicate, fact.value]), [
+    ["derived:world:sentence", "world_rule", "soft", "The world", "A world where the sea has swallowed the old roads, in which a good map is worth more than gold."]
+  ]);
+  assert.equal(facts("en", { what: "", here: "the tide is a law" })[0].value, "in which the tide is a law.");
+  assert.equal(facts("zh-CN", { what: "海水淹没了旧日道路", here: "地图比黄金还值钱" })[0].value, "一个海水淹没了旧日道路的世界，在这里地图比黄金还值钱。");
+  assert.deepEqual(facts("en", { what: " ", here: "" }), []);
+});
+
 test("HTTP: the world in a sentence is saved on the story, and a stale save is refused", async () => {
   const { body: { work } } = await call("/api/works", "POST", { title: "World", language: "en", focus: "shape" });
   assert.equal((await call(`/api/works/${work.id}/world`)).body.world.revision, 0);

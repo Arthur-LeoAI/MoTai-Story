@@ -75,7 +75,7 @@ const {
 const { appError, toErrorResponse } = require("./src/errors");
 const { assertOwner, authenticate } = require("./src/auth");
 const { createPreferenceRepository } = require("./src/preferences");
-const { continuityFacts, describeCanon } = require("./src/canon-model");
+const { continuityFacts, describeCanon, WORLD_FACT_ID } = require("./src/canon-model");
 const { createCanonRepository } = require("./src/canon-store");
 const { createCanonApi } = require("./src/canon-api");
 const canonDrafts = require("./src/canon-drafts");
@@ -2298,7 +2298,17 @@ function parseJsonObject(text) {
   }
 }
 
-function continuityContextText(context) {
+function continuityContextText(context, english = false) {
+  if (english) {
+    const facts = context.canonFacts.map((fact) => `- [${fact.strength}] ${fact.predicate}: ${fact.value || fact.objectId}`).join("\n");
+    const memories = context.chapterMemories.map((memory) => `- Chapter ${memory.chapterOrder + 1}: ${memory.summary}${memory.timeLabel ? ` (when: ${memory.timeLabel})` : ""}`).join("\n");
+    return [
+      "Established facts (hard: must not be broken; soft: keep where possible):",
+      facts || "- No established facts yet",
+      "Recent chapters:",
+      memories || "- No chapter summaries yet"
+    ].join("\n");
+  }
   const facts = context.canonFacts.map((fact) => `- [${fact.strength}] ${fact.predicate}：${fact.value || fact.objectId}`).join("\n");
   const memories = context.chapterMemories.map((memory) => `- 第${memory.chapterOrder + 1}章：${memory.summary}${memory.timeLabel ? `（时间：${memory.timeLabel}）` : ""}`).join("\n");
   return [
@@ -2353,12 +2363,23 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
     };
   }
 
+  const english = normalizeStoryLanguage(work.language) === "en";
   const validationBody = {
     mode: "custom",
     work,
     chapter,
     selectedText: candidate,
-    instruction: [
+    instruction: english ? [
+      "You only check a novel for continuity; do not write any story text. Return one JSON object and nothing else, no Markdown.",
+      "Shape: {\"conflicts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|causality|motivation|voice|other\",\"severity\":\"hard|soft\",\"message\":\"...\",\"excerpt\":\"...\"}],\"chapterMemory\":{\"summary\":\"...\",\"timeLabel\":\"...\"},\"facts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|other\",\"predicate\":\"...\",\"value\":\"...\",\"strength\":\"hard|soft\"}]}",
+      "Use hard only for a plain break of an established fact, the timeline, someone's death, a known limit of an ability, a rule of the world, or cause and effect; style advice is soft.",
+      "facts: only what clearly happens in this new text and later chapters must remember, at most 12.",
+      "chapterMemory.summary must sum up the whole chapter so far including the new text, not only the last paragraph.",
+      "Write every message, summary and fact in English.",
+      "The chapter so far:",
+      limitText(chapter.content || "", 16000),
+      continuityContextText(context, true)
+    ].join("\n") : [
       "你现在只做小说连续性审校，不创作正文。严格输出 JSON 对象，不要 Markdown。",
       "格式：{\"conflicts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|causality|motivation|voice|other\",\"severity\":\"hard|soft\",\"message\":\"...\",\"excerpt\":\"...\"}],\"chapterMemory\":{\"summary\":\"...\",\"timeLabel\":\"...\"},\"facts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|other\",\"predicate\":\"...\",\"value\":\"...\",\"strength\":\"hard|soft\"}]}",
       "hard 仅用于明确违反已确认事实、时间线、死亡状态、已知能力边界或因果不可能；风格建议用 soft。",
@@ -2369,15 +2390,15 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
       continuityContextText(context)
     ].join("\n")
   };
-  const result = await callOpenAiWriter(validationBody);
-  const parsed = parseJsonObject(result.text);
-  if (!Array.isArray(parsed.conflicts) || !Array.isArray(parsed.facts)
-    || !parsed.chapterMemory || typeof parsed.chapterMemory.summary !== "string"
-    || !parsed.chapterMemory.summary.trim()
-    || parsed.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim())) {
-    const error = appError("AI_REVIEW_INVALID");
-    throw error;
-  }
+  // A model now and then returns a report of the wrong shape; one more try
+  // usually gets a good one (seen with real replies, 2026-11-19).
+  const validReport = (value) => Array.isArray(value?.conflicts) && Array.isArray(value?.facts)
+    && value.chapterMemory && typeof value.chapterMemory.summary === "string" && value.chapterMemory.summary.trim()
+    && !value.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim());
+  const readReport = async () => parseJsonObject((await callOpenAiWriter(validationBody)).text);
+  let parsed = await readReport();
+  if (!validReport(parsed)) parsed = await readReport();
+  if (!validReport(parsed)) throw appError("AI_REVIEW_INVALID");
   const conflicts = (Array.isArray(parsed.conflicts) ? parsed.conflicts : []).slice(0, 40).map((item) => normalizeConflict({
     id: createId("conflict"),
     category: item.category,
@@ -3037,6 +3058,7 @@ async function handleWorldApi(req, res, parts, db, work) {
     const body = await readBody(req, 16 * 1024);
     const world = storyWorld.updateWorld(work, body, nowIso());
     work.updatedAt = world.updatedAt;
+    invalidateDependencies(work, { factIds: [WORLD_FACT_ID], reason: "世界设定变化" });
     await writeDb(db);
     sendJson(res, 200, { world });
     return true;

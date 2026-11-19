@@ -282,6 +282,9 @@ function derivedFactId(kind, objectId) {
   return `${DERIVED_PREFIX}:${kind}:${objectId}`;
 }
 
+/** The fact the world sentence stands for. */
+const WORLD_FACT_ID = derivedFactId("world", "sentence");
+
 function isDerivedFactId(value) {
   return typeof value === "string" && value.startsWith(`${DERIVED_PREFIX}:`);
 }
@@ -295,6 +298,8 @@ const PROMPT_LABELS = Object.freeze({
     listSeparator: ", ",
     aliases: "also called",
     inside: "Part of",
+    world: "The world",
+    worldSentence: (what, here) => [what && `A world ${what}`, here && `in which ${here}`].filter(Boolean).join(", ") + ".",
     tension: "Tension",
     time: "When",
     participants: "Who",
@@ -312,6 +317,8 @@ const PROMPT_LABELS = Object.freeze({
     listSeparator: "、",
     aliases: "又称",
     inside: "位于",
+    world: "世界",
+    worldSentence: (what, here) => [what && `一个${what}的世界`, here && `在这里${here}`].filter(Boolean).join("，") + "。",
     tension: "张力",
     time: "时间",
     participants: "人物",
@@ -462,6 +469,24 @@ function deriveCanonFacts(work) {
     });
   }
 
+  // The world in a sentence (World page): what makes this world different.
+  const world = work?.world && typeof work.world === "object" ? work.world : {};
+  const what = typeof world.what === "string" ? world.what.trim() : "";
+  const here = typeof world.here === "string" ? world.here.trim() : "";
+  if (what || here) {
+    facts.push({
+      ...base,
+      id: WORLD_FACT_ID,
+      category: "world_rule",
+      subjectId: "",
+      predicate: labels.world,
+      value: labels.worldSentence(what, here).slice(0, 4000),
+      strength: "soft",
+      sourceRevision: Number.isInteger(world.revision) ? world.revision : 0,
+      derivedFrom: { kind: "world", id: "sentence" }
+    });
+  }
+
   return facts;
 }
 
@@ -548,6 +573,7 @@ function describeCanon(work, { limit = 2400 } = {}) {
 }
 
 module.exports = {
+  WORLD_FACT_ID,
   CANON_COLLECTIONS,
   CARD_ENTITY_TYPES,
   CARD_FIELDS,
