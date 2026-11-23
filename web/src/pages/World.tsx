@@ -1,0 +1,430 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ApiError, errorText, request, type WorkSummary } from "../api";
+import { castApi, type Entity, type EntityDraft, type Relation } from "../castApi";
+import { FactionsSection, PlacesSection } from "../components/WorldCards";
+
+// World page (plan 5.6): what makes this world different from ours. At the
+// top, the world in a sentence; then the rules, each with three questions:
+// the rule, what it costs or limits, and its exceptions. Rules are cards
+// (type "rule"); every rule is a hard constraint for the AI's writing.
+
+interface WorldSentence {
+  what: string;
+  here: string;
+  revision: number;
+}
+
+const worldPath = (workId: string) => `/api/works/${encodeURIComponent(workId)}/world`;
+export const worldApi = {
+  read: (workId: string) => request<{ world: WorldSentence }>(worldPath(workId)),
+  save: (workId: string, lines: { what: string; here: string }, baseRevision: number) =>
+    request<{ world: WorldSentence }>(worldPath(workId), { method: "PUT", body: JSON.stringify({ lines, baseRevision }) })
+};
+
+type Status = "idle" | "saving" | "saved" | "error" | "conflict";
+type RuleDraft = { rule: string; cost: string; exception: string; detail: string };
+type Editing = { mode: "new" } | { mode: "edit"; rule: Entity } | null;
+type Stress = { state: "idle" } | { state: "asking" } | { state: "questions"; questions: string[]; answers: string[] } | { state: "folding"; questions: string[]; answers: string[] } | { state: "folded" };
+
+function Sentence({ workId, language }: { workId: string; language: string }) {
+  const { t } = useTranslation();
+  const [lines, setLinesState] = useState({ what: "", here: "" });
+  const [status, setStatus] = useState<Status>("idle");
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
+  const linesRef = useRef(lines);
+  const revision = useRef(0);
+  const sent = useRef("");
+  const conflict = useRef(false);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  const setLines = (next: { what: string; here: string }) => {
+    linesRef.current = next;
+    setLinesState(next);
+  };
+
+  const load = useCallback(async () => {
+    const { world } = await worldApi.read(workId);
+    revision.current = world.revision;
+    conflict.current = false;
+    const next = { what: world.what, here: world.here };
+    sent.current = JSON.stringify(next);
+    setLines(next);
+    setReady(true);
+  }, [workId]);
+
+  useEffect(() => {
+    load().catch((cause) => {
+      setError(errorText(t, cause));
+      setStatus("error");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+
+  function save() {
+    queue.current = queue.current.then(async () => {
+      const json = JSON.stringify(linesRef.current);
+      if (conflict.current || json === sent.current) return;
+      setStatus("saving");
+      try {
+        const { world } = await worldApi.save(workId, linesRef.current, revision.current);
+        revision.current = world.revision;
+        sent.current = json;
+        setStatus("saved");
+      } catch (cause) {
+        conflict.current = cause instanceof ApiError && cause.code === "REVISION_CONFLICT";
+        setError(errorText(t, cause));
+        setStatus(conflict.current ? "conflict" : "error");
+      }
+    });
+  }
+
+  async function loadSaved() {
+    try {
+      await load();
+      setStatus("idle");
+      setError("");
+    } catch (cause) {
+      setError(errorText(t, cause));
+    }
+  }
+
+  return (
+    <section className="card world-sentence" aria-labelledby="world-sentence-title" data-testid="world-sentence">
+      <div className="spine-head">
+        <h2 id="world-sentence-title" className="caps spine-title">{t("world.sentence.title")}</h2>
+        <span className="muted spine-status" role="status" data-testid="world-status" data-status={status}>
+          {status === "saving" ? t("write.saving") : status === "saved" ? t("plot.spine.saved") : ""}
+        </span>
+      </div>
+      {ready ? (
+        <p className="world-sentence-line display">
+          <span>{t("world.sentence.before")}</span>
+          <input className="field world-blank" aria-label={t("world.sentence.whatLabel")} maxLength={500} lang={language} value={lines.what} placeholder={t("world.sentence.whatHint")} onChange={(change) => setLines({ ...linesRef.current, what: change.target.value })} onBlur={save} data-testid="world-what" />
+          <span>{t("world.sentence.middle")}</span>
+          <input className="field world-blank" aria-label={t("world.sentence.hereLabel")} maxLength={500} lang={language} value={lines.here} placeholder={t("world.sentence.hereHint")} onChange={(change) => setLines({ ...linesRef.current, here: change.target.value })} onBlur={save} data-testid="world-here" />
+          <span>{t("world.sentence.after")}</span>
+        </p>
+      ) : null}
+      {status === "error" || status === "conflict" ? (
+        <div className="notice cast-error" role="alert" data-testid="world-error">
+          <span>{error}</span>
+          {status === "conflict" ? <button type="button" className="btn" onClick={() => void loadSaved()}>{t("cast.loadSaved")}</button> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function RuleDialog({ workId, language, editing, onClose, onChanged, onReload }: {
+  workId: string;
+  language: string;
+  editing: Editing;
+  onClose: () => void;
+  onChanged: () => void;
+  onReload: () => Promise<Entity | null>;
+}) {
+  const { t } = useTranslation();
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const empty: RuleDraft = { rule: "", cost: "", exception: "", detail: "" };
+  const [draft, setDraft] = useState<RuleDraft>(empty);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
+  const [stress, setStress] = useState<Stress>({ state: "idle" });
+  const [stressError, setStressError] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const rule = editing?.mode === "edit" ? editing.rule : null;
+  // The questions are about the rule as saved, so unsaved changes come first.
+  const unsaved = rule ? draft.rule.trim() !== rule.name || draft.cost.trim() !== (rule.card.cost ?? "") || draft.exception.trim() !== (rule.card.exception ?? "") || draft.detail.trim() !== rule.summary : false;
+  const fill = (value: Entity | null) => setDraft(value ? { rule: value.name, cost: value.card.cost ?? "", exception: value.card.exception ?? "", detail: value.summary } : empty);
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (editing && !dialog.open) {
+      fill(rule);
+      setError("");
+      setConflict(false);
+      setStress({ state: "idle" });
+      setStressError("");
+      setMoreOpen(Boolean(rule?.summary));
+      dialog.showModal();
+    } else if (!editing && dialog.open) dialog.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, rule]);
+
+  async function save(submit: FormEvent) {
+    submit.preventDefault();
+    if (!draft.rule.trim()) {
+      setError(t("world.rules.ruleRequired"));
+      return;
+    }
+    const payload: EntityDraft = {
+      name: draft.rule.trim(),
+      aliases: rule?.aliases ?? [],
+      summary: draft.detail.trim(),
+      card: { cost: draft.cost.trim(), exception: draft.exception.trim() },
+      notes: rule?.notes ?? ""
+    };
+    setBusy(true);
+    setError("");
+    setConflict(false);
+    try {
+      if (rule) await castApi.update(workId, rule, payload);
+      else await castApi.create(workId, "rule", payload);
+      onChanged();
+      onClose();
+    } catch (cause) {
+      setError(errorText(t, cause));
+      setConflict(cause instanceof ApiError && cause.code === "REVISION_CONFLICT");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadSaved() {
+    setBusy(true);
+    try {
+      const saved = await onReload();
+      if (!saved) {
+        onClose();
+        return;
+      }
+      fill(saved);
+      setError("");
+      setConflict(false);
+    } catch (cause) {
+      setError(errorText(t, cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!rule || !window.confirm(t("world.rules.deleteConfirm"))) return;
+    setBusy(true);
+    try {
+      await castApi.remove(workId, rule);
+      onChanged();
+      onClose();
+    } catch (cause) {
+      setError(errorText(t, cause));
+      setConflict(cause instanceof ApiError && cause.code === "REVISION_CONFLICT");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function ask() {
+    if (!rule) return;
+    setStress({ state: "asking" });
+    setStressError("");
+    try {
+      const { questions } = await castApi.ruleQuestions(workId, rule.id);
+      setStress({ state: "questions", questions, answers: questions.map(() => "") });
+    } catch (cause) {
+      setStress({ state: "idle" });
+      setStressError(errorText(t, cause));
+    }
+  }
+
+  async function fold() {
+    if (!rule || stress.state !== "questions") return;
+    const { questions, answers } = stress;
+    setStress({ state: "folding", questions, answers });
+    setStressError("");
+    try {
+      const { draft: folded } = await castApi.foldRuleAnswers(workId, rule.id, questions.map((question, index) => ({ question, answer: answers[index] })));
+      setDraft((current) => ({ ...current, cost: folded.cost, exception: folded.exception, detail: folded.detail }));
+      if (folded.detail) setMoreOpen(true);
+      setStress({ state: "folded" });
+    } catch (cause) {
+      setStress({ state: "questions", questions, answers });
+      setStressError(errorText(t, cause));
+    }
+  }
+
+  const field = (key: keyof RuleDraft, rows: number, limit: number) => (
+    <div className="dialog-field">
+      <label className="caps" htmlFor={`rule-${key}`}>{t(`world.rules.fields.${key}`)}</label>
+      <textarea id={`rule-${key}`} className="field" rows={rows} maxLength={limit} lang={language} value={draft[key]} placeholder={t(`world.rules.hints.${key}`)} onChange={(change) => setDraft({ ...draft, [key]: change.target.value })} data-testid={`rule-${key}`} />
+    </div>
+  );
+
+  return (
+    <dialog ref={dialogRef} className="dialog cast-dialog" onClose={onClose} aria-labelledby="rule-dialog-title" data-testid="rule-dialog">
+      <form onSubmit={save} className="dialog-body" noValidate>
+        <h2 id="rule-dialog-title" className="display dialog-title">{rule ? t("world.rules.editTitle") : t("world.rules.newTitle")}</h2>
+        {field("rule", 2, 160)}
+        {field("cost", 2, 2000)}
+        {field("exception", 2, 2000)}
+        <details className="cast-more" open={moreOpen} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
+          <summary className="caps">{t("world.rules.more")}</summary>
+          {field("detail", 3, 600)}
+        </details>
+        {rule ? (
+          <section className="rule-stress" aria-labelledby="rule-stress-title" data-testid="rule-stress">
+            <div className="spine-head">
+              <h3 id="rule-stress-title" className="caps spine-title">{t("world.stress.title")}</h3>
+              {stress.state === "idle" || stress.state === "asking" || stress.state === "folded" ? (
+                <button type="button" className="btn" onClick={() => void ask()} disabled={busy || unsaved || stress.state === "asking"} data-testid="rule-stress-ask">
+                  {stress.state === "asking" ? t("world.stress.asking") : stress.state === "folded" ? t("world.stress.again") : t("world.stress.ask")}
+                </button>
+              ) : null}
+            </div>
+            {stress.state === "idle" ? <p className="muted assist-hint">{unsaved ? t("world.stress.saveFirst") : t("world.stress.hint")}</p> : null}
+            {stress.state === "questions" || stress.state === "folding" ? (
+              <>
+                <ol className="rule-stress-list">
+                  {stress.questions.map((question, index) => (
+                    <li key={question} className="rule-stress-item" data-testid="rule-stress-question">
+                      <label htmlFor={`rule-answer-${index}`} lang={language}>{question}</label>
+                      <textarea id={`rule-answer-${index}`} className="field" rows={2} maxLength={2000} lang={language} value={stress.answers[index]} placeholder={t("world.stress.answerHint")} disabled={stress.state === "folding"} onChange={(change) => {
+                        if (stress.state !== "questions") return;
+                        const answers = [...stress.answers];
+                        answers[index] = change.target.value;
+                        setStress({ ...stress, answers });
+                      }} data-testid="rule-stress-answer" />
+                    </li>
+                  ))}
+                </ol>
+                <p className="muted assist-hint">{t("world.stress.answerNote")}</p>
+                <div className="draft-actions">
+                  <button type="button" className="btn primary" onClick={() => void fold()} disabled={stress.state === "folding" || !stress.answers.some((answer) => answer.trim())} data-testid="rule-stress-fold">
+                    {stress.state === "folding" ? t("world.stress.folding") : t("world.stress.fold")}
+                  </button>
+                  <button type="button" className="btn quiet" onClick={() => setStress({ state: "idle" })} disabled={stress.state === "folding"} data-testid="rule-stress-close">{t("world.stress.close")}</button>
+                </div>
+              </>
+            ) : null}
+            {stress.state === "folded" ? <p className="assist-done" role="status" data-testid="rule-stress-folded">{t("world.stress.folded")}</p> : null}
+            {stressError ? <p className="notice" role="alert" data-testid="rule-stress-error">{stressError}</p> : null}
+          </section>
+        ) : null}
+        {error ? (
+          <div className="notice cast-error" role="alert" data-testid="rule-error">
+            <span>{error}</span>
+            {conflict ? <button type="button" className="btn" onClick={() => void loadSaved()} disabled={busy}>{t("cast.loadSaved")}</button> : null}
+          </div>
+        ) : null}
+        <div className="dialog-row dialog-actions">
+          <button type="submit" className="btn primary" disabled={busy} data-testid="rule-save">{busy ? t("write.saving") : t("ideate.save")}</button>
+          <button type="button" className="btn" onClick={onClose} disabled={busy} data-testid="rule-cancel">{t("ideate.cancel")}</button>
+          {rule ? <button type="button" className="btn quiet cast-delete" onClick={() => void remove()} disabled={busy} data-testid="rule-delete">{t("world.rules.delete")}</button> : null}
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+export default function World({ work }: { work: WorkSummary }) {
+  const { t } = useTranslation();
+  const [cards, setCards] = useState<{ entities: Entity[]; relations: Relation[] } | null>(null);
+  const [failed, setFailed] = useState("");
+  const [editing, setEditing] = useState<Editing>(null);
+
+  const load = useCallback(async () => {
+    const { canon } = await castApi.canon(work.id);
+    const next = { entities: canon.entities, relations: canon.relations };
+    setCards(next);
+    return next;
+  }, [work.id]);
+  const ofType = (entities: Entity[], type: Entity["type"]) => entities.filter((entity) => entity.type === type);
+  const rules = cards ? ofType(cards.entities, "rule") : null;
+
+  // ?card=<id> (a name linked in the manuscript) opens that card once.
+  const [params, setParams] = useSearchParams();
+  const [openId, setOpenId] = useState("");
+  const cardId = params.get("card");
+  useEffect(() => {
+    if (!cardId || !cards) return;
+    const entity = cards.entities.find((candidate) => candidate.id === cardId);
+    if (entity?.type === "rule") setEditing({ mode: "edit", rule: entity });
+    else if (entity) setOpenId(entity.id);
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("card");
+      return next;
+    }, { replace: true });
+  }, [cardId, cards, setParams]);
+
+  useEffect(() => {
+    load().catch((cause) => setFailed(errorText(t, cause)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+
+  return (
+    <div className="world" data-testid="world">
+      <header className="cast-head">
+        <div>
+          <div className="caps">{t("world.part")}</div>
+          <h1 className="display page-title">{t("nav.world")}</h1>
+          <p className="page-subtitle muted">{t("world.subtitle")}</p>
+        </div>
+      </header>
+      <hr className="rule2" />
+
+      <Sentence workId={work.id} language={work.language} />
+
+      <section className="world-rules" aria-labelledby="rules-title" data-testid="rules">
+        <div className="spine-head">
+          <div>
+            <h2 id="rules-title" className="caps spine-title">{t("world.rules.title")}</h2>
+            <p className="muted assist-hint">{t("world.rules.hint")}</p>
+          </div>
+          <button type="button" className="btn primary" onClick={() => setEditing({ mode: "new" })} data-testid="rule-new">{t("world.rules.new")}</button>
+        </div>
+        {failed ? <p className="notice" role="alert">{failed}</p> : null}
+        {rules === null && !failed ? <p className="muted">{t("app.loading")}</p> : null}
+        {rules && rules.length === 0 ? <p className="muted cast-empty" data-testid="rules-empty">{t("world.rules.empty")}</p> : null}
+        {rules && rules.length ? (
+          <ul className="rule-cards">
+            {rules.map((rule) => (
+              <li key={rule.id}>
+                <button type="button" className="card rule-card" onClick={() => setEditing({ mode: "edit", rule })} data-testid="rule-card" data-rule-id={rule.id}>
+                  <span className="rule-row">
+                    <span className="caps">{t("world.rules.fields.rule")}</span>
+                    <strong lang={work.language}>{rule.name}</strong>
+                  </span>
+                  <span className="rule-row">
+                    <span className="caps">{t("world.rules.short.cost")}</span>
+                    {rule.card.cost ? <span lang={work.language}>{rule.card.cost}</span> : <span className="muted rule-missing">{t("world.rules.noCost")}</span>}
+                  </span>
+                  <span className="rule-row">
+                    <span className="caps">{t("world.rules.short.exception")}</span>
+                    {rule.card.exception ? <span lang={work.language}>{rule.card.exception}</span> : <span className="muted rule-missing">{t("world.rules.noException")}</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      {cards ? (
+        <>
+          <PlacesSection workId={work.id} language={work.language} openId={openId} places={ofType(cards.entities, "location")} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "location")} />
+          <FactionsSection workId={work.id} language={work.language} openId={openId} factions={ofType(cards.entities, "faction")} relations={cards.relations} onChanged={() => void load()} onReload={async () => ofType((await load()).entities, "faction")} />
+        </>
+      ) : null}
+
+      <RuleDialog
+        workId={work.id}
+        language={work.language}
+        editing={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void load()}
+        onReload={async () => {
+          const fresh = ofType((await load()).entities, "rule");
+          const id = editing?.mode === "edit" ? editing.rule.id : "";
+          const rule = fresh.find((candidate) => candidate.id === id) ?? null;
+          if (rule) setEditing({ mode: "edit", rule });
+          return rule;
+        }}
+      />
+    </div>
+  );
+}

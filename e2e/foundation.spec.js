@@ -54,6 +54,34 @@ test("interface language switches and is remembered", async ({ page }) => {
   await expect(page.getByTestId("hero-title")).toHaveText(englishHeading);
 });
 
+test("a choice made before the saved preferences arrive is not undone by them", async ({ page }) => {
+  // A returning writer with saved preferences.
+  expect((await page.request.patch("/api/me/preferences", { data: { uiLocale: "en", theme: "paper" } })).ok()).toBeTruthy();
+  // The server answers at once (with the saved "en" and "paper"), but the
+  // answer only reaches the page after the writer has chosen.
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.goto("/app/");
+  const html = page.locator("html");
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+  await page.getByTestId("locale-select").selectOption("zh-CN");
+  await page.getByTestId("theme-toggle").click();
+  await expect(html).toHaveAttribute("lang", "zh-CN");
+  await expect(html).toHaveAttribute("data-theme", "candle");
+  const answered = page.waitForResponse("**/api/session");
+  release();
+  await answered;
+  // The saved values ("en", "paper") arrived late and change nothing.
+  await expect(html).toHaveAttribute("lang", "zh-CN");
+  await expect(html).toHaveAttribute("data-theme", "candle");
+  await page.unroute("**/api/session");
+});
+
 test("paper and candle themes switch and are remembered", async ({ page }) => {
   // Colours fade over 200 ms; with reduced motion they change at once, so a
   // reading never lands mid-fade.
@@ -113,8 +141,9 @@ test("a Shape story starts from one sentence and opens in Ideate", async ({ page
   await page.getByTestId("nav-plot").click();
   await expect(page.getByTestId("plot")).toBeVisible();
   await page.getByTestId("nav-world").click();
-  await expect(page.getByTestId("section-placeholder")).toHaveAttribute("data-section", "world");
+  await expect(page.getByTestId("world")).toBeVisible();
   await expect(page.getByTestId("nav-world")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("section-placeholder")).toHaveCount(0);
   await page.getByTestId("nav-write").click();
   await expect(page.getByTestId("manuscript")).toBeVisible();
   await expect(page.getByTestId("nav-write")).toHaveAttribute("aria-current", "page");

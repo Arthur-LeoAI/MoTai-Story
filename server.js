@@ -75,12 +75,17 @@ const {
 const { appError, toErrorResponse } = require("./src/errors");
 const { assertOwner, authenticate } = require("./src/auth");
 const { createPreferenceRepository } = require("./src/preferences");
-const { continuityFacts, describeCanon } = require("./src/canon-model");
+const { continuityFacts, describeCanon, WORLD_FACT_ID } = require("./src/canon-model");
 const { createCanonRepository } = require("./src/canon-store");
 const { createCanonApi } = require("./src/canon-api");
 const canonDrafts = require("./src/canon-drafts");
 const plotSpine = require("./src/plot-spine");
 const timelineChecks = require("./src/timeline-checks");
+const storyWorld = require("./src/world");
+const ruleStress = require("./src/rule-stress");
+const writingStyles = require("./src/styles");
+const userStyleDrafts = require("./src/user-styles");
+const threeWays = require("./src/variants");
 const brand = require("./shared/brand.json");
 const PACKAGE_VERSION = require("./package.json").version;
 
@@ -127,6 +132,7 @@ const dataStore = STORAGE_BACKEND === "postgres"
   ? createPostgresStore({ createPool: () => poolFromEnvironment(process.env) })
   : createJsonStore(DATA_FILE);
 const preferenceRepository = createPreferenceRepository(dataStore);
+const userStyles = userStyleDrafts.createUserStyleRepository(dataStore, { now: nowIso, makeId: createId });
 const workspaceService = createWorkspaceService(dataStore, DATA_DIR);
 const taskService = createTaskService(dataStore, async input => input.kind === "review" ? reviewChapterTask(input) : input.kind === "extract" ? extractManuscriptTask(input) : createConstrainedGeneration(input));
 const betaApi = createBetaApi({ store: dataStore, service: workspaceService, tasks: taskService, readDb, readWork: async (workId) => findWork(await readWorkDb(workId), workId), ensureMigrated, readBody, sendJson, analyze: analyzeGeneratedText, canAccept: canAcceptGeneration, hash: hashChapterContent, normalizeMemory: normalizeChapterMemory, selectContext: selectContinuityContext });
@@ -2296,7 +2302,17 @@ function parseJsonObject(text) {
   }
 }
 
-function continuityContextText(context) {
+function continuityContextText(context, english = false) {
+  if (english) {
+    const facts = context.canonFacts.map((fact) => `- [${fact.strength}] ${fact.predicate}: ${fact.value || fact.objectId}`).join("\n");
+    const memories = context.chapterMemories.map((memory) => `- Chapter ${memory.chapterOrder + 1}: ${memory.summary}${memory.timeLabel ? ` (when: ${memory.timeLabel})` : ""}`).join("\n");
+    return [
+      "Established facts (hard: must not be broken; soft: keep where possible):",
+      facts || "- No established facts yet",
+      "Recent chapters:",
+      memories || "- No chapter summaries yet"
+    ].join("\n");
+  }
   const facts = context.canonFacts.map((fact) => `- [${fact.strength}] ${fact.predicate}：${fact.value || fact.objectId}`).join("\n");
   const memories = context.chapterMemories.map((memory) => `- 第${memory.chapterOrder + 1}章：${memory.summary}${memory.timeLabel ? `（时间：${memory.timeLabel}）` : ""}`).join("\n");
   return [
@@ -2351,12 +2367,23 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
     };
   }
 
+  const english = normalizeStoryLanguage(work.language) === "en";
   const validationBody = {
     mode: "custom",
     work,
     chapter,
     selectedText: candidate,
-    instruction: [
+    instruction: english ? [
+      "You only check a novel for continuity; do not write any story text. Return one JSON object and nothing else, no Markdown.",
+      "Shape: {\"conflicts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|causality|motivation|voice|other\",\"severity\":\"hard|soft\",\"message\":\"...\",\"excerpt\":\"...\"}],\"chapterMemory\":{\"summary\":\"...\",\"timeLabel\":\"...\"},\"facts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|other\",\"predicate\":\"...\",\"value\":\"...\",\"strength\":\"hard|soft\"}]}",
+      "Use hard only for a plain break of an established fact, the timeline, someone's death, a known limit of an ability, a rule of the world, or cause and effect; style advice is soft.",
+      "facts: only what clearly happens in this new text and later chapters must remember, at most 12.",
+      "chapterMemory.summary must sum up the whole chapter so far including the new text, not only the last paragraph.",
+      "Write every message, summary and fact in English.",
+      "The chapter so far:",
+      limitText(chapter.content || "", 16000),
+      continuityContextText(context, true)
+    ].join("\n") : [
       "你现在只做小说连续性审校，不创作正文。严格输出 JSON 对象，不要 Markdown。",
       "格式：{\"conflicts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|causality|motivation|voice|other\",\"severity\":\"hard|soft\",\"message\":\"...\",\"excerpt\":\"...\"}],\"chapterMemory\":{\"summary\":\"...\",\"timeLabel\":\"...\"},\"facts\":[{\"category\":\"timeline|identity|life_status|ability|knowledge|relationship|world_rule|location|event_state|foreshadowing|other\",\"predicate\":\"...\",\"value\":\"...\",\"strength\":\"hard|soft\"}]}",
       "hard 仅用于明确违反已确认事实、时间线、死亡状态、已知能力边界或因果不可能；风格建议用 soft。",
@@ -2367,15 +2394,15 @@ async function analyzeGeneratedText(work, chapter, candidate, context) {
       continuityContextText(context)
     ].join("\n")
   };
-  const result = await callOpenAiWriter(validationBody);
-  const parsed = parseJsonObject(result.text);
-  if (!Array.isArray(parsed.conflicts) || !Array.isArray(parsed.facts)
-    || !parsed.chapterMemory || typeof parsed.chapterMemory.summary !== "string"
-    || !parsed.chapterMemory.summary.trim()
-    || parsed.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim())) {
-    const error = appError("AI_REVIEW_INVALID");
-    throw error;
-  }
+  // A model now and then returns a report of the wrong shape; one more try
+  // usually gets a good one (seen with real replies, 2026-11-19).
+  const validReport = (value) => Array.isArray(value?.conflicts) && Array.isArray(value?.facts)
+    && value.chapterMemory && typeof value.chapterMemory.summary === "string" && value.chapterMemory.summary.trim()
+    && !value.conflicts.some((item) => !item || !["hard", "soft"].includes(item.severity) || typeof item.message !== "string" || !item.message.trim());
+  const readReport = async () => parseJsonObject((await callOpenAiWriter(validationBody)).text);
+  let parsed = await readReport();
+  if (!validReport(parsed)) parsed = await readReport();
+  if (!validReport(parsed)) throw appError("AI_REVIEW_INVALID");
   const conflicts = (Array.isArray(parsed.conflicts) ? parsed.conflicts : []).slice(0, 40).map((item) => normalizeConflict({
     id: createId("conflict"),
     category: item.category,
@@ -2506,7 +2533,10 @@ async function createConstrainedGeneration(body) {
   const attempts = [];
   let analysis = { conflicts: [], facts: [], chapterMemory: normalizeChapterMemory() };
   let result = null;
-  const extraInstruction = [scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
+  const styleId = typeof body.styleId === "string" ? body.styleId : writingStyles.storyStyleId(work);
+  const style = writingStyles.findStyle(styleId, await readUserStyles(work.ownerId));
+  const styleText = writingStyles.styleInstruction(style, normalizeStoryLanguage(work.language) === "en");
+  const extraInstruction = [scene ? `场景要求：${JSON.stringify(scene)}` : "", `作品写作偏好：${JSON.stringify(work.writingPreferences || {})}`, styleText, body.contextNotes ? `作者补充资料：${String(body.contextNotes).slice(0, 8000)}` : ""].filter(Boolean).join("\n");
   // For a scene, the writer's account is its own section of the prompt.
   const account = mode === "scene" ? normalizeText(body.instruction) : "";
   const baseInstruction = [normalizeText(body.instruction), extraInstruction].filter(Boolean).join("\n");
@@ -2914,6 +2944,29 @@ async function handleCanonDraftApi(req, res, parts, db, work) {
     sendJson(res, 200, { draft });
     return true;
   }
+  // POST /api/works/:id/canon/drafts/rule-questions { ruleId } → pointed questions about a rule.
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "rule-questions") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 16 * 1024);
+    const ruleId = normalizeText(body.ruleId);
+    const questions = isTestAiEnabled()
+      ? ruleStress.testQuestions(work, ruleId)
+      : ruleStress.normalizeQuestions(await callStructuredAi(work, ruleStress.questionsRequest(work, ruleId)));
+    sendJson(res, 200, { questions });
+    return true;
+  }
+  // POST /api/works/:id/canon/drafts/rule-answers { ruleId, answers: [{ question, answer }] }
+  // → a draft of the rule's cost, exception and detail with the answers folded in.
+  if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "rule-answers") {
+    assertOwner(req.user, work);
+    const body = await readBody(req, 64 * 1024);
+    const ruleId = normalizeText(body.ruleId);
+    const draft = isTestAiEnabled()
+      ? ruleStress.testFold(work, ruleId, body)
+      : ruleStress.normalizeFold(await callStructuredAi(work, ruleStress.foldRequest(work, ruleId, body)), work, ruleId);
+    sendJson(res, 200, { draft });
+    return true;
+  }
   // POST /api/works/:id/canon/drafts/manuscript → a background task (see extractManuscriptTask).
   if (req.method === "POST" && parts.length === 6 && parts[3] === "canon" && parts[4] === "drafts" && parts[5] === "manuscript") {
     assertOwner(req.user, work);
@@ -2998,7 +3051,77 @@ async function handleTimelineApi(req, res, parts, db, work) {
   return false;
 }
 
+/** The writer's own style cards (phase 5 step 2), kept per user. */
+async function readUserStyles(userId) {
+  if (!userId) return [];
+  const stored = await dataStore.readDocument("userStyles", userId);
+  return (Array.isArray(stored?.styles) ? stored.styles : []).map((style) => writingStyles.normalizeStyle(style, { source: style.source === "imported" ? "imported" : "user" }));
+}
+
+// "Three ways" (plan 5.9 C): POST /api/works/:id/variants
+// { passage, before?, after?, styleIds?: [up to 3], explain? } → three versions; nothing is saved.
+async function handleVariantsApi(req, res, parts, db, work) {
+  if (parts[3] !== "variants" || parts.length !== 4 || req.method !== "POST") return false;
+  assertOwner(req.user, work);
+  const body = await readBody(req, 64 * 1024);
+  const own = await readUserStyles(work.ownerId);
+  const styleIds = Array.isArray(body.styleIds) ? body.styleIds.filter((id) => typeof id === "string" && id).slice(0, 3) : [];
+  const styles = styleIds.map((id) => writingStyles.findStyle(id, own));
+  if (styles.some((style) => !style)) throw appError("STYLE_NOT_FOUND");
+  const storyStyle = writingStyles.findStyle(writingStyles.storyStyleId(work), own);
+  const { ways, spec } = threeWays.variantsRequest(work, body, { styles, storyStyle });
+  const variants = isTestAiEnabled()
+    ? threeWays.testVariants(ways, body)
+    : threeWays.normalizeVariants(await callStructuredAi(work, spec), ways, body.explain === true);
+  sendJson(res, 200, { variants });
+  return true;
+}
+
+// The story's default writing style (plan 5.9.1).
+async function handleStyleApi(req, res, parts, db, work) {
+  if (parts[3] !== "style" || parts.length !== 4) return false;
+  assertOwner(req.user, work);
+  if (req.method === "GET") {
+    sendJson(res, 200, { styleId: writingStyles.storyStyleId(work) });
+    return true;
+  }
+  if (req.method === "PUT") {
+    const body = await readBody(req, 16 * 1024);
+    const style = writingStyles.setStoryStyle(work, body.styleId, await readUserStyles(work.ownerId), nowIso());
+    work.updatedAt = style.updatedAt;
+    await writeDb(db);
+    sendJson(res, 200, { styleId: style.styleId });
+    return true;
+  }
+  return false;
+}
+
+// The world in a sentence (plan 5.6).
+async function handleWorldApi(req, res, parts, db, work) {
+  if (parts[3] !== "world" || parts.length !== 4) return false;
+  assertOwner(req.user, work);
+  // GET /api/works/:id/world
+  if (req.method === "GET") {
+    sendJson(res, 200, { world: storyWorld.normalizeWorld(work.world) });
+    return true;
+  }
+  // PUT /api/works/:id/world { lines: { what?, here? }, baseRevision }
+  if (req.method === "PUT") {
+    const body = await readBody(req, 16 * 1024);
+    const world = storyWorld.updateWorld(work, body, nowIso());
+    work.updatedAt = world.updatedAt;
+    invalidateDependencies(work, { factIds: [WORLD_FACT_ID], reason: "世界设定变化" });
+    await writeDb(db);
+    sendJson(res, 200, { world });
+    return true;
+  }
+  return false;
+}
+
 async function handleStudioWorkspaceApi(req, res, parts, db, work) {
+  if (await handleStyleApi(req, res, parts, db, work)) return true;
+  if (await handleVariantsApi(req, res, parts, db, work)) return true;
+  if (await handleWorldApi(req, res, parts, db, work)) return true;
   if (await handleCanonDraftApi(req, res, parts, db, work)) return true;
   if (await handleTimelineApi(req, res, parts, db, work)) return true;
   if (await handleSpineApi(req, res, parts, db, work)) return true;
@@ -3299,7 +3422,7 @@ function createSampleWork(language, ownerId) {
 
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean);
-  if (await handleAccountApi(req, res, parts)) return;
+  if (await handleAccountApi(req, res, parts, url)) return;
   if (await canonApi(req, res, url)) return;
   if (await betaApi(req, res, url)) return;
 
@@ -4821,7 +4944,7 @@ function buildTestStoryBible(work) {
 
 // Identity and per-user preferences. Every handler here receives the user from
 // the single auth entry point (src/auth.js) and reads/writes only that user's data.
-async function handleAccountApi(req, res, parts) {
+async function handleAccountApi(req, res, parts, url) {
   if (parts[0] !== "api") return false;
   const user = req.user;
 
@@ -4834,6 +4957,49 @@ async function handleAccountApi(req, res, parts) {
       brand: { codename: brand.codename },
       preferences
     });
+    return true;
+  }
+
+  // The writer's own styles: GET/POST /api/me/styles, PUT/DELETE /api/me/styles/:id,
+  // POST /api/me/styles/draft (AI; nothing is saved).
+  if (parts[1] === "me" && parts[2] === "styles") {
+    await ensureMigrated();
+    if (parts.length === 3 && req.method === "GET") {
+      sendJson(res, 200, { styles: await userStyles.list(user.id) });
+      return true;
+    }
+    if (parts.length === 3 && req.method === "POST") {
+      sendJson(res, 201, { style: await userStyles.create(user.id, await readBody(req, 64 * 1024)) });
+      return true;
+    }
+    if (parts.length === 4 && parts[3] === "draft" && req.method === "POST") {
+      const body = await readBody(req, 64 * 1024);
+      const language = normalizeStoryLanguage(body.language);
+      const input = { ...body, language };
+      const draft = isTestAiEnabled()
+        ? userStyleDrafts.testDraft(input)
+        : userStyleDrafts.normalizeDraft(await callStructuredAi({ language }, userStyleDrafts.draftRequest(input)), input);
+      sendJson(res, 200, { draft });
+      return true;
+    }
+    if (parts.length === 4 && req.method === "PUT") {
+      sendJson(res, 200, { style: await userStyles.update(user.id, parts[3], await readBody(req, 64 * 1024)) });
+      return true;
+    }
+    if (parts.length === 4 && req.method === "DELETE") {
+      sendJson(res, 200, { removed: await userStyles.remove(user.id, parts[3], await readBody(req, 16 * 1024)) });
+      return true;
+    }
+    sendError(res, "METHOD_NOT_ALLOWED");
+    return true;
+  }
+
+  // GET /api/styles?language=en: built-in styles for that story language, and the writer's own.
+  if (parts[1] === "styles" && parts.length === 2 && req.method === "GET") {
+    await ensureMigrated();
+    const language = normalizeStoryLanguage(url.searchParams.get("language"));
+    const own = (await readUserStyles(user.id)).filter((style) => style.language === language);
+    sendJson(res, 200, { styles: [...writingStyles.builtinStyles(language), ...own] });
     return true;
   }
 

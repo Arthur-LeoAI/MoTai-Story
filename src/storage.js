@@ -29,7 +29,7 @@ async function renameWithRetry(from, to, attempts = 8) {
 }
 
 const RECORD_COLLECTIONS = Object.freeze(["tasks", "usage", "imports", "receipts"]);
-const DOCUMENT_COLLECTIONS = Object.freeze(["settings", "userPreferences"]);
+const DOCUMENT_COLLECTIONS = Object.freeze(["settings", "userPreferences", "userStyles"]);
 
 function createJsonStore(filePath) {
   const resolvedFile = path.resolve(filePath);

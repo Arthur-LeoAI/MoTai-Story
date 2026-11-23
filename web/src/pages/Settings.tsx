@@ -229,6 +229,14 @@ export default function Settings() {
         <AiSection />
         <UsageSection />
         <BackupSection />
+        {/* Every page is rebuilt, but a few tools live only in the previous workspace for now. */}
+        <section className="card settings-section" aria-labelledby="settings-classic" data-testid="settings-classic">
+          <h2 id="settings-classic" className="caps">{t("settings.classic.heading")}</h2>
+          <p className="muted assist-hint">{t("settings.classic.intro")}</p>
+          <div className="draft-actions">
+            <a className="btn" href="/classic/" data-testid="legacy-link">{t("app.legacyLink")}</a>
+          </div>
+        </section>
         <Notice />
       </main>
     </div>

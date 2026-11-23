@@ -129,6 +129,8 @@ function normalizeEntity(value) {
     notes: text(source.notes, LIMITS.notes),
     image: text(source.image, LIMITS.image),
     color: colorKey(source.color),
+    // Places only: the place this one is inside (region › city › place).
+    parentId: type === "location" ? id(source.parentId) : "",
     revision: revisionValue(source.revision),
     createdAt: dateValue(source.createdAt),
     updatedAt: dateValue(source.updatedAt)
@@ -149,6 +151,10 @@ function normalizeRelation(value) {
     // as temporal facts and `scene.storyTime`. null = not placed in time.
     storyFrom: numberOrNull(source.storyFrom),
     storyUntil: numberOrNull(source.storyUntil),
+    // In reader terms (phase 5): the first and the last chapter in which the
+    // relationship holds; empty = from the start / to the end.
+    fromChapterId: id(source.fromChapterId),
+    untilChapterId: id(source.untilChapterId),
     revision: revisionValue(source.revision),
     createdAt: dateValue(source.createdAt),
     updatedAt: dateValue(source.updatedAt)
@@ -253,6 +259,9 @@ function repairCanonReferences(canon) {
   const entityIds = new Set((canon.entities || []).map((item) => item.id));
   const threadIds = new Set((canon.threads || []).map((item) => item.id));
   canon.relations = (canon.relations || []).filter((item) => entityIds.has(item.fromId) && entityIds.has(item.toId));
+  for (const entity of canon.entities || []) {
+    if (entity.parentId && !entityIds.has(entity.parentId)) entity.parentId = "";
+  }
   for (const event of canon.events || []) {
     event.participantIds = event.participantIds.filter((item) => entityIds.has(item));
     if (event.locationId && !entityIds.has(event.locationId)) event.locationId = "";
@@ -277,6 +286,9 @@ function derivedFactId(kind, objectId) {
   return `${DERIVED_PREFIX}:${kind}:${objectId}`;
 }
 
+/** The fact the world sentence stands for. */
+const WORLD_FACT_ID = derivedFactId("world", "sentence");
+
 function isDerivedFactId(value) {
   return typeof value === "string" && value.startsWith(`${DERIVED_PREFIX}:`);
 }
@@ -289,6 +301,10 @@ const PROMPT_LABELS = Object.freeze({
     colon: ": ",
     listSeparator: ", ",
     aliases: "also called",
+    inside: "Part of",
+    world: "The world",
+    untilChapter: (number) => `(until chapter ${number})`,
+    worldSentence: (what, here) => [what && `A world ${what}`, here && `in which ${here}`].filter(Boolean).join(", ") + ".",
     tension: "Tension",
     time: "When",
     participants: "Who",
@@ -305,6 +321,10 @@ const PROMPT_LABELS = Object.freeze({
     colon: "：",
     listSeparator: "、",
     aliases: "又称",
+    inside: "位于",
+    world: "世界",
+    untilChapter: (number) => `（持续到第 ${number} 章）`,
+    worldSentence: (what, here) => [what && `一个${what}的世界`, here && `在这里${here}`].filter(Boolean).join("，") + "。",
     tension: "张力",
     time: "时间",
     participants: "人物",
@@ -338,9 +358,11 @@ function entityHeading(entity, labels) {
     : entity.name;
 }
 
-function entityDescription(entity, labels) {
+function entityDescription(entity, labels, names) {
+  const parent = entity.parentId && names?.get(entity.parentId);
   return [
     entity.summary,
+    parent && `${labels.inside}${labels.colon}${parent}`,
     ...(CARD_FIELDS[entity.type] || [])
       .filter((key) => entity.card[key])
       .map((key) => `${labels.card[key]}${labels.colon}${entity.card[key]}`)
@@ -375,7 +397,8 @@ function deriveCanonFacts(work) {
   const facts = [];
 
   for (const entity of canon.entities) {
-    const value = entityDescription(entity, labels);
+    // A rule is often only its statement; it is still a constraint.
+    const value = entityDescription(entity, labels, names) || (entity.type === "rule" ? entity.name : "");
     if (!value && !entity.aliases.length) continue;
     facts.push({
       ...base,
@@ -399,9 +422,10 @@ function deriveCanonFacts(work) {
       subjectId: relation.fromId,
       objectId: relation.toId,
       predicate: `${names.get(relation.fromId)} → ${names.get(relation.toId)}`,
-      value: relationDescription(relation, labels),
+      value: [relationDescription(relation, labels), chapterOrder.has(relation.untilChapterId) ? labels.untilChapter(chapterOrder.get(relation.untilChapterId) + 1) : ""].filter(Boolean).join(" "),
       storyFrom: relation.storyFrom,
       storyUntil: relation.storyUntil,
+      ...(chapterOrder.has(relation.fromChapterId) ? { readerOrder: chapterOrder.get(relation.fromChapterId), sourceChapterId: relation.fromChapterId } : {}),
       sourceRevision: relation.revision,
       derivedFrom: { kind: "relation", id: relation.id }
     });
@@ -452,6 +476,24 @@ function deriveCanonFacts(work) {
     });
   }
 
+  // The world in a sentence (World page): what makes this world different.
+  const world = work?.world && typeof work.world === "object" ? work.world : {};
+  const what = typeof world.what === "string" ? world.what.trim() : "";
+  const here = typeof world.here === "string" ? world.here.trim() : "";
+  if (what || here) {
+    facts.push({
+      ...base,
+      id: WORLD_FACT_ID,
+      category: "world_rule",
+      subjectId: "",
+      predicate: labels.world,
+      value: labels.worldSentence(what, here).slice(0, 4000),
+      strength: "soft",
+      sourceRevision: Number.isInteger(world.revision) ? world.revision : 0,
+      derivedFrom: { kind: "world", id: "sentence" }
+    });
+  }
+
   return facts;
 }
 
@@ -478,6 +520,9 @@ function dependentDerivedFactIds(canonValue, collection, objectId) {
     for (const event of canon.events) {
       if (event.participantIds.includes(objectId) || event.locationId === objectId) ids.add(derivedFactId("event", event.id));
     }
+    for (const entity of canon.entities) {
+      if (entity.parentId === objectId) ids.add(derivedFactId("entity", entity.id));
+    }
   }
   if (collection === "events") {
     for (const setup of canon.setups) {
@@ -502,6 +547,9 @@ function chapterDerivedFactIds(canonValue, chapterIds) {
   for (const setup of canon.setups) {
     const anchored = [setup.plantedIn, setup.paidOffIn].some((anchor) => anchor && (anchor.kind === "chapter" ? chapters.has(anchor.id) : eventIds.has(anchor.id)));
     if (anchored) ids.add(derivedFactId("setup", setup.id));
+  }
+  for (const relation of canon.relations) {
+    if (chapters.has(relation.fromChapterId) || chapters.has(relation.untilChapterId)) ids.add(derivedFactId("relation", relation.id));
   }
   return [...ids];
 }
@@ -535,6 +583,7 @@ function describeCanon(work, { limit = 2400 } = {}) {
 }
 
 module.exports = {
+  WORLD_FACT_ID,
   CANON_COLLECTIONS,
   CARD_ENTITY_TYPES,
   CARD_FIELDS,
